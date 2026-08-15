@@ -1,0 +1,54 @@
+[
+  {
+    "Product": "Kaspersky Next",
+    "Streams": [
+      {
+        "Stream": "Kaspersky Next Optimum",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Next EDR Foundations",
+            "Releases": [
+              {
+                "Id": 9001,
+                "Title": "Optional fields",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 10001,
+                    "Title": "[BRQ] Complete",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Complete",
+                    "MarketingTitle": "Complete",
+                    "IsSubjectToChange": false
+                  },
+                  {
+                    "Id": 10002,
+                    "Title": "[BRQ] No Kbr",
+                    "MarketingTitleEn": "No Kbr",
+                    "MarketingTitle": "No Kbr",
+                    "IsSubjectToChange": true
+                  },
+                  {
+                    "Id": 10003,
+                    "Title": "[BRQ] No IsSubjectToChange",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "No StC",
+                    "MarketingTitle": "No StC"
+                  },
+                  {
+                    "Id": 10004,
+                    "Title": "[BRQ] No Kbr and no StC",
+                    "MarketingTitleEn": "Neither",
+                    "MarketingTitle": "Neither"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

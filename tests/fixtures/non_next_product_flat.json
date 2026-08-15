@@ -1,0 +1,59 @@
+[
+  {
+    "Product": "Kaspersky Threat Intelligence",
+    "Streams": [
+      {
+        "Stream": "Threat Intelligence",
+        "Tiers": [
+          {
+            "Tier": "Threat Data Feeds",
+            "Releases": [
+              {
+                "Id": 5001,
+                "Title": "Feeds",
+                "AppId": 2,
+                "AppTitle": "Threat Data Feeds",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 6001,
+                    "Title": "[BRQ] Feed X",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Feed X",
+                    "MarketingTitle": "Feed X",
+                    "IsSubjectToChange": false
+                  },
+                  {
+                    "Id": 6002,
+                    "Title": "[BRQ] Feed Y",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Feed Y",
+                    "MarketingTitle": "Feed Y",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              },
+              {
+                "Id": 5002,
+                "Title": "Sandbox",
+                "AppId": 3,
+                "AppTitle": "Sandbox",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 6003,
+                    "Title": "[BRQ] Sandbox Z",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Sandbox Z",
+                    "MarketingTitle": "Sandbox Z",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

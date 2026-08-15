@@ -1,0 +1,50 @@
+[
+  {
+    "Product": "Kaspersky Next",
+    "Streams": [
+      {
+        "Stream": "Kaspersky Next Optimum",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Next EDR Foundations",
+            "Releases": [
+              {
+                "Id": 7001,
+                "Title": "EN content",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 8001,
+                    "Title": "[BRQ] Has EN text",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "License management improvements for MSP/MSSP",
+                    "MarketingTitle": "Улучшения лицензирования для MSP/MSSP",
+                    "IsSubjectToChange": false
+                  },
+                  {
+                    "Id": 8002,
+                    "Title": "[BRQ] Null EN text",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": null,
+                    "MarketingTitle": "Только русский текст требования",
+                    "IsSubjectToChange": false
+                  },
+                  {
+                    "Id": 8003,
+                    "Title": "[BRQ] Another EN text",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Android 16 support",
+                    "MarketingTitle": "Поддержка Android 16",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

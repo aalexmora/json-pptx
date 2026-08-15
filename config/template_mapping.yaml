@@ -1,0 +1,8 @@
+# Таблица выбора шаблона: slide_type -> файл .pptx (путь от корня проекта).
+#
+# До появления финального размеченного дизайн-шаблона (ТЗ v4 §12) оба типа
+# указывают на синтетический шаблон разработки. `columns_count`/`grouped_by_apptitle`
+# пока не влияют на выбор файла — расширяется, когда библиотека шаблонов пополнится
+# (ТЗ v4 §7.1: таблица `slide_type × columns_count × grouped → template_file`).
+roadmap: tests/fixtures/synthetic_template.pptx
+roadmap_cont: tests/fixtures/synthetic_template.pptx

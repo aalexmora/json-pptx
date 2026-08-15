@@ -1,0 +1,102 @@
+[
+  {
+    "Product": "Kaspersky Next",
+    "Streams": [
+      {
+        "Stream": "Kaspersky Next Optimum",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Next EDR Foundations",
+            "Releases": [
+              {
+                "Id": 1001,
+                "Title": "R1",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 2001,
+                    "Title": "[BRQ] Feature A",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Feature A",
+                    "MarketingTitle": "Feature A",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              },
+              {
+                "Id": 1002,
+                "Title": "R2",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.04.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 2002,
+                    "Title": "[BRQ] Feature B",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Feature B",
+                    "MarketingTitle": "Feature B",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              },
+              {
+                "Id": 1003,
+                "Title": "R3",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.07.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 2003,
+                    "Title": "[BRQ] Feature C",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Feature C",
+                    "MarketingTitle": "Feature C",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              },
+              {
+                "Id": 1004,
+                "Title": "R4",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.10.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 2004,
+                    "Title": "[BRQ] Feature D",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Feature D",
+                    "MarketingTitle": "Feature D",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              },
+              {
+                "Id": 1005,
+                "Title": "R5",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.01.2026 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 2005,
+                    "Title": "[BRQ] Feature E",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Feature E",
+                    "MarketingTitle": "Feature E",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

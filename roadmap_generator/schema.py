@@ -1,0 +1,267 @@
+"""Схема и валидация входных данных roadmap.
+
+Модуль не зависит от python-pptx и FastAPI — только stdlib. Содержит
+`validate_roadmap` (сбор всех ошибок за один проход) и `normalize_roadmap`
+(разворачивание сырого JSON в типизированную `RoadmapModel` с вычислением
+календарных кварталов и применением EN-фильтра). Плагины здесь НЕ применяются —
+они работают поверх `RoadmapModel` в `plugins_engine.py`.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List, Literal, Optional
+
+DATE_FORMAT = "%d.%m.%Y %H:%M:%S"
+Language = Literal["ru", "en"]
+
+
+@dataclass
+class Requirement:
+    id: int
+    title: str                      # техническое имя (Title), НЕ выводится на слайд
+    kbr: Optional[str]              # "Yes" | "No" | None (None = поле отсутствовало)
+    marketing_title: str            # RU, обязательное
+    marketing_title_en: Optional[str]
+    is_subject_to_change: bool
+
+
+@dataclass
+class Release:
+    id: int
+    title: str                      # внутреннее имя релиза, НЕ выводится на слайд
+    app_id: Optional[int]
+    app_title: str
+    tr_date: datetime
+    quarter: str                    # "Qx YYYY" (календарный квартал)
+    requirements: List[Requirement]
+
+
+@dataclass
+class Tier:
+    name: str
+    releases: List[Release]
+
+
+@dataclass
+class Stream:
+    name: str
+    tiers: List[Tier]
+
+
+@dataclass
+class Product:
+    name: str
+    streams: List[Stream]
+
+
+@dataclass
+class RoadmapModel:
+    language: Language
+    products: List[Product]
+    warnings: List[str] = field(default_factory=list)
+
+
+def _quarter(dt: datetime) -> str:
+    """Календарный квартал: Q1 = янв-мар, Q2 = апр-июн и т.д."""
+    return f"Q{((dt.month - 1) // 3) + 1} {dt.year}"
+
+
+_HYPHEN_SPACES = re.compile(r"\s*-\s*")
+
+
+def _normalize_name(value) -> str:
+    """Нормализует брендовое имя (Product/Stream/Tier/AppTitle) к каноническому виду.
+
+    Канонический источник — `Products list.xlsx`. Правило (согласовано): схлопнуть
+    пробелы/control-символы и убрать пробелы вокруг дефиса, чтобы
+    «Kaspersky SD - WAN» → «Kaspersky SD-WAN», «Kaspersky Anti - Virus SDK» →
+    «Kaspersky Anti-Virus SDK». Имена НЕ переводятся — только написание.
+    """
+    s = str(value or "")
+    s = re.sub(r"\s+", " ", s).strip()
+    s = _HYPHEN_SPACES.sub("-", s)
+    return s
+
+
+def validate_roadmap(data) -> List[str]:
+    """Собирает все ошибки валидации за один проход.
+
+    Возвращает список строк-описаний ошибок; пустой список = данные валидны.
+    Отсутствие опциональных полей (`Kbr`, `MarketingTitleEn`, `IsSubjectToChange`)
+    ошибкой НЕ является — это мягкий fallback + warning в `normalize_roadmap`.
+    """
+    errors: List[str] = []
+
+    if not isinstance(data, list) or len(data) == 0:
+        return ["входные данные должны быть непустым списком (array)"]
+
+    seen_release_ids: set[int] = set()
+    seen_requirement_ids: set[int] = set()
+
+    for pi, product in enumerate(data):
+        prefix = f"Product[{pi}]"
+        if not isinstance(product, dict):
+            errors.append(f"{prefix}: ожидался объект, получен {type(product).__name__}")
+            continue
+
+        name = product.get("Product")
+        if not isinstance(name, str) or not name.strip():
+            errors.append(f"{prefix}: отсутствует непустое поле 'Product'")
+
+        streams = product.get("Streams")
+        if not isinstance(streams, list):
+            errors.append(f"{prefix}: отсутствует поле 'Streams' (список)")
+            continue
+
+        for si, stream in enumerate(streams):
+            sprefix = f"{prefix}.Streams[{si}]"
+            if not isinstance(stream, dict):
+                errors.append(f"{sprefix}: ожидался объект, получен {type(stream).__name__}")
+                continue
+
+            if not isinstance(stream.get("Stream"), str):
+                errors.append(f"{sprefix}: отсутствует поле 'Stream' (строка)")
+
+            tiers = stream.get("Tiers")
+            if not isinstance(tiers, list):
+                errors.append(f"{sprefix}: отсутствует поле 'Tiers' (список)")
+                continue
+
+            for ti, tier in enumerate(tiers):
+                tprefix = f"{sprefix}.Tiers[{ti}]"
+                if not isinstance(tier, dict):
+                    errors.append(f"{tprefix}: ожидался объект, получен {type(tier).__name__}")
+                    continue
+
+                if not isinstance(tier.get("Tier"), str):
+                    errors.append(f"{tprefix}: отсутствует поле 'Tier' (строка)")
+
+                releases = tier.get("Releases")
+                if not isinstance(releases, list):
+                    errors.append(f"{tprefix}: отсутствует поле 'Releases' (список)")
+                    continue
+
+                for ri, release in enumerate(releases):
+                    rprefix = f"{tprefix}.Releases[{ri}]"
+                    if not isinstance(release, dict):
+                        errors.append(f"{rprefix}: ожидался объект, получен {type(release).__name__}")
+                        continue
+
+                    rid = release.get("Id")
+                    if not isinstance(rid, int):
+                        errors.append(f"{rprefix}: поле 'Id' должно быть int")
+                    elif rid in seen_release_ids:
+                        errors.append(f"{rprefix}: 'Id'={rid} дублируется (должен быть уникален глобально)")
+                    else:
+                        seen_release_ids.add(rid)
+
+                    if not isinstance(release.get("AppTitle"), str):
+                        errors.append(f"{rprefix}: отсутствует поле 'AppTitle' (строка)")
+
+                    trdate = release.get("TrDate")
+                    if not isinstance(trdate, str):
+                        errors.append(f"{rprefix}: отсутствует поле 'TrDate' (строка)")
+                    else:
+                        try:
+                            datetime.strptime(trdate, DATE_FORMAT)
+                        except ValueError:
+                            errors.append(
+                                f"{rprefix}: 'TrDate'='{trdate}' не парсится как {DATE_FORMAT}"
+                            )
+
+                    reqs = release.get("Requirements")
+                    if not isinstance(reqs, list):
+                        errors.append(f"{rprefix}: отсутствует поле 'Requirements' (список)")
+                        continue
+
+                    for qi, req in enumerate(reqs):
+                        qprefix = f"{rprefix}.Requirements[{qi}]"
+                        if not isinstance(req, dict):
+                            errors.append(f"{qprefix}: ожидался объект, получен {type(req).__name__}")
+                            continue
+
+                        qid = req.get("Id")
+                        if not isinstance(qid, int):
+                            errors.append(f"{qprefix}: поле 'Id' должно быть int")
+                        elif qid in seen_requirement_ids:
+                            errors.append(f"{qprefix}: 'Id'={qid} дублируется (должен быть уникален глобально)")
+                        else:
+                            seen_requirement_ids.add(qid)
+
+                        mtitle = req.get("MarketingTitle")
+                        if not isinstance(mtitle, str) or not mtitle.strip():
+                            errors.append(f"{qprefix}: отсутствует непустое поле 'MarketingTitle'")
+
+    return errors
+
+
+def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
+    """Разворачивает сырой JSON в типизированную `RoadmapModel`.
+
+    - вычисляет календарный квартал для каждого Release из `TrDate`;
+    - при `language == "en"` отбрасывает Requirements с `MarketingTitleEn == null`;
+    - собирает мягкие fallback'и как warnings (не ошибки): отсутствие `Kbr`
+      (→ не проходит фильтр `Yes`) и `IsSubjectToChange` (→ `false`).
+
+    Плагины здесь НЕ применяются.
+    """
+    products: List[Product] = []
+    missing_stc = 0
+    missing_kbr = 0
+
+    for raw_product in data:
+        streams: List[Stream] = []
+        for raw_stream in raw_product.get("Streams", []):
+            tiers: List[Tier] = []
+            for raw_tier in raw_stream.get("Tiers", []):
+                releases: List[Release] = []
+                for raw_release in raw_tier.get("Releases", []):
+                    tr_date = datetime.strptime(raw_release["TrDate"], DATE_FORMAT)
+                    requirements: List[Requirement] = []
+                    for raw_req in raw_release.get("Requirements", []):
+                        kbr = raw_req.get("Kbr")
+                        if "Kbr" not in raw_req:
+                            missing_kbr += 1
+
+                        if "IsSubjectToChange" not in raw_req:
+                            missing_stc += 1
+                            stc = False
+                        else:
+                            stc = bool(raw_req.get("IsSubjectToChange"))
+
+                        marketing_title_en = raw_req.get("MarketingTitleEn")
+                        if language == "en" and (marketing_title_en is None or marketing_title_en == ""):
+                            continue
+
+                        requirements.append(Requirement(
+                            id=raw_req["Id"],
+                            title=raw_req.get("Title") or "",
+                            kbr=kbr,
+                            marketing_title=raw_req.get("MarketingTitle") or "",
+                            marketing_title_en=marketing_title_en,
+                            is_subject_to_change=stc,
+                        ))
+
+                    releases.append(Release(
+                        id=raw_release["Id"],
+                        title=raw_release.get("Title") or "",
+                        app_id=raw_release.get("AppId"),
+                        app_title=_normalize_name(raw_release.get("AppTitle")),
+                        tr_date=tr_date,
+                        quarter=_quarter(tr_date),
+                        requirements=requirements,
+                    ))
+
+                tiers.append(Tier(name=_normalize_name(raw_tier.get("Tier")), releases=releases))
+            streams.append(Stream(name=_normalize_name(raw_stream.get("Stream")), tiers=tiers))
+        products.append(Product(name=_normalize_name(raw_product.get("Product")), streams=streams))
+
+    warnings: List[str] = []
+    if missing_stc:
+        warnings.append(f"{missing_stc} требований без поля IsSubjectToChange — принято как false")
+    if missing_kbr:
+        warnings.append(f"{missing_kbr} требований без поля Kbr — принято как не проходящие фильтр 'Yes'")
+
+    return RoadmapModel(language=language, products=products, warnings=warnings)

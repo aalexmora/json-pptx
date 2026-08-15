@@ -1,0 +1,78 @@
+[
+  {
+    "Product": "Kaspersky Next",
+    "Streams": [
+      {
+        "Stream": "Kaspersky Next Optimum",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Next EDR Foundations",
+            "Releases": [
+              {
+                "Id": 11001,
+                "Title": "Foundations release",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 12001,
+                    "Title": "[BRQ] Foundations feature",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Foundations feature",
+                    "MarketingTitle": "Foundations feature",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Tier": "Kaspersky Next EDR Optimum",
+            "Releases": [
+              {
+                "Id": 11002,
+                "Title": "Optimum release",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 12002,
+                    "Title": "[BRQ] Optimum feature",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Optimum feature",
+                    "MarketingTitle": "Optimum feature",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Tier": "Kaspersky Next XDR Optimum",
+            "Releases": [
+              {
+                "Id": 11003,
+                "Title": "XDR release",
+                "AppId": 2,
+                "AppTitle": "XDR",
+                "TrDate": "15.04.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 12003,
+                    "Title": "[BRQ] XDR feature",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "XDR feature",
+                    "MarketingTitle": "XDR feature",
+                    "IsSubjectToChange": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
