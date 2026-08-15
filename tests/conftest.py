@@ -13,7 +13,7 @@ import pytest
 from pptx import Presentation
 from pptx.util import Inches
 
-from roadmap_generator import labels, ordering, template_registry
+from roadmap_generator import labels, linter, ordering, template_registry
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -22,12 +22,14 @@ REAL_DATA_PATH = PROJECT_ROOT / "Requirements" / "product-tiers-data.json"
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    """Сбрасывает in-memory хранилища ordering/labels между тестами."""
+    """Сбрасывает in-memory хранилища ordering/labels/linter между тестами."""
     ordering._reset_state()
     labels._reset_state()
+    linter._reset_state()
     yield
     ordering._reset_state()
     labels._reset_state()
+    linter._reset_state()
 
 
 def load_json(path: Path):

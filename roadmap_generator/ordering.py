@@ -12,6 +12,7 @@ SEPARATOR = " > "
 
 _order_store: Dict[str, List[str]] = {}
 _apptitle_priority: List[str] = []
+_tier_inheritance_flags: Dict[str, bool] = {}
 
 
 def get_effective_order(parent_path: str, item_names: List[str]) -> List[str]:
@@ -56,7 +57,17 @@ def resolve_apptitle_order(app_titles_with_counts: List[Tuple[str, int]]) -> Lis
     return result + rest
 
 
+def get_tier_inheritance_flag(tier_path: str) -> bool:
+    """Флаг «Показывать наследование» для узла Tier в дереве порядка (ТЗ v4 §4.3)."""
+    return _tier_inheritance_flags.get(tier_path, False)
+
+
+def save_tier_inheritance_flag(tier_path: str, flag: bool) -> None:
+    _tier_inheritance_flags[tier_path] = bool(flag)
+
+
 def _reset_state() -> None:
     """Сброс in-memory хранилища (для тестов)."""
     _order_store.clear()
     _apptitle_priority.clear()
+    _tier_inheritance_flags.clear()

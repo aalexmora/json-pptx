@@ -160,6 +160,65 @@ def test_single_slide_for_four_or_fewer_quarters(load_fixture):
     assert slides[0].continuation is False
 
 
+def test_flexible_columns_split_heavy_quarter():
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [
+                {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"f{i}"}
+                for i in range(25)
+            ],
+        }]}]}],
+    }]
+    plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    slides = _roadmap_slides(plan)
+    # 25 фич в одном квартале → 3 колонки (10+10+5) → 1 слайд (≤4)
+    assert len(slides) == 1
+    assert len(slides[0].columns) == 3
+    assert [len(c.bullets) for c in slides[0].columns] == [10, 10, 5]
+
+
+def test_flexible_columns_heavy_quarter_spans_columns_in_order():
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [
+            {"Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00", "Requirements": [
+                {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"q1-{i}"} for i in range(25)
+            ]},
+            {"Id": 2, "AppTitle": "A", "TrDate": "15.04.2025 21:00:00", "Requirements": [
+                {"Id": 2000 + i, "Kbr": "Yes", "MarketingTitle": f"q2-{i}"} for i in range(5)
+            ]},
+        ]}]}],
+    }]
+    plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    slides = _roadmap_slides(plan)
+    assert len(slides) == 1
+    assert len(slides[0].columns) == 4
+    assert [c.quarter for c in slides[0].columns] == ["Q1 2025", "Q1 2025", "Q1 2025", "Q2 2025"]
+
+
+def test_flexible_columns_paginate_when_over_four():
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [
+                {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"f{i}"}
+                for i in range(45)
+            ],
+        }]}]}],
+    }]
+    plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    slides = _roadmap_slides(plan)
+    # 45 фич → 5 колонок (10×4 + 5) → 2 слайда (4 + 1)
+    assert len(slides) == 2
+    assert slides[0].continuation is False
+    assert slides[1].continuation is True
+    assert len(slides[0].columns) == 4
+    assert len(slides[1].columns) == 1
+
+
 def test_product_divider_precedes_slides(load_fixture):
     model = _model(load_fixture, "pagination_5_quarters.json")
     plan = build_slide_plan(model, {})

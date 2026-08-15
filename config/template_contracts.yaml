@@ -1,5 +1,5 @@
 # Состав обязательных именованных шейпов на комбинацию
-# `slide_type × columns_count × grouped_by_apptitle` (и для аннотаций).
+# `slide_type × columns_count × grouped_by_apptitle`.
 #
 # Это ЕДИНСТВЕННОЕ место, где описан состав шейпов — template_registry.py читает
 # его отсюда, а не хардкодит имена в коде (ТЗ v4 раздел 10). Изменение состава
@@ -9,8 +9,10 @@
 # Конвенция имён (ТЗ v4 раздел 12):
 #   col_{n}_header          — заголовок n-й колонки-квартала (n = 1..4)
 #   col_{n}_bullets         — список bullet'ов n-й колонки
-#   col_{n}_group_{m}_header — подзаголовок AppTitle-группы m внутри колонки n
-#   annotation_*            — placeholder-шейпы аннотаций
+#   col_{n}_group_{m}_header — подзаголовок AppTitle-группы m внутри колонки n (m=1 — слот, клонируется)
+#
+# Аннотации (Subject to Change, Under approval, наследование тиров) — это ТЕКСТ,
+# а не выделенные шейпы шаблона (согласовано с заказчиком), поэтому здесь их нет.
 
 roadmap:
   columns_1_flat: [col_1_header, col_1_bullets]
@@ -38,8 +40,3 @@ roadmap:
       col_3_header, col_3_bullets, col_3_group_1_header,
       col_4_header, col_4_bullets, col_4_group_1_header,
     ]
-
-annotations:
-  subject_to_change: [annotation_subject_to_change]
-  under_approval: [annotation_under_approval]
-  tier_inheritance: [annotation_tier_inheritance]

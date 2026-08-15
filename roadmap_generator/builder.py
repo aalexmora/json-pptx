@@ -67,9 +67,16 @@ def _render_roadmap(prs, layout, slide: RoadmapSlide, w: float, h: float) -> Non
         slide.tier, TITLE_FONT_PT, bold=True,
     )
 
+    top = 1.0
+    if slide.inheritance_note:
+        _set_paragraph(
+            s.shapes.add_textbox(Inches(MARGIN), Inches(0.88), Inches(w - 2 * MARGIN), Inches(0.3)),
+            slide.inheritance_note, 12, bold=False,
+        )
+        top = 1.25
+
     n = len(slide.columns)
     col_w = (w - 2 * MARGIN - (n - 1) * GAP) / n
-    top = 1.0
     body_h = h - top - MARGIN
     x = MARGIN
 
@@ -83,6 +90,12 @@ def _render_roadmap(prs, layout, slide: RoadmapSlide, w: float, h: float) -> Non
         box = s.shapes.add_textbox(Inches(x), Inches(body_top), Inches(col_w), Inches(body_h - 0.42))
         overflow.extend(_fill_column_body(box, col, body_h - 0.42, col_w))
         x += col_w + GAP
+
+    if slide.footnote:
+        _set_paragraph(
+            s.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.45), Inches(w - 2 * MARGIN), Inches(0.35)),
+            slide.footnote, 10, bold=False,
+        )
 
     if overflow:
         _render_overflow(prs, layout, slide, overflow, w, h)
@@ -114,13 +127,20 @@ def _fill_column_body(box, col, body_h_in: float, col_w_in: float) -> list:
                 continue
             add(group.app_title, True)
             for bullet in group.bullets[:take]:
-                add(f"• {bullet.text}", False)
+                add(_bullet_text(bullet), False)
             remaining -= take
     else:
         for bullet in bullets[:fit_count]:
-            add(f"• {bullet.text}", False)
+            add(_bullet_text(bullet), False)
 
     return overflow
+
+
+def _bullet_text(bullet) -> str:
+    text = f"• {bullet.text}"
+    if bullet.is_subject_to_change:
+        text += " *"
+    return text
 
 
 def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float, h: float) -> None:

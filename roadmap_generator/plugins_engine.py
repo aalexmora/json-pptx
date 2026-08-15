@@ -13,12 +13,23 @@ from typing import List, Tuple, Union
 
 from plugins._base import Bullet, Column, RoadmapPlugin, SlideBuildContext
 from roadmap_generator.labels import get_apptitle_label
-from roadmap_generator.ordering import SEPARATOR, get_effective_order, resolve_apptitle_order
+from roadmap_generator.ordering import (
+    SEPARATOR,
+    get_effective_order,
+    get_tier_inheritance_flag,
+    resolve_apptitle_order,
+)
 from roadmap_generator.schema import RoadmapModel
+from roadmap_generator.strings import INHERITANCE_PREFIX, SUBJECT_TO_CHANGE_FOOTNOTE
 
 PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
 
 _PLUGIN_ATTRS = ("id", "label", "kind", "scope", "default_settings", "apply")
+
+# Гибкая раскладка: максимум фич в одной колонке-квартале (v1-прокси «сколько влезает»).
+# При переполнении квартал занимает несколько колонок. Позже может стать текст-зависимым
+# (fit_bullets_dynamic) или настраиваться в админке как «фиксированный лимит» (ТЗ v4 §4.2 п.8).
+MAX_BULLETS_PER_COLUMN = 10
 
 
 @dataclass
@@ -28,6 +39,9 @@ class RoadmapSlide:
     tier: str
     columns: List[Column]
     continuation: bool
+    has_subject_to_change: bool = False
+    footnote: str = ""
+    inheritance_note: str = ""
 
 
 @dataclass
@@ -106,10 +120,18 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
             stream = next(s for s in product.streams if s.name == sname)
             stream_slides: List[RoadmapSlide] = []
             tier_names = [t.name for t in stream.tiers]
-            for tname in get_effective_order(f"{pname}{SEPARATOR}{sname}", tier_names):
+            ordered_tiers = get_effective_order(f"{pname}{SEPARATOR}{sname}", tier_names)
+            for idx, tname in enumerate(ordered_tiers):
                 tier = next(t for t in stream.tiers if t.name == tname)
+                tier_path = f"{pname}{SEPARATOR}{sname}{SEPARATOR}{tname}"
+                inheritance_note = None
+                if idx > 0 and get_tier_inheritance_flag(tier_path):
+                    previous = ", ".join(ordered_tiers[:idx])
+                    inheritance_note = f"{INHERITANCE_PREFIX[model.language]} {previous}"
                 stream_slides.extend(
-                    _build_tier_slides(model.language, pname, sname, tname, tier, filters, groupers, plugin_settings)
+                    _build_tier_slides(
+                        model.language, pname, sname, tname, tier, filters, groupers, plugin_settings, inheritance_note,
+                    )
                 )
             if stream_slides:
                 if sname != "-":
@@ -123,7 +145,7 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
     return SlidePlan(slides=slides, conflicts=conflicts)
 
 
-def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings):
+def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings, inheritance_note=None):
     parent_path = f"{product}{SEPARATOR}{stream}{SEPARATOR}{tier}"
 
     bullets: List[Bullet] = []
@@ -148,14 +170,14 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
     if not context.bullets:
         return []
 
-    context.columns = _group_by_quarter(context.bullets)
+    context.columns = _allocate_columns(context.bullets)
 
     for plugin in groupers:
         plugin.apply(context, _resolve_plugin_settings(plugin, plugin_settings, product, parent_path))
 
     _apply_group_order_and_labels(context.columns)
 
-    return _paginate(product, stream, tier, context.columns)
+    return _paginate(product, stream, tier, context.columns, language, inheritance_note)
 
 
 def _resolve_plugin_settings(plugin, plugin_settings, product_name, parent_path) -> dict:
@@ -178,11 +200,21 @@ def _resolve_plugin_settings(plugin, plugin_settings, product_name, parent_path)
     return settings
 
 
-def _group_by_quarter(bullets: List[Bullet]) -> List[Column]:
+def _allocate_columns(bullets: List[Bullet]) -> List[Column]:
+    """Гибкая раскладка: квартал с переполнением занимает несколько колонок.
+
+    Пули группируются по кварталу хронологически; каждый квартал режется на колонки
+    по `MAX_BULLETS_PER_COLUMN`, сохраняя порядок фич внутри квартала.
+    """
     by_quarter: dict = defaultdict(list)
     for bullet in bullets:
         by_quarter[bullet.quarter].append(bullet)
-    return [Column(quarter=q, bullets=by_quarter[q]) for q in sorted(by_quarter, key=_quarter_sort_key)]
+    columns: List[Column] = []
+    for quarter in sorted(by_quarter, key=_quarter_sort_key):
+        quarter_bullets = by_quarter[quarter]
+        for i in range(0, len(quarter_bullets), MAX_BULLETS_PER_COLUMN):
+            columns.append(Column(quarter=quarter, bullets=quarter_bullets[i:i + MAX_BULLETS_PER_COLUMN]))
+    return columns
 
 
 def _quarter_sort_key(quarter: str) -> Tuple[int, int]:
@@ -192,20 +224,43 @@ def _quarter_sort_key(quarter: str) -> Tuple[int, int]:
 
 def _apply_group_order_and_labels(columns: List[Column]) -> None:
     for column in columns:
-        if not column.grouped:
-            continue
-        ordered = resolve_apptitle_order([(g.app_title, len(g.bullets)) for g in column.groups])
-        by_title = {g.app_title: g for g in column.groups}
-        column.groups = [by_title[t] for t in ordered]
-        for group in column.groups:
-            group.app_title = get_apptitle_label(group.app_title)
+        if column.grouped:
+            ordered = resolve_apptitle_order([(g.app_title, len(g.bullets)) for g in column.groups])
+            by_title = {g.app_title: g for g in column.groups}
+            column.groups = [by_title[t] for t in ordered]
+            for group in column.groups:
+                group.app_title = get_apptitle_label(group.app_title)
+                # сначала подтверждённые (false), затем «под вопросом» (true)
+                group.bullets.sort(key=lambda b: b.is_subject_to_change)
+        else:
+            column.bullets.sort(key=lambda b: b.is_subject_to_change)
 
 
-def _paginate(product: str, stream: str, tier: str, columns: List[Column]) -> List[RoadmapSlide]:
+def _column_all_bullets(column: Column) -> List[Bullet]:
+    if column.grouped:
+        return [b for g in column.groups for b in g.bullets]
+    return column.bullets
+
+
+def _paginate(
+    product: str,
+    stream: str,
+    tier: str,
+    columns: List[Column],
+    language: str,
+    inheritance_note: str,
+) -> List[RoadmapSlide]:
     slides: List[RoadmapSlide] = []
     for i in range(0, len(columns), 4):
+        chunk = columns[i:i + 4]
+        has_stc = any(b.is_subject_to_change for col in chunk for b in _column_all_bullets(col))
+        footnote = SUBJECT_TO_CHANGE_FOOTNOTE[language] if has_stc else ""
+        note = inheritance_note if (i == 0 and inheritance_note) else ""
         slides.append(RoadmapSlide(
             product=product, stream=stream, tier=tier,
-            columns=columns[i:i + 4], continuation=(i > 0),
+            columns=chunk, continuation=(i > 0),
+            has_subject_to_change=has_stc,
+            footnote=footnote,
+            inheritance_note=note,
         ))
     return slides

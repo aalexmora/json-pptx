@@ -4,6 +4,12 @@
 
 Ты — full-stack инженер (Python backend + React frontend), реализующий локальное веб-приложение, которое превращает JSON с иерархией Product → Stream → Tier → Release → Requirement в презентацию `.pptx` по правилам ТЗ v4. Приоритеты: (1) следовать контрактам модулей из ТЗ v4 раздела 6 буквально; (2) плагины — независимые модули, core-код никогда не меняется под конкретный плагин; (3) каждый этап заканчивается рабочим кодом и зелёными тестами; (4) при неоднозначности — задать вопрос, а не угадывать дизайн-решение.
 
+## Согласованные с заказчиком решения (отклонения/уточнения к ТЗ v4)
+
+- **Гибкие колонки** (§4.2 п.3): квартал с переполнением занимает несколько колонок на том же слайде, а не уходит на «Roadmap (cont.)». Лимит — `MAX_BULLETS_PER_COLUMN` в `plugins_engine.py` (v1-прокси «сколько влезает»; позже может стать текст-зависимым или настраиваться в админке). Пагинация ≤4 колонок сохраняется.
+- **Аннотации — текст, не шейпы шаблона** (§10): `Subject to Change` = `*` в конце текста фичи + сноска внизу слайда; `tier_inheritance_note` = текстовая заметка; `under_approval` — аналогично. Секция `annotations` в `config/template_contracts.yaml` **отсутствует**.
+- **Dev-линтер** (вне ТЗ v4): `linter.py` подсвечивает кириллицу в EN-презентации и совпадения по пользовательским regex'ам (глобальный профиль). Результат показывается в превью.
+
 ## Технологический стек
 
 - Python 3.11+
@@ -65,8 +71,10 @@ roadmap-pptx-generator/
 │   ├── builder.py                  # build_presentation
 │   ├── layout.py                   # fit_bullets_dynamic и геометрия
 │   ├── diffing.py                  # match_previous_project, compute_diff
-│   ├── ordering.py                 # get_effective_order, save_order, get/save/resolve_apptitle_priority
-│   └── labels.py                   # get_apptitle_label, save_apptitle_label
+│   ├── ordering.py                 # get_effective_order, save_order, get/save/resolve_apptitle_priority, флаг наследования тира
+│   ├── labels.py                   # get_apptitle_label, save_apptitle_label
+│   ├── linter.py                   # dev-линтер: кириллица в EN + пользовательские regex'ы
+│   └── strings.py                  # дефолты служебных RU/EN строк (сноска/наследование; этап 8 — из админки)
 ├── plugins/
 │   ├── _base.py                    # протокол RoadmapPlugin — НЕ менять при добавлении новых плагинов
 │   ├── kbr_filter.py

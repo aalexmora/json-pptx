@@ -4,7 +4,7 @@ from __future__ import annotations
 from pptx import Presentation
 
 from roadmap_generator.builder import build_presentation
-from roadmap_generator.plugins_engine import build_slide_plan
+from roadmap_generator.plugins_engine import RoadmapSlide, build_slide_plan
 from roadmap_generator.schema import normalize_roadmap
 
 
@@ -62,20 +62,21 @@ def test_inherits_slide_size(load_fixture, synthetic_template_path):
     assert prs.slide_height == template.slide_height
 
 
-def test_overflow_creates_continuation(load_fixture, synthetic_template_path):
-    # тир с одним кварталом и множеством bullet'ов → переполнение → слайд-продолжение
+def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_template_path):
+    # 200 фич в одном квартале → 20 колонок → 5 roadmap-слайдов (гибкая раскладка)
     data = [{
         "Product": "Kaspersky Next",
         "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
             "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
             "Requirements": [
-                {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"feature number {i} with a long description"}
+                {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"feature number {i}"}
                 for i in range(200)
             ],
         }]}]}],
     }]
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    roadmap_slides = [s for s in plan.slides if isinstance(s, RoadmapSlide)]
+    assert len(roadmap_slides) == 5  # 200/10 = 20 колонок → 5 слайдов
     prs = build_presentation(plan)
-    # product divider + stream divider + roadmap + overflow continuation >= 4
-    assert len(prs.slides) >= 4
-    assert any("overflow" in _slide_text(s) for s in prs.slides)
+    # product divider + stream divider + 5 roadmap = 7 слайдов
+    assert len(prs.slides) == 7
