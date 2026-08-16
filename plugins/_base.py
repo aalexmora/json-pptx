@@ -22,6 +22,7 @@ class Bullet:
     app_title: str                     # из Release, для apptitle_grouping
     quarter: str                       # "Qx YYYY", для группировки в колонки
     is_subject_to_change: bool
+    release_id: int = 0                # из Release, для under_approval
 
 
 @dataclass
@@ -40,6 +41,7 @@ class Column:
     bullets: List[Bullet] = field(default_factory=list)
     groups: List[Group] = field(default_factory=list)
     grouped: bool = False
+    under_approval_badge: str = ""      # непусто, если в квартале есть релиз «под согласованием»
 
 
 @dataclass

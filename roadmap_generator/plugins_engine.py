@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Tuple, Union
 
 from plugins._base import Bullet, Column, RoadmapPlugin, SlideBuildContext
+from roadmap_generator.approval import is_under_approval
 from roadmap_generator.labels import get_apptitle_label
 from roadmap_generator.ordering import (
     SEPARATOR,
@@ -20,7 +21,9 @@ from roadmap_generator.ordering import (
     resolve_apptitle_order,
 )
 from roadmap_generator.schema import RoadmapModel
-from roadmap_generator.strings import INHERITANCE_PREFIX, SUBJECT_TO_CHANGE_FOOTNOTE
+from roadmap_generator.deck_meta import get_deck_meta
+from roadmap_generator.static_slides import get_static_slides
+from roadmap_generator.strings import get_service_string
 
 PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
 
@@ -42,6 +45,7 @@ class RoadmapSlide:
     has_subject_to_change: bool = False
     footnote: str = ""
     inheritance_note: str = ""
+    language: str = "ru"
 
 
 @dataclass
@@ -51,8 +55,26 @@ class DividerSlide:
 
 
 @dataclass
+class TitleSlide:
+    title: str
+    year: str
+    version: str
+
+
+@dataclass
+class ThankYouSlide:
+    text: str
+
+
+@dataclass
+class StaticSlide:
+    title: str
+    text: str
+
+
+@dataclass
 class SlidePlan:
-    slides: List[Union[DividerSlide, RoadmapSlide]] = field(default_factory=list)
+    slides: List[Union[TitleSlide, ThankYouSlide, DividerSlide, RoadmapSlide, StaticSlide]] = field(default_factory=list)
     conflicts: List[str] = field(default_factory=list)
 
 
@@ -110,7 +132,7 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
     # annotation/static/collector — подключаются на этапах 6+.
 
     products_by_name = {p.name: p for p in model.products}
-    slides: List[Union[DividerSlide, RoadmapSlide]] = []
+    product_decks: List[Tuple[str, List[Union[DividerSlide, RoadmapSlide]]]] = []
 
     for pname in get_effective_order("", [p.name for p in model.products]):
         product = products_by_name[pname]
@@ -127,7 +149,7 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
                 inheritance_note = None
                 if idx > 0 and get_tier_inheritance_flag(tier_path):
                     previous = ", ".join(ordered_tiers[:idx])
-                    inheritance_note = f"{INHERITANCE_PREFIX[model.language]} {previous}"
+                    inheritance_note = f"{get_service_string('inheritance_prefix', model.language)} {previous}"
                 stream_slides.extend(
                     _build_tier_slides(
                         model.language, pname, sname, tname, tier, filters, groupers, plugin_settings, inheritance_note,
@@ -139,10 +161,34 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
                 deck_items.extend(stream_slides)
 
         if deck_items:
-            slides.append(DividerSlide("product", pname))
-            slides.extend(deck_items)
+            product_decks.append((pname, [DividerSlide("product", pname)] + deck_items))
 
-    return SlidePlan(slides=slides, conflicts=conflicts)
+    slides = _assemble_with_static(product_decks, get_static_slides())
+
+    meta = get_deck_meta()
+    deck: List[Union[TitleSlide, ThankYouSlide, DividerSlide, RoadmapSlide, StaticSlide]] = [
+        TitleSlide(title=meta["title"], year=meta["year"], version=meta["version"]),
+    ]
+    deck.extend(slides)
+    deck.append(ThankYouSlide(text=get_service_string("thank_you", model.language)))
+    return SlidePlan(slides=deck, conflicts=conflicts)
+
+
+def _assemble_with_static(product_decks, static_slides) -> List[Union[DividerSlide, RoadmapSlide, StaticSlide]]:
+    """Вставляет статичные слайды по точкам: before:<P>, after:<P>, end."""
+    result: List[Union[DividerSlide, RoadmapSlide, StaticSlide]] = []
+    for pname, deck_items in product_decks:
+        for ss in static_slides:
+            if ss["position"] == f"before:{pname}":
+                result.append(StaticSlide(title=ss["title"], text=ss["text"]))
+        result.extend(deck_items)
+        for ss in static_slides:
+            if ss["position"] == f"after:{pname}":
+                result.append(StaticSlide(title=ss["title"], text=ss["text"]))
+    for ss in static_slides:
+        if ss["position"] == "end":
+            result.append(StaticSlide(title=ss["title"], text=ss["text"]))
+    return result
 
 
 def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings, inheritance_note=None):
@@ -159,6 +205,7 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
                 app_title=release.app_title,
                 quarter=release.quarter,
                 is_subject_to_change=req.is_subject_to_change,
+                release_id=release.id,
             ))
 
     context = SlideBuildContext(
@@ -171,6 +218,7 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
         return []
 
     context.columns = _allocate_columns(context.bullets)
+    _apply_under_approval(context.columns, language)
 
     for plugin in groupers:
         plugin.apply(context, _resolve_plugin_settings(plugin, plugin_settings, product, parent_path))
@@ -222,6 +270,14 @@ def _quarter_sort_key(quarter: str) -> Tuple[int, int]:
     return (int(year_part), int(num_part[1:]))
 
 
+def _apply_under_approval(columns: List[Column], language: str) -> None:
+    """Помечает колонку-квартал бейджем, если в ней есть релиз «под согласованием»."""
+    badge = get_service_string("under_approval_badge", language)
+    for column in columns:
+        if any(is_under_approval(b.release_id) for b in column.bullets):
+            column.under_approval_badge = badge
+
+
 def _apply_group_order_and_labels(columns: List[Column]) -> None:
     for column in columns:
         if column.grouped:
@@ -254,7 +310,7 @@ def _paginate(
     for i in range(0, len(columns), 4):
         chunk = columns[i:i + 4]
         has_stc = any(b.is_subject_to_change for col in chunk for b in _column_all_bullets(col))
-        footnote = SUBJECT_TO_CHANGE_FOOTNOTE[language] if has_stc else ""
+        footnote = get_service_string("subject_to_change_footnote", language) if has_stc else ""
         note = inheritance_note if (i == 0 and inheritance_note) else ""
         slides.append(RoadmapSlide(
             product=product, stream=stream, tier=tier,
@@ -262,5 +318,43 @@ def _paginate(
             has_subject_to_change=has_stc,
             footnote=footnote,
             inheritance_note=note,
+            language=language,
         ))
     return slides
+
+
+def build_tree(model: RoadmapModel) -> dict:
+    """Упорядоченное дерево Product → Stream → Tier (с флагом наследования тира)."""
+    products_by_name = {p.name: p for p in model.products}
+    products = []
+    for pname in get_effective_order("", [p.name for p in model.products]):
+        product = products_by_name[pname]
+        streams = []
+        for sname in get_effective_order(pname, [s.name for s in product.streams]):
+            stream = next(s for s in product.streams if s.name == sname)
+            tiers = []
+            for tname in get_effective_order(f"{pname}{SEPARATOR}{sname}", [t.name for t in stream.tiers]):
+                tier_path = f"{pname}{SEPARATOR}{sname}{SEPARATOR}{tname}"
+                tiers.append({"name": tname, "inheritance_flag": get_tier_inheritance_flag(tier_path)})
+            streams.append({"name": sname, "tiers": tiers})
+        products.append({"name": pname, "streams": streams})
+    return {"products": products}
+
+
+def list_releases(model: RoadmapModel) -> list:
+    """Плоский список релизов (для UI пометки «под согласованием»)."""
+    releases = []
+    for product in model.products:
+        for stream in product.streams:
+            for tier in stream.tiers:
+                for release in tier.releases:
+                    releases.append({
+                        "id": release.id,
+                        "title": release.title,
+                        "app_title": release.app_title,
+                        "quarter": release.quarter,
+                        "product": product.name,
+                        "stream": stream.name,
+                        "tier": tier.name,
+                    })
+    return releases

@@ -22,37 +22,40 @@ def _slide_text(slide) -> str:
     return "\n".join(chunks)
 
 
+def _all_texts(prs) -> list:
+    return [_slide_text(s) for s in prs.slides]
+
+
 def test_pagination_slide_count(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
-    # product divider + stream divider + 2 roadmap = 4
-    assert len(prs.slides) == 4
+    # титульный + product + stream + 2 roadmap + спасибо = 6
+    assert len(prs.slides) == 6
 
 
 def test_dividers_render_titles(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
-    assert "Kaspersky Next" in _slide_text(prs.slides[0])
-    assert "Kaspersky Next Optimum" in _slide_text(prs.slides[1])
+    texts = _all_texts(prs)
+    assert any("PRODUCT" in t and "Kaspersky Next" in t for t in texts)
+    assert any("STREAM" in t and "Kaspersky Next Optimum" in t for t in texts)
 
 
 def test_continuation_eyebrow(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
-    # slides[2] = первый roadmap (Q1-Q4), slides[3] = continuation (Q1 2026)
-    assert "cont." in _slide_text(prs.slides[3])
+    # RU-заголовок продолжения — «Роадмап (продолжение)»
+    assert any("продолжение" in t for t in _all_texts(prs))
 
 
 def test_flat_column_bullets(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
-    # product divider, stream divider, roadmap = 3 слайда
-    roadmap_text = _slide_text(prs.slides[2])
-    assert "Q1 2025" in roadmap_text
-    assert "Feed X" in roadmap_text
-    assert "Sandbox Z" in roadmap_text
+    joined = "\n".join(_all_texts(prs))
+    assert "Q1 2025" in joined
+    assert "Feed X" in joined
+    assert "Sandbox Z" in joined
 
 
 def test_group_headers_rendered(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
-    roadmap_text = _slide_text(prs.slides[2])
-    assert "Managed Detection and Response" in roadmap_text
+    assert any("Managed Detection and Response" in t for t in _all_texts(prs))
 
 
 def test_inherits_slide_size(load_fixture, synthetic_template_path):
@@ -78,5 +81,13 @@ def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_temp
     roadmap_slides = [s for s in plan.slides if isinstance(s, RoadmapSlide)]
     assert len(roadmap_slides) == 5  # 200/10 = 20 колонок → 5 слайдов
     prs = build_presentation(plan)
-    # product divider + stream divider + 5 roadmap = 7 слайдов
-    assert len(prs.slides) == 7
+    # титульный + product + stream + 5 roadmap + спасибо = 9 слайдов
+    assert len(prs.slides) == 9
+
+
+def test_title_and_thank_you_slides(load_fixture, synthetic_template_path):
+    prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
+    texts = _all_texts(prs)
+    # первый слайд — титульный (дефолтный заголовок «Roadmap»), последний — «Спасибо!»
+    assert "Roadmap" in texts[0]
+    assert "Спасибо!" in texts[-1]

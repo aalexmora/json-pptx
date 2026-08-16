@@ -5,8 +5,11 @@
 """
 from __future__ import annotations
 
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import pptx
 import yaml
@@ -14,6 +17,8 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONTRACTS_PATH = PROJECT_ROOT / "config" / "template_contracts.yaml"
 MAPPING_PATH = PROJECT_ROOT / "config" / "template_mapping.yaml"
+TEMPLATES_LIBRARY = PROJECT_ROOT / "templates_library"
+ACTIVE_TEMPLATE_FILE = PROJECT_ROOT / "data" / "active_template.txt"
 
 
 def load_contracts() -> dict:
@@ -48,11 +53,10 @@ def validate_template_shapes(template_path: str, required_shape_names: List[str]
 
 
 def select_template(slide_type: str, columns_count: int, grouped_by_apptitle: bool) -> str:
-    """Возвращает путь к `.pptx`-шаблону согласно таблице маппинга.
-
-    `columns_count`/`grouped_by_apptitle` приняты для fidelity сигнатуры; выбор
-    файла по ним включается, когда таблица станет гранулярной (ТЗ v4 §7.1).
-    """
+    """Возвращает путь к `.pptx`-шаблону: активный (загруженный) или дефолт из маппинга."""
+    active = get_active_template_path()
+    if active:
+        return active
     mapping = _load_mapping()
     if slide_type not in mapping:
         raise KeyError(f"нет шаблона для slide_type='{slide_type}'")
@@ -65,3 +69,103 @@ def select_template(slide_type: str, columns_count: int, grouped_by_apptitle: bo
 def _load_mapping() -> dict:
     with open(MAPPING_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def _soffice() -> Optional[str]:
+    return shutil.which("soffice") or "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+
+
+def _all_required_shapes() -> List[str]:
+    contracts = load_contracts()
+    names: List[str] = []
+    for value in contracts.get("roadmap", {}).values():
+        for name in value:
+            if name not in names:
+                names.append(name)
+    return names
+
+
+def save_template(filename: str, data: bytes) -> dict:
+    """Сохраняет загруженный шаблон, валидирует и генерирует PNG-превью первого слайда."""
+    TEMPLATES_LIBRARY.mkdir(parents=True, exist_ok=True)
+    path = TEMPLATES_LIBRARY / filename
+    path.write_bytes(data)
+
+    missing = validate_template_shapes(str(path), _all_required_shapes())
+    preview = generate_preview(filename)
+    return {
+        "filename": filename,
+        "missing_shapes": missing,
+        "valid": not missing,
+        "preview": preview,
+    }
+
+
+def generate_preview(filename: str) -> Optional[str]:
+    """Генерирует JPEG первого слайда через soffice + pdftoppm. Возвращает путь или None."""
+    path = TEMPLATES_LIBRARY / filename
+    if not path.exists():
+        return None
+    soffice = _soffice()
+    if not soffice or not shutil.which("pdftoppm"):
+        return None
+
+    out_dir = TEMPLATES_LIBRARY / "previews"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = path.stem
+
+    with tempfile.TemporaryDirectory() as tmp:
+        subprocess.run(
+            [soffice, "--headless", "--convert-to", "pdf", "--outdir", tmp, str(path)],
+            check=False, capture_output=True, timeout=120,
+        )
+        pdf = Path(tmp) / f"{stem}.pdf"
+        if not pdf.exists():
+            return None
+        subprocess.run(
+            ["pdftoppm", "-jpeg", "-r", "90", "-f", "1", "-l", "1", str(pdf), str(out_dir / stem)],
+            check=False, capture_output=True, timeout=120,
+        )
+    jpg = out_dir / f"{stem}-1.jpg"
+    return str(jpg) if jpg.exists() else None
+
+
+def preview_path(filename: str) -> Optional[str]:
+    jpg = TEMPLATES_LIBRARY / "previews" / f"{Path(filename).stem}-1.jpg"
+    return str(jpg) if jpg.exists() else None
+
+
+def list_templates() -> List[dict]:
+    """Список загруженных шаблонов с валидацией и превью."""
+    result: List[dict] = []
+    for path in sorted(TEMPLATES_LIBRARY.glob("*.pptx")):
+        missing = validate_template_shapes(str(path), _all_required_shapes())
+        result.append({
+            "filename": path.name,
+            "missing_shapes": missing,
+            "valid": not missing,
+            "preview": preview_path(path.name),
+            "active": get_active_template_path() == str(path),
+        })
+    return result
+
+
+def set_active_template(filename: Optional[str]) -> None:
+    if filename:
+        ACTIVE_TEMPLATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ACTIVE_TEMPLATE_FILE.write_text(filename, encoding="utf-8")
+    else:
+        ACTIVE_TEMPLATE_FILE.unlink(missing_ok=True)
+
+
+def get_active_template_path() -> Optional[str]:
+    if ACTIVE_TEMPLATE_FILE.exists():
+        filename = ACTIVE_TEMPLATE_FILE.read_text(encoding="utf-8").strip()
+        path = TEMPLATES_LIBRARY / filename
+        if path.exists():
+            return str(path)
+    return None
+
+
+def _reset_template_state() -> None:
+    ACTIVE_TEMPLATE_FILE.unlink(missing_ok=True)

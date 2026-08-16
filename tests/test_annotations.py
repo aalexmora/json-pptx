@@ -1,8 +1,14 @@
 """Тесты для текстовых аннотаций (Этап 6): Subject to Change и наследование тиров."""
 from __future__ import annotations
 
-from roadmap_generator import ordering
-from roadmap_generator.plugins_engine import RoadmapSlide, build_slide_plan
+from roadmap_generator import ordering, static_slides, strings
+from roadmap_generator.plugins_engine import (
+    DividerSlide,
+    RoadmapSlide,
+    StaticSlide,
+    ThankYouSlide,
+    build_slide_plan,
+)
 from roadmap_generator.schema import normalize_roadmap
 
 
@@ -82,3 +88,32 @@ def test_tier_inheritance_note_lists_all_previous_tiers(load_fixture):
     xdr = next(s for s in slides if s.tier == "Kaspersky Next XDR Optimum")
     assert "Kaspersky Next EDR Foundations" in xdr.inheritance_note
     assert "Kaspersky Next EDR Optimum" in xdr.inheritance_note
+
+
+def test_service_strings_override(load_fixture):
+    strings.save_service_strings({"thank_you": {"ru": "Пока!", "en": "Bye!"}})
+    model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="ru")
+    plan = build_slide_plan(model, {})
+    thank = next(s for s in plan.slides if isinstance(s, ThankYouSlide))
+    assert thank.text == "Пока!"
+
+
+def test_service_strings_default_when_no_override(load_fixture):
+    model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="en")
+    plan = build_slide_plan(model, {})
+    thank = next(s for s in plan.slides if isinstance(s, ThankYouSlide))
+    assert thank.text == "Thank you!"
+
+
+def test_static_slides_insertion(load_fixture):
+    static_slides.save_static_slides([
+        {"title": "Intro", "text": "hello", "position": "end"},
+        {"title": "Pre", "text": "pre", "position": "before:Kaspersky Next"},
+    ])
+    model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="ru")
+    plan = build_slide_plan(model, {})
+    static_titles = [s.title for s in plan.slides if isinstance(s, StaticSlide)]
+    assert static_titles == ["Pre", "Intro"]
+    idx_pre = next(i for i, s in enumerate(plan.slides) if isinstance(s, StaticSlide) and s.title == "Pre")
+    idx_prod = next(i for i, s in enumerate(plan.slides) if isinstance(s, DividerSlide) and s.divider_type == "product")
+    assert idx_pre < idx_prod

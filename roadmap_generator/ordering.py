@@ -66,6 +66,22 @@ def save_tier_inheritance_flag(tier_path: str, flag: bool) -> None:
     _tier_inheritance_flags[tier_path] = bool(flag)
 
 
+def export_state() -> dict:
+    return {
+        "order": dict(_order_store),
+        "apptitle_priority": list(_apptitle_priority),
+        "tier_inheritance_flags": dict(_tier_inheritance_flags),
+    }
+
+
+def import_state(state: dict) -> None:
+    _order_store.clear()
+    _order_store.update(state.get("order", {}))
+    _apptitle_priority[:] = list(state.get("apptitle_priority", []))
+    _tier_inheritance_flags.clear()
+    _tier_inheritance_flags.update(state.get("tier_inheritance_flags", {}))
+
+
 def _reset_state() -> None:
     """Сброс in-memory хранилища (для тестов)."""
     _order_store.clear()

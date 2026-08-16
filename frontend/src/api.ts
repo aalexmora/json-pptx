@@ -1,0 +1,83 @@
+import type { DiffResponse, PlanResponse, Profile, TemplateInfo } from './types'
+
+export async function fetchPlan(
+  jsonData: unknown,
+  language: string,
+  pluginSettings: Record<string, unknown>,
+): Promise<PlanResponse> {
+  const res = await fetch('/api/plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ json_data: jsonData, language, plugin_settings: pluginSettings }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function downloadPptx(
+  jsonData: unknown,
+  language: string,
+  pluginSettings: Record<string, unknown>,
+): Promise<void> {
+  const res = await fetch('/api/pptx', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ json_data: jsonData, language, plugin_settings: pluginSettings }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'roadmap.pptx'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export async function fetchDiff(
+  oldJson: unknown,
+  newJson: unknown,
+  language: string,
+): Promise<DiffResponse> {
+  const res = await fetch('/api/diff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old_json: oldJson, new_json: newJson, language }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function listTemplates(): Promise<TemplateInfo[]> {
+  const res = await fetch('/api/templates')
+  return res.json()
+}
+
+export async function uploadTemplate(file: File): Promise<TemplateInfo> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/templates/upload', { method: 'POST', body: form })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function setActiveTemplate(filename: string | null): Promise<void> {
+  await fetch('/api/templates/active', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename }),
+  })
+}
+
+export async function getProfile(): Promise<Profile> {
+  const res = await fetch('/api/profile')
+  return res.json()
+}
+
+export async function saveProfile(profile: Profile): Promise<void> {
+  await fetch('/api/profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  })
+}

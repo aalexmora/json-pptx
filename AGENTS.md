@@ -74,7 +74,10 @@ roadmap-pptx-generator/
 │   ├── ordering.py                 # get_effective_order, save_order, get/save/resolve_apptitle_priority, флаг наследования тира
 │   ├── labels.py                   # get_apptitle_label, save_apptitle_label
 │   ├── linter.py                   # dev-линтер: кириллица в EN + пользовательские regex'ы
-│   └── strings.py                  # дефолты служебных RU/EN строк (сноска/наследование; этап 8 — из админки)
+│   ├── static_slides.py            # статичные слайды пользователя (title/text/точка вставки)
+│   ├── deck_meta.py                # метаданные титульного слайда (заголовок/год/версия)
+│   ├── approval.py                 # флаги «под согласованием» (Id релизов)
+│   └── strings.py                  # служебные RU/EN строки (дефолты + override из профиля)
 ├── plugins/
 │   ├── _base.py                    # протокол RoadmapPlugin — НЕ менять при добавлении новых плагинов
 │   ├── kbr_filter.py

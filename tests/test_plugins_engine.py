@@ -222,9 +222,10 @@ def test_flexible_columns_paginate_when_over_four():
 def test_product_divider_precedes_slides(load_fixture):
     model = _model(load_fixture, "pagination_5_quarters.json")
     plan = build_slide_plan(model, {})
-    assert isinstance(plan.slides[0], DividerSlide)
-    assert plan.slides[0].divider_type == "product"
-    assert plan.slides[0].title == "Kaspersky Next"
+    # первый слайд — титульный, затем product-divider
+    first_divider = next(s for s in plan.slides if isinstance(s, DividerSlide))
+    assert first_divider.divider_type == "product"
+    assert first_divider.title == "Kaspersky Next"
 
 
 def test_stream_dash_has_no_stream_divider():
@@ -251,7 +252,9 @@ def test_empty_tier_after_filter_skipped():
         }]}]}],
     }]
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
-    assert plan.slides == []
+    # только титульный + спасибо, без roadmap/divider
+    content = [s for s in plan.slides if isinstance(s, (RoadmapSlide, DividerSlide))]
+    assert content == []
 
 
 def test_empty_product_skipped(real_data):

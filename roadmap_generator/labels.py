@@ -23,6 +23,15 @@ def save_apptitle_label(original: str, custom_label: str) -> None:
         _labels[original] = str(custom_label)
 
 
+def export_state() -> dict:
+    return dict(_labels)
+
+
+def import_state(state: dict) -> None:
+    _labels.clear()
+    _labels.update(state)
+
+
 def _reset_state() -> None:
     """Сброс in-memory хранилища (для тестов)."""
     _labels.clear()

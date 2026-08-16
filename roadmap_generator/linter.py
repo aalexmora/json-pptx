@@ -63,6 +63,14 @@ def _issue(product: str, stream: str, tier: str, requirement_id: int, text: str,
     }
 
 
+def export_state() -> list:
+    return list(_custom_rules)
+
+
+def import_state(rules) -> None:
+    _custom_rules[:] = list(rules)
+
+
 def _reset_state() -> None:
     """Сброс in-memory хранилища regex-правил (для тестов)."""
     _custom_rules.clear()

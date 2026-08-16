@@ -12,7 +12,15 @@ from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
 from roadmap_generator.layout import fit_bullets_dynamic
-from roadmap_generator.plugins_engine import DividerSlide, RoadmapSlide, SlidePlan
+from roadmap_generator.strings import get_service_string
+from roadmap_generator.plugins_engine import (
+    DividerSlide,
+    RoadmapSlide,
+    SlidePlan,
+    StaticSlide,
+    ThankYouSlide,
+    TitleSlide,
+)
 from roadmap_generator.template_registry import select_template
 
 MARGIN = 0.5
@@ -36,11 +44,51 @@ def build_presentation(plan: SlidePlan) -> Presentation:
     h = prs.slide_height.inches
 
     for item in plan.slides:
-        if isinstance(item, DividerSlide):
+        if isinstance(item, TitleSlide):
+            _render_title(prs, blank, item, w, h)
+        elif isinstance(item, ThankYouSlide):
+            _render_thank_you(prs, blank, item, w, h)
+        elif isinstance(item, DividerSlide):
             _render_divider(prs, blank, item, w, h)
+        elif isinstance(item, StaticSlide):
+            _render_static(prs, blank, item, w, h)
         elif isinstance(item, RoadmapSlide):
             _render_roadmap(prs, blank, item, w, h)
     return prs
+
+
+def _render_static(prs, layout, slide: StaticSlide, w: float, h: float) -> None:
+    s = prs.slides.add_slide(layout)
+    _set_paragraph(
+        s.shapes.add_textbox(Inches(MARGIN), Inches(0.6), Inches(w - 2 * MARGIN), Inches(0.8)),
+        slide.title, 28, bold=True,
+    )
+    _set_paragraph(
+        s.shapes.add_textbox(Inches(MARGIN), Inches(1.6), Inches(w - 2 * MARGIN), Inches(h - 2.4)),
+        slide.text, 16, bold=False,
+    )
+
+
+def _render_title(prs, layout, slide: TitleSlide, w: float, h: float) -> None:
+    s = prs.slides.add_slide(layout)
+    _set_paragraph(
+        s.shapes.add_textbox(Inches(MARGIN), Inches(h / 2 - 0.9), Inches(w - 2 * MARGIN), Inches(1.2)),
+        slide.title or "Roadmap", 40, bold=True, align=PP_ALIGN.CENTER,
+    )
+    subtitle = " ".join(x for x in (slide.year, slide.version) if x)
+    if subtitle:
+        _set_paragraph(
+            s.shapes.add_textbox(Inches(MARGIN), Inches(h / 2 + 0.4), Inches(w - 2 * MARGIN), Inches(0.5)),
+            subtitle, 18, bold=False, align=PP_ALIGN.CENTER,
+        )
+
+
+def _render_thank_you(prs, layout, slide: ThankYouSlide, w: float, h: float) -> None:
+    s = prs.slides.add_slide(layout)
+    _set_paragraph(
+        s.shapes.add_textbox(Inches(MARGIN), Inches(h / 2 - 0.6), Inches(w - 2 * MARGIN), Inches(1.2)),
+        slide.text, 40, bold=True, align=PP_ALIGN.CENTER,
+    )
 
 
 def _render_divider(prs, layout, slide: DividerSlide, w: float, h: float) -> None:
@@ -57,7 +105,7 @@ def _render_divider(prs, layout, slide: DividerSlide, w: float, h: float) -> Non
 def _render_roadmap(prs, layout, slide: RoadmapSlide, w: float, h: float) -> None:
     s = prs.slides.add_slide(layout)
 
-    eyebrow = "Roadmap (cont.)" if slide.continuation else "Roadmap"
+    eyebrow = get_service_string("roadmap_cont_title" if slide.continuation else "roadmap_title", slide.language)
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.15), Inches(w - 2 * MARGIN), Inches(0.3)),
         eyebrow, EYEBROW_FONT_PT, bold=False,
@@ -82,13 +130,14 @@ def _render_roadmap(prs, layout, slide: RoadmapSlide, w: float, h: float) -> Non
 
     overflow: list = []
     for col in slide.columns:
+        header = col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
         _set_paragraph(
-            s.shapes.add_textbox(Inches(x), Inches(top), Inches(col_w), Inches(0.35)),
-            col.quarter, HEADER_FONT_PT, bold=True,
+            s.shapes.add_textbox(Inches(x), Inches(top), Inches(col_w), Inches(0.5)),
+            header, HEADER_FONT_PT, bold=True,
         )
-        body_top = top + 0.42
-        box = s.shapes.add_textbox(Inches(x), Inches(body_top), Inches(col_w), Inches(body_h - 0.42))
-        overflow.extend(_fill_column_body(box, col, body_h - 0.42, col_w))
+        body_top = top + 0.55
+        box = s.shapes.add_textbox(Inches(x), Inches(body_top), Inches(col_w), Inches(body_h - 0.55))
+        overflow.extend(_fill_column_body(box, col, body_h - 0.55, col_w))
         x += col_w + GAP
 
     if slide.footnote:
@@ -147,7 +196,7 @@ def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float,
     s = prs.slides.add_slide(layout)
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.15), Inches(w - 2 * MARGIN), Inches(0.3)),
-        "Roadmap (cont. — overflow)", EYEBROW_FONT_PT, bold=False,
+        get_service_string("roadmap_cont_title", slide.language), EYEBROW_FONT_PT, bold=False,
     )
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.42), Inches(w - 2 * MARGIN), Inches(0.45)),

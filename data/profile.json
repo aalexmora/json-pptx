@@ -1,0 +1,50 @@
+{
+  "ordering": {
+    "order": {},
+    "apptitle_priority": [],
+    "tier_inheritance_flags": {
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Foundations": true,
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum": true,
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": true
+    }
+  },
+  "labels": {},
+  "linter_rules": [],
+  "under_approval_ids": [
+    1,
+    8074887,
+    8179944
+  ],
+  "deck_meta": {
+    "title": "123",
+    "year": "2123",
+    "version": "1"
+  },
+  "service_strings": {
+    "subject_to_change_footnote": {
+      "ru": "* Могут быть внесены изменения",
+      "en": "* Subject to Change"
+    },
+    "under_approval_badge": {
+      "ru": "На согласовании",
+      "en": "In the approval process"
+    },
+    "thank_you": {
+      "ru": "Спасибо!",
+      "en": "Thank you!"
+    },
+    "inheritance_prefix": {
+      "ru": "вкл. все фичи предыдущих тиров:",
+      "en": "inc. all features of previous tier(s):"
+    },
+    "roadmap_title": {
+      "ru": "Роадмап",
+      "en": "Roadmap"
+    },
+    "roadmap_cont_title": {
+      "ru": "Роадмап (продолжение)",
+      "en": "Roadmap (cont.)"
+    }
+  },
+  "static_slides": []
+}
