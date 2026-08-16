@@ -107,13 +107,13 @@ def test_service_strings_default_when_no_override(load_fixture):
 
 def test_static_slides_insertion(load_fixture):
     static_slides.save_static_slides([
-        {"title": "Intro", "text": "hello", "position": "end"},
-        {"title": "Pre", "text": "pre", "position": "before:Kaspersky Next"},
+        {"name": "Intro", "position": "end"},
+        {"name": "Pre", "position": "before:Kaspersky Next"},
     ])
     model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="ru")
     plan = build_slide_plan(model, {})
-    static_titles = [s.title for s in plan.slides if isinstance(s, StaticSlide)]
-    assert static_titles == ["Pre", "Intro"]
-    idx_pre = next(i for i, s in enumerate(plan.slides) if isinstance(s, StaticSlide) and s.title == "Pre")
+    static_names = [s.name for s in plan.slides if isinstance(s, StaticSlide)]
+    assert static_names == ["Pre", "Intro"]
+    idx_pre = next(i for i, s in enumerate(plan.slides) if isinstance(s, StaticSlide) and s.name == "Pre")
     idx_prod = next(i for i, s in enumerate(plan.slides) if isinstance(s, DividerSlide) and s.divider_type == "product")
     assert idx_pre < idx_prod

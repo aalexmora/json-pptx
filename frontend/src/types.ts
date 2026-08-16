@@ -47,7 +47,12 @@ export interface ThankYouSlide {
   text: string
 }
 
-export type Slide = RoadmapSlide | DividerSlide | TitleSlide | ThankYouSlide
+export interface StaticSlide {
+  name: string
+  pptx: string
+}
+
+export type Slide = RoadmapSlide | DividerSlide | TitleSlide | ThankYouSlide | StaticSlide
 
 export interface SlidePlan {
   slides: Slide[]
@@ -103,7 +108,7 @@ export interface Profile {
   under_approval_ids: number[]
   deck_meta: { title: string; year: string; version: string }
   service_strings: Record<string, { ru: string; en: string }>
-  static_slides: { title: string; text: string; position: string }[]
+  static_slides: { name: string; position: string; pptx: string }[]
 }
 
 export interface PlanResponse {

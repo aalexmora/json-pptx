@@ -1,24 +1,50 @@
 {
   "ordering": {
-    "order": {},
+    "order": {
+      "": [
+        "Kaspersky Next",
+        "Kaspersky Hybrid Cloud Security",
+        "Kaspersky Next Generation Firewall",
+        "Kaspersky Automated Security Awareness Platform",
+        "Kaspersky Vulnerability Management",
+        "Kaspersky Anti Targeted Attack",
+        "Threat Intelligence Portal",
+        "Kaspersky Unified Monitoring and Analysis Platform",
+        "Kaspersky CyberTrace",
+        "Kaspersky Managed Detection and Response",
+        "Kaspersky SD-WAN",
+        "Kaspersky Container Security",
+        "Kaspersky Embedded Systems Security",
+        "Kaspersky Private Security Network",
+        "Kaspersky Industrial CyberSecurity",
+        "Kaspersky Fraud Prevention",
+        "Kaspersky Scan Engine",
+        "Kaspersky Anti-Virus SDK",
+        "Kaspersky Mobile Security SDK",
+        "Kaspersky Security for Mail Server"
+      ]
+    },
     "apptitle_priority": [],
     "tier_inheritance_flags": {
       "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Foundations": true,
       "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum": true,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": true
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": true,
+      "Kaspersky Vulnerability Management > - > -": true
     }
   },
-  "labels": {},
+  "labels": {
+    "Managed Detection and Response": "жор"
+  },
   "linter_rules": [],
   "under_approval_ids": [
-    1,
+    2,
     8074887,
     8179944
   ],
   "deck_meta": {
-    "title": "123",
-    "year": "2123",
-    "version": "1"
+    "title": "",
+    "year": "2026",
+    "version": ""
   },
   "service_strings": {
     "subject_to_change_footnote": {
@@ -46,5 +72,21 @@
       "en": "Roadmap (cont.)"
     }
   },
-  "static_slides": []
+  "static_slides": [
+    {
+      "name": "2",
+      "position": "after:Kaspersky Next",
+      "pptx": "вставка.pptx"
+    },
+    {
+      "name": "1",
+      "position": "before:Kaspersky Next",
+      "pptx": ""
+    },
+    {
+      "name": "тт",
+      "position": "before:Kaspersky Next",
+      "pptx": "вставка.pptx"
+    }
+  ]
 }

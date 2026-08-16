@@ -68,8 +68,8 @@ class ThankYouSlide:
 
 @dataclass
 class StaticSlide:
-    title: str
-    text: str
+    name: str
+    pptx: str = ""
 
 
 @dataclass
@@ -180,14 +180,14 @@ def _assemble_with_static(product_decks, static_slides) -> List[Union[DividerSli
     for pname, deck_items in product_decks:
         for ss in static_slides:
             if ss["position"] == f"before:{pname}":
-                result.append(StaticSlide(title=ss["title"], text=ss["text"]))
+                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", "")))
         result.extend(deck_items)
         for ss in static_slides:
             if ss["position"] == f"after:{pname}":
-                result.append(StaticSlide(title=ss["title"], text=ss["text"]))
+                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", "")))
     for ss in static_slides:
         if ss["position"] == "end":
-            result.append(StaticSlide(title=ss["title"], text=ss["text"]))
+            result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", "")))
     return result
 
 

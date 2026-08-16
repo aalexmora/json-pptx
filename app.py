@@ -173,6 +173,14 @@ def template_preview(filename: str):
     return FileResponse(path, media_type="image/jpeg")
 
 
+@app.post("/api/static-slides/pptx")
+async def upload_static_slide_pptx(file: UploadFile = File(...)):
+    data = await file.read()
+    filename = Path(file.filename or "slide.pptx").name
+    saved = static_slides.save_static_slide_pptx(filename, data)
+    return {"filename": saved, "extracted_title": static_slides.extract_slide_title(saved)}
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}

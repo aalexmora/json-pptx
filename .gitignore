@@ -1,20 +1,23 @@
 # Python
-__pycache__/
-*.py[cod]
-*.pyo
 .venv/
-venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
 
-# front
-frontend/.npm-cache
+# Node
+node_modules/
+frontend/dist/
+frontend/.npm-cache/
+.npm-cache/
+
+# Runtime-данные (профиль пользователя, загруженные шаблоны, превью)
+data/
+templates_library/
+output/
+
+# Генерируемый синтетический шаблон (создаётся автоматически)
+tests/fixtures/synthetic_template.pptx
 
 # macOS
 .DS_Store
-
-# Environment
-.env
-.env.local
-
-# IDE
-.vscode/
-.idea/

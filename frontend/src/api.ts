@@ -61,6 +61,14 @@ export async function uploadTemplate(file: File): Promise<TemplateInfo> {
   return res.json()
 }
 
+export async function uploadStaticSlidePptx(file: File): Promise<{ filename: string; extracted_title: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/static-slides/pptx', { method: 'POST', body: form })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 export async function setActiveTemplate(filename: string | null): Promise<void> {
   await fetch('/api/templates/active', {
     method: 'POST',

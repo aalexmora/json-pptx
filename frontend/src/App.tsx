@@ -10,6 +10,7 @@ import type {
   ReleaseInfo,
   RoadmapSlide,
   Slide,
+  StaticSlide,
   TemplateInfo,
   ThankYouSlide,
   TitleSlide,
@@ -23,6 +24,7 @@ import {
   listTemplates,
   saveProfile,
   setActiveTemplate,
+  uploadStaticSlidePptx,
   uploadTemplate,
 } from './api'
 
@@ -111,6 +113,23 @@ function isThankYou(slide: Slide): slide is ThankYouSlide {
   return 'text' in slide
 }
 
+function isStatic(slide: Slide): slide is StaticSlide {
+  return 'pptx' in slide
+}
+
+function computeInsertPoints(slides: Slide[]): { index: number; position: string }[] {
+  const points: { index: number; position: string }[] = []
+  let thankYouIndex = -1
+  slides.forEach((s, i) => {
+    if (isDivider(s) && s.divider_type === 'product') {
+      points.push({ index: i, position: `before:${s.title}` })
+    }
+    if (isThankYou(s) && thankYouIndex === -1) thankYouIndex = i
+  })
+  points.push({ index: thankYouIndex >= 0 ? thankYouIndex : slides.length, position: 'end' })
+  return points.sort((a, b) => a.index - b.index)
+}
+
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
   const next = [...arr]
   const [moved] = next.splice(from, 1)
@@ -124,7 +143,7 @@ type DropHandlerFactory = (
   siblings: string[],
 ) => {
   draggable: boolean
-  onDragStart: () => void
+  onDragStart: (e: DragEvent) => void
   onDragOver: (e: DragEvent) => void
   onDrop: (e: DragEvent) => void
 }
@@ -148,6 +167,11 @@ export default function App() {
   const projectFileRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<{ parentPath: string; index: number } | null>(null)
   const [diff, setDiff] = useState<DiffResponse | null>(null)
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
+  const [rightWidth, setRightWidth] = useState(320)
+  const [collapsedSlides, setCollapsedSlides] = useState<Set<number>>(new Set())
+  const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '' })
 
   const newReqIds = useMemo(() => new Set(diff?.diff?.new_requirement_ids ?? []), [diff])
   const changedReqIds = useMemo(() => new Set(diff?.diff?.changed_requirement_ids ?? []), [diff])
@@ -157,6 +181,20 @@ export default function App() {
     [result],
   )
   const productNames = useMemo(() => (result?.tree?.products ?? []).map((p) => p.name), [result])
+
+  const slideItems = useMemo(() => {
+    const slides = result?.plan?.slides ?? []
+    const ptAt = new Map(computeInsertPoints(slides).map((p) => [p.index, p.position]))
+    const items: ({ kind: 'marker'; position: string } | { kind: 'slide'; slide: Slide; index: number })[] = []
+    slides.forEach((slide, i) => {
+      const pos = ptAt.get(i)
+      if (pos !== undefined) items.push({ kind: 'marker', position: pos })
+      items.push({ kind: 'slide', slide, index: i })
+    })
+    const endPos = ptAt.get(slides.length)
+    if (endPos !== undefined) items.push({ kind: 'marker', position: endPos })
+    return items
+  }, [result])
 
   function buildSettings(): Record<string, unknown> {
     const global: Record<string, unknown> = {}
@@ -290,9 +328,14 @@ export default function App() {
     }
   }
 
+  const saveQueue = useRef<Promise<void>>(Promise.resolve())
+
   async function persist(next: Profile) {
     setProfile(next)
-    await saveProfile(next)
+    // сериализуем сохранения, чтобы backend не получил устаревший профиль при быстрых правках
+    const save = saveQueue.current.then(() => saveProfile(next))
+    saveQueue.current = save
+    await save
     setRefreshKey((k) => k + 1)
   }
 
@@ -321,6 +364,43 @@ export default function App() {
     if (approved) ids.add(releaseId)
     else ids.delete(releaseId)
     persist({ ...profile, under_approval_ids: [...ids].sort((a, b) => a - b) })
+  }
+
+  function toggleSlide(i: number) {
+    setCollapsedSlides((prev) => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+  }
+
+  function toggleAllSlides(total: number) {
+    setCollapsedSlides((prev) =>
+      prev.size > 0 ? new Set() : new Set(Array.from({ length: total }, (_, i) => i)),
+    )
+  }
+
+  function openStaticSlideModal(position = 'end') {
+    setStaticModal({ open: true, name: '', position, pptx: '' })
+  }
+
+  function handleDeleteStaticSlide(index: number) {
+    if (!profile) return
+    handleStaticSlides((profile.static_slides ?? []).filter((_, k) => k !== index))
+  }
+
+  function closeStaticSlideModal() {
+    setStaticModal((m) => ({ ...m, open: false }))
+  }
+
+  function submitStaticSlide() {
+    if (!profile) return
+    handleStaticSlides([
+      ...(profile.static_slides ?? []),
+      { name: staticModal.name, position: staticModal.position, pptx: staticModal.pptx },
+    ])
+    closeStaticSlideModal()
   }
 
   function handleDeckMeta(field: 'title' | 'year' | 'version', value: string) {
@@ -352,15 +432,17 @@ export default function App() {
     persist({ ...profile, ordering: { ...profile.ordering, apptitle_priority: names } })
   }
 
-  function handleStaticSlides(slides: { title: string; text: string; position: string }[]) {
+  function handleStaticSlides(slides: { name: string; position: string; pptx: string }[]) {
     if (!profile) return
     persist({ ...profile, static_slides: slides })
   }
 
   const dropHandlers: DropHandlerFactory = (parentPath, index, siblings) => ({
     draggable: true,
-    onDragStart: () => {
+    onDragStart: (e) => {
       dragRef.current = { parentPath, index }
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', String(index))
     },
     onDragOver: (e) => {
       e.preventDefault()
@@ -377,12 +459,27 @@ export default function App() {
   })
 
   return (
-    <div className="layout">
+    <div
+      className="layout"
+      style={{
+        gridTemplateColumns: `${leftCollapsed ? '0px' : '280px'} minmax(0, 1fr) ${
+          rightCollapsed ? '0px' : rightWidth + 'px'
+        }`,
+      }}
+    >
       <header className="header">
-        <h1>Roadmap → PPTX</h1>
+        <div className="header-left">
+          <button onClick={() => setLeftCollapsed((v) => !v)} title="Скрыть/показать меню данных">
+            {leftCollapsed ? '☰' : '✕'}
+          </button>
+          <h1>Roadmap → PPTX</h1>
+        </div>
         <div className="header-actions">
           <button onClick={toggleTheme} title="Переключить тему">
             {theme === 'dark' ? '☀️ Светлая' : '🌙 Ночная'}
+          </button>
+          <button onClick={() => setRightCollapsed((v) => !v)} title="Скрыть/показать настройки">
+            {rightCollapsed ? '⚙' : '✕'}
           </button>
           <button onClick={handleGenerate} disabled={!jsonData}>
             Сгенерировать PPTX
@@ -412,6 +509,107 @@ export default function App() {
             Сохранить проект
           </button>
           <button onClick={() => projectFileRef.current?.click()}>Загрузить проект</button>
+        </div>
+
+        <details className="json-debug">
+          <summary>JSON (debug)</summary>
+          <textarea
+            className="json-input"
+            placeholder="Вставьте JSON-выгрузку roadmap…"
+            value={jsonText}
+            onChange={(e) => setJsonText(e.target.value)}
+          />
+          <button onClick={handleLoad} disabled={loading}>
+            Обновить превью
+          </button>
+        </details>
+
+        {error && <div className="error">{error}</div>}
+      </aside>
+
+      <main className="content">
+        {loading && <p>Загрузка…</p>}
+        {result && result.lint_issues.length > 0 && (
+          <div className="lint">
+            <h3>Ошибки линтера ({result.lint_issues.length})</h3>
+            {result.lint_issues.map((issue, i) => (
+              <LintRow key={i} issue={issue} />
+            ))}
+          </div>
+        )}
+
+        {result && result.tree && profile && (
+          <details className="section" open>
+            <summary>Дерево порядка слайдов</summary>
+            <TreeView
+              tree={result.tree}
+              dropHandlers={dropHandlers}
+              onToggleInheritance={handleToggleInheritance}
+              newTierPaths={newTierPaths}
+            />
+          </details>
+        )}
+
+        <details className="section">
+          <summary>Библиотека шаблонов</summary>
+          <TemplatesPanel />
+        </details>
+
+        {diff && diff.diff && (
+          <div className="diff-summary">
+            <b>Изменения относительно прошлой загрузки:</b>{' '}
+            +{diff.diff.new_requirement_ids?.length ?? 0} новых,{' '}
+            ~{diff.diff.changed_requirement_ids?.length ?? 0} изменено,{' '}
+            −{diff.diff.removed_requirement_ids?.length ?? 0} удалено
+          </div>
+        )}
+
+        {result && result.plan && (
+          <>
+            <div className="slides-toolbar">
+              <button onClick={() => toggleAllSlides(result.plan!.slides.length)}>
+                {collapsedSlides.size > 0 ? 'Раскрыть все блоки' : 'Схлопнуть все блоки'}
+              </button>
+              <button onClick={() => openStaticSlideModal()}>＋ Статичный слайд</button>
+            </div>
+            <div className="slides">
+              {slideItems.map((item, i) =>
+                item.kind === 'marker' ? (
+                  <InsertMarker key={`m${i}`} position={item.position} onInsert={openStaticSlideModal} />
+                ) : (
+                  <SlideCard
+                    key={`s${i}`}
+                    slide={item.slide}
+                    newReqIds={newReqIds}
+                    changedReqIds={changedReqIds}
+                    expanded={!collapsedSlides.has(item.index)}
+                    onToggle={() => toggleSlide(item.index)}
+                  />
+                ),
+              )}
+            </div>
+          </>
+        )}
+      </main>
+
+      <aside className="right-panel">
+        <div
+          className="resize-handle"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            const startX = e.clientX
+            const startWidth = rightWidth
+            const onMove = (ev: MouseEvent) =>
+              setRightWidth(Math.max(240, Math.min(600, startWidth + (startX - ev.clientX))))
+            const onUp = () => {
+              window.removeEventListener('mousemove', onMove)
+              window.removeEventListener('mouseup', onUp)
+            }
+            window.addEventListener('mousemove', onMove)
+            window.addEventListener('mouseup', onUp)
+          }}
+        />
+        <div className="controls">
           <label>
             Язык:
             <select value={language} onChange={(e) => setLanguage(e.target.value as 'ru' | 'en')}>
@@ -458,43 +656,6 @@ export default function App() {
             </div>
           </div>
         </div>
-
-        <textarea
-          className="json-input"
-          placeholder="Вставьте JSON-выгрузку roadmap…"
-          value={jsonText}
-          onChange={(e) => setJsonText(e.target.value)}
-        />
-        <button onClick={handleLoad} disabled={loading}>
-          Обновить превью
-        </button>
-
-        {error && <div className="error">{error}</div>}
-      </aside>
-
-      <main className="content">
-        {loading && <p>Загрузка…</p>}
-        {result && result.lint_issues.length > 0 && (
-          <div className="lint">
-            <h3>Ошибки линтера ({result.lint_issues.length})</h3>
-            {result.lint_issues.map((issue, i) => (
-              <LintRow key={i} issue={issue} />
-            ))}
-          </div>
-        )}
-
-        {result && result.tree && profile && (
-          <details className="section" open>
-            <summary>Дерево порядка слайдов</summary>
-            <TreeView
-              tree={result.tree}
-              dropHandlers={dropHandlers}
-              onToggleInheritance={handleToggleInheritance}
-              newTierPaths={newTierPaths}
-            />
-          </details>
-        )}
-
         {result && (result.releases ?? []).length > 0 && profile && (
           <details className="section">
             <summary>Под согласованием</summary>
@@ -515,7 +676,7 @@ export default function App() {
 
         {profile && (
           <details className="section">
-            <summary>Синонимы AppTitle</summary>
+            <summary>App group mapping</summary>
             <SynonymsPanel labels={profile.labels} appTitles={appTitles} onChange={handleLabel} />
           </details>
         )}
@@ -534,36 +695,18 @@ export default function App() {
         {profile && (
           <details className="section">
             <summary>Статичные слайды</summary>
-            <StaticSlidesPanel
-              slides={profile.static_slides ?? []}
-              productNames={productNames}
-              onChange={handleStaticSlides}
-            />
+            <StaticSlidesList slides={profile.static_slides ?? []} onDelete={handleDeleteStaticSlide} />
           </details>
         )}
+      </aside>
 
-        <details className="section">
-          <summary>Библиотека шаблонов</summary>
-          <TemplatesPanel />
-        </details>
-
-        {diff && diff.diff && (
-          <div className="diff-summary">
-            <b>Изменения относительно прошлой загрузки:</b>{' '}
-            +{diff.diff.new_requirement_ids?.length ?? 0} новых,{' '}
-            ~{diff.diff.changed_requirement_ids?.length ?? 0} изменено,{' '}
-            −{diff.diff.removed_requirement_ids?.length ?? 0} удалено
-          </div>
-        )}
-
-        {result && result.plan && (
-          <div className="slides">
-            {result.plan.slides.map((slide, i) => (
-              <SlideCard key={i} slide={slide} newReqIds={newReqIds} changedReqIds={changedReqIds} />
-            ))}
-          </div>
-        )}
-      </main>
+      <StaticSlideModal
+        modal={staticModal}
+        productNames={productNames}
+        onChange={(patch) => setStaticModal((m) => ({ ...m, ...patch }))}
+        onClose={closeStaticSlideModal}
+        onSubmit={submitStaticSlide}
+      />
     </div>
   )
 }
@@ -616,16 +759,18 @@ function TreeView({
                       {newTierPaths.has(`${p.name} > ${s.name} > ${t.name}`) && (
                         <span className="tree-badge">новое</span>
                       )}
-                      <label className="inheritance-check">
-                        <input
-                          type="checkbox"
-                          checked={t.inheritance_flag}
-                          onChange={(e) =>
-                            onToggleInheritance(`${p.name} > ${s.name} > ${t.name}`, e.target.checked)
-                          }
-                        />
-                        наследование
-                      </label>
+                      {ti > 0 && (
+                        <label className="inheritance-check">
+                          <input
+                            type="checkbox"
+                            checked={t.inheritance_flag}
+                            onChange={(e) =>
+                              onToggleInheritance(`${p.name} > ${s.name} > ${t.name}`, e.target.checked)
+                            }
+                          />
+                          наследование
+                        </label>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -721,15 +866,17 @@ function SynonymsPanel({
         </div>
       ))}
       <div className="synonym-row">
-        <input type="text" list="apptitle-syn" value={orig} placeholder="Оригинал" onChange={(e) => setOrig(e.target.value)} />
+        <select value={orig} onChange={(e) => setOrig(e.target.value)}>
+          <option value="">— выберите AppTitle —</option>
+          {appTitles.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
         <input type="text" value={custom} placeholder="Кастомное название" onChange={(e) => setCustom(e.target.value)} />
         <button onClick={add}>+</button>
       </div>
-      <datalist id="apptitle-syn">
-        {appTitles.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
     </div>
   )
 }
@@ -773,52 +920,101 @@ function PriorityPanel({
         </div>
       ))}
       <div className="priority-row">
-        <input type="text" list="apptitle-prio" value={name} placeholder="AppTitle" onChange={(e) => setName(e.target.value)} />
+        <select value={name} onChange={(e) => setName(e.target.value)}>
+          <option value="">— выберите AppTitle —</option>
+          {appTitles.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
         <button onClick={add}>+</button>
       </div>
-      <datalist id="apptitle-prio">
-        {appTitles.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
     </div>
   )
 }
 
-function StaticSlidesPanel({
-  slides,
+function StaticSlideModal({
+  modal,
   productNames,
   onChange,
+  onClose,
+  onSubmit,
 }: {
-  slides: { title: string; text: string; position: string }[]
+  modal: { open: boolean; name: string; position: string; pptx: string }
   productNames: string[]
-  onChange: (slides: { title: string; text: string; position: string }[]) => void
+  onChange: (patch: Partial<{ name: string; position: string; pptx: string }>) => void
+  onClose: () => void
+  onSubmit: () => void
 }) {
+  const [dragOver, setDragOver] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
   const positions = ['end', ...productNames.flatMap((p) => [`before:${p}`, `after:${p}`])]
 
-  function update(i: number, patch: Partial<{ title: string; text: string; position: string }>) {
-    onChange(slides.map((s, k) => (k === i ? { ...s, ...patch } : s)))
+  async function upload(file: File) {
+    try {
+      const { filename, extracted_title } = await uploadStaticSlidePptx(file)
+      const patch: { pptx: string; name?: string } = { pptx: filename }
+      if (!modal.name.trim()) patch.name = extracted_title
+      onChange(patch)
+    } catch (err) {
+      alert('Ошибка загрузки: ' + err)
+    }
   }
 
+  if (!modal.open) return null
+
   return (
-    <div className="static-slides">
-      {slides.map((s, i) => (
-        <div key={i} className="static-row">
-          <input type="text" value={s.title} placeholder="Заголовок" onChange={(e) => update(i, { title: e.target.value })} />
-          <input type="text" value={s.text} placeholder="Текст" onChange={(e) => update(i, { text: e.target.value })} />
-          <select value={s.position} onChange={(e) => update(i, { position: e.target.value })}>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Новый статичный слайд</h3>
+        <label className="modal-field">
+          Название:
+          <input type="text" value={modal.name} onChange={(e) => onChange({ name: e.target.value })} />
+        </label>
+        <label className="modal-field">
+          Позиция:
+          <select value={modal.position} onChange={(e) => onChange({ position: e.target.value })}>
             {positions.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
           </select>
-          <button onClick={() => onChange(slides.filter((_, k) => k !== i))}>✕</button>
+        </label>
+        <div
+          className={'dropzone' + (dragOver ? ' over' : '')}
+          onClick={() => fileRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragOver(true)
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragOver(false)
+            const file = e.dataTransfer.files?.[0]
+            if (file) upload(file)
+          }}
+        >
+          {modal.pptx ? `📎 ${modal.pptx}` : 'Перетащите .pptx сюда или кликните для выбора'}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pptx"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) upload(f)
+              e.target.value = ''
+            }}
+          />
         </div>
-      ))}
-      <button onClick={() => onChange([...slides, { title: '', text: '', position: 'end' }])}>
-        + Добавить статичный слайд
-      </button>
+        <div className="modal-actions">
+          <button onClick={onClose}>Отмена</button>
+          <button onClick={onSubmit}>Добавить</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -892,14 +1088,49 @@ function TemplatesPanel() {
   )
 }
 
+function InsertMarker({ position, onInsert }: { position: string; onInsert: (position: string) => void }) {
+  return (
+    <div className="insert-marker" onClick={() => onInsert(position)} title={`Вставить сюда (${position})`}>
+      <span className="insert-plus">＋</span>
+    </div>
+  )
+}
+
+function StaticSlidesList({
+  slides,
+  onDelete,
+}: {
+  slides: { name: string; position: string; pptx: string }[]
+  onDelete: (index: number) => void
+}) {
+  if (slides.length === 0) return <div className="priority-empty">Нет статичных слайдов.</div>
+  return (
+    <div className="static-list">
+      {slides.map((s, i) => (
+        <div key={i} className="static-list-row">
+          <span className="static-list-name">{s.name || '(без названия)'}</span>
+          <span className="static-list-pos">{s.position}</span>
+          <button title="Удалить" onClick={() => onDelete(i)}>
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SlideCard({
   slide,
   newReqIds,
   changedReqIds,
+  expanded,
+  onToggle,
 }: {
   slide: Slide
   newReqIds: Set<number>
   changedReqIds: Set<number>
+  expanded: boolean
+  onToggle: () => void
 }) {
   if (isTitle(slide)) {
     return (
@@ -919,6 +1150,14 @@ function SlideCard({
       </div>
     )
   }
+  if (isStatic(slide)) {
+    return (
+      <div className="card divider divider-static">
+        <span className="badge">STATIC</span>
+        <span className="divider-title">{slide.name || '(без названия)'}</span>
+      </div>
+    )
+  }
   if (isDivider(slide)) {
     return (
       <div className={'card divider divider-' + slide.divider_type}>
@@ -927,31 +1166,46 @@ function SlideCard({
       </div>
     )
   }
-  return <RoadmapCard slide={slide} newReqIds={newReqIds} changedReqIds={changedReqIds} />
+  return (
+    <RoadmapCard
+      slide={slide}
+      newReqIds={newReqIds}
+      changedReqIds={changedReqIds}
+      expanded={expanded}
+      onToggle={onToggle}
+    />
+  )
 }
 
 function RoadmapCard({
   slide,
   newReqIds,
   changedReqIds,
+  expanded,
+  onToggle,
 }: {
   slide: RoadmapSlide
   newReqIds: Set<number>
   changedReqIds: Set<number>
+  expanded: boolean
+  onToggle: () => void
 }) {
   return (
-    <div className="card roadmap">
+    <div className="card roadmap" onClick={onToggle}>
       <div className="roadmap-head">
         <span className="badge">{slide.continuation ? 'Roadmap (cont.)' : 'Roadmap'}</span>
         <span className="tier">{slide.tier}</span>
+        <span className="collapse-hint">{expanded ? '▾' : '▸'}</span>
       </div>
-      {slide.inheritance_note && <div className="inheritance">{slide.inheritance_note}</div>}
-      <div className="columns">
-        {slide.columns.map((col, i) => (
-          <ColumnView key={i} col={col} newReqIds={newReqIds} changedReqIds={changedReqIds} />
-        ))}
-      </div>
-      {slide.footnote && <div className="footnote">{slide.footnote}</div>}
+      {expanded && slide.inheritance_note && <div className="inheritance">{slide.inheritance_note}</div>}
+      {expanded && (
+        <div className="columns">
+          {slide.columns.map((col, i) => (
+            <ColumnView key={i} col={col} newReqIds={newReqIds} changedReqIds={changedReqIds} />
+          ))}
+        </div>
+      )}
+      {expanded && slide.footnote && <div className="footnote">{slide.footnote}</div>}
     </div>
   )
 }

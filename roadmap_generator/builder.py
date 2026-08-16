@@ -7,10 +7,15 @@
 """
 from __future__ import annotations
 
+import copy
+import io
+
 from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
+from roadmap_generator import static_slides
 from roadmap_generator.layout import fit_bullets_dynamic
 from roadmap_generator.strings import get_service_string
 from roadmap_generator.plugins_engine import (
@@ -58,15 +63,35 @@ def build_presentation(plan: SlidePlan) -> Presentation:
 
 
 def _render_static(prs, layout, slide: StaticSlide, w: float, h: float) -> None:
+    if slide.pptx:
+        path = static_slides.static_slide_pptx_path(slide.pptx)
+        if path.exists():
+            _copy_slides_from(prs, str(path))
+            return
     s = prs.slides.add_slide(layout)
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.6), Inches(w - 2 * MARGIN), Inches(0.8)),
-        slide.title, 28, bold=True,
+        slide.name, 28, bold=True,
     )
-    _set_paragraph(
-        s.shapes.add_textbox(Inches(MARGIN), Inches(1.6), Inches(w - 2 * MARGIN), Inches(h - 2.4)),
-        slide.text, 16, bold=False,
-    )
+
+
+def _copy_slides_from(prs, source_path: str) -> None:
+    """Копирует слайды `.pptx`-заготовки в целевую презентацию.
+
+    Картинки пересоздаются через публичный `add_picture` (с их blob'ом), чтобы не
+    было «битых» ссылок; остальные шейпы — `copy.deepcopy` + `_spTree`.
+    """
+    source = Presentation(source_path)
+    blank = prs.slide_layouts[6]
+    for source_slide in source.slides:
+        new_slide = prs.slides.add_slide(blank)
+        for shape in source_slide.shapes:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                new_slide.shapes.add_picture(
+                    io.BytesIO(shape.image.blob), shape.left, shape.top, shape.width, shape.height,
+                )
+            else:
+                new_slide.shapes._spTree.append(copy.deepcopy(shape._element))
 
 
 def _render_title(prs, layout, slide: TitleSlide, w: float, h: float) -> None:

@@ -48,20 +48,25 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 360px 1fr;
   grid-template-rows: 56px 1fr;
-  grid-template-areas: 'header header' 'sidebar content';
   height: 100vh;
 }
 
 .header {
-  grid-area: header;
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .header h1 {
@@ -75,14 +80,17 @@ body {
 }
 
 .sidebar {
-  grid-area: sidebar;
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  overflow-y: auto;
 }
 
 .controls {
@@ -145,9 +153,45 @@ button:disabled {
 }
 
 .content {
-  grid-area: content;
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
   padding: 20px;
   overflow-y: auto;
+}
+
+.right-panel {
+  grid-column: 3;
+  grid-row: 2;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+  padding: 16px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.resize-handle:hover {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.json-debug summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
 }
 
 .lint {
@@ -491,6 +535,17 @@ button:disabled {
   font-size: 13px;
 }
 
+.synonym-row select,
+.priority-row select {
+  flex: 1;
+  padding: 5px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
 .priority-empty {
   font-size: 12px;
   color: var(--text-muted);
@@ -579,4 +634,142 @@ button:disabled {
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 5px 6px;
+}
+
+.static-pptx {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slides-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.collapse-hint {
+  margin-left: auto;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 420px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.modal-field input[type='text'],
+.modal-field select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.dropzone.over {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.insert-marker {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  cursor: pointer;
+  margin: -6px 0;
+}
+
+.insert-marker:hover {
+  opacity: 1;
+}
+
+.insert-plus {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: center;
+}
+
+.static-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.static-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.static-list-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.static-list-pos {
+  font-size: 11px;
+  color: var(--text-muted);
 }
