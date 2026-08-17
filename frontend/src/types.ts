@@ -109,6 +109,7 @@ export interface Profile {
   deck_meta: { title: string; year: string; version: string }
   service_strings: Record<string, { ru: string; en: string }>
   static_slides: { name: string; position: string; pptx: string }[]
+  product_languages: Record<string, { ru: boolean; en: boolean }>
 }
 
 export interface PlanResponse {
@@ -138,6 +139,8 @@ export interface DiffResponse {
 export interface TemplateInfo {
   filename: string
   missing_shapes: string[]
+  duplicate_shapes: string[]
+  issues: string[]
   valid: boolean
   preview: string | null
   active: boolean

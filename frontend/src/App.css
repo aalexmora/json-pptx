@@ -146,6 +146,11 @@ button:disabled {
   cursor: default;
 }
 
+button.danger {
+  color: var(--error);
+  border-color: var(--error);
+}
+
 .error {
   color: var(--error);
   font-size: 13px;
@@ -772,4 +777,89 @@ button:disabled {
 .static-list-pos {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.grouped {
+  display: flex;
+  flex-direction: column;
+}
+
+.group .group {
+  margin-left: 16px;
+  border-left: 1px solid var(--border);
+  padding-left: 8px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: grab;
+  margin: 4px 0;
+}
+
+.group-header:hover {
+  background: var(--hover);
+}
+
+.group-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.product-h {
+  border-left: 3px solid var(--accent);
+}
+
+.stream-h {
+  border-left: 3px solid var(--text-muted);
+}
+
+.product-langs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.product-lang-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.product-lang-name {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lang-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.lang-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.lang-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--hover);
+  padding: 2px 8px;
+  border-radius: 999px;
 }

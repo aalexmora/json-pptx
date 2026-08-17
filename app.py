@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, static_slides, strings, template_registry
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, static_slides, strings, template_registry
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.diffing import compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
@@ -49,6 +49,7 @@ def _load_profile() -> None:
         deck_meta.import_state(data.get("deck_meta", {}))
         strings.import_state(data.get("service_strings", {}))
         static_slides.import_state(data.get("static_slides", []))
+        product_languages.import_state(data.get("product_languages", {}))
     except (json.JSONDecodeError, OSError):
         pass
 
@@ -64,6 +65,7 @@ def _save_profile() -> None:
         "deck_meta": deck_meta.export_state(),
         "service_strings": strings.export_state(),
         "static_slides": static_slides.export_state(),
+        "product_languages": product_languages.export_state(),
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -165,6 +167,12 @@ def set_active(payload: dict):
     return {"status": "ok"}
 
 
+@app.delete("/api/templates/{filename}")
+def delete_template(filename: str):
+    template_registry.delete_template(filename)
+    return {"status": "ok"}
+
+
 @app.get("/api/templates/preview/{filename}")
 def template_preview(filename: str):
     path = template_registry.preview_path(filename)
@@ -196,6 +204,7 @@ def get_profile():
         "deck_meta": deck_meta.export_state(),
         "service_strings": strings.get_service_strings(),
         "static_slides": static_slides.export_state(),
+        "product_languages": product_languages.export_state(),
     }
 
 
@@ -208,6 +217,7 @@ def save_profile(profile: dict):
     deck_meta.import_state(profile.get("deck_meta", {}))
     strings.save_service_strings(profile.get("service_strings", {}))
     static_slides.import_state(profile.get("static_slides", []))
+    product_languages.import_state(profile.get("product_languages", {}))
     _save_profile()
     return {"status": "ok"}
 

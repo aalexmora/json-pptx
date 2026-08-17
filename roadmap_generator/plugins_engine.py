@@ -14,6 +14,7 @@ from typing import List, Tuple, Union
 from plugins._base import Bullet, Column, RoadmapPlugin, SlideBuildContext
 from roadmap_generator.approval import is_under_approval
 from roadmap_generator.labels import get_apptitle_label
+from roadmap_generator.product_languages import is_product_visible
 from roadmap_generator.ordering import (
     SEPARATOR,
     get_effective_order,
@@ -135,6 +136,8 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
     product_decks: List[Tuple[str, List[Union[DividerSlide, RoadmapSlide]]]] = []
 
     for pname in get_effective_order("", [p.name for p in model.products]):
+        if not is_product_visible(pname, model.language):
+            continue
         product = products_by_name[pname]
         deck_items: List[Union[DividerSlide, RoadmapSlide]] = []
 

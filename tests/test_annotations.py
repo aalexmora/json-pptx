@@ -26,8 +26,8 @@ def test_subject_to_change_sorts_false_first():
         "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
             "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
             "Requirements": [
-                {"Id": 10, "Kbr": "Yes", "MarketingTitle": "Tentative", "IsSubjectToChange": True},
-                {"Id": 11, "Kbr": "Yes", "MarketingTitle": "Confirmed", "IsSubjectToChange": False},
+                {"Id": 10, "Kbr": "Yes", "MarketingTitle": "Tentative"},
+                {"Id": 11, "Kbr": "No", "MarketingTitle": "Confirmed"},
             ],
         }]}]}],
     }]

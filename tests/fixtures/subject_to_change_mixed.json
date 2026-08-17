@@ -18,34 +18,30 @@
                   {
                     "Id": 4001,
                     "Title": "[BRQ] Confirmed A",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Confirmed A",
-                    "MarketingTitle": "Confirmed A",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Confirmed A"
                   },
                   {
                     "Id": 4002,
                     "Title": "[BRQ] Confirmed B",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Confirmed B",
-                    "MarketingTitle": "Confirmed B",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Confirmed B"
                   },
                   {
                     "Id": 4003,
                     "Title": "[BRQ] Tentative C",
                     "Kbr": "Yes",
                     "MarketingTitleEn": "Tentative C",
-                    "MarketingTitle": "Tentative C",
-                    "IsSubjectToChange": true
+                    "MarketingTitle": "Tentative C"
                   },
                   {
                     "Id": 4004,
                     "Title": "[BRQ] Tentative D",
                     "Kbr": "Yes",
                     "MarketingTitleEn": "Tentative D",
-                    "MarketingTitle": "Tentative D",
-                    "IsSubjectToChange": true
+                    "MarketingTitle": "Tentative D"
                   }
                 ]
               }

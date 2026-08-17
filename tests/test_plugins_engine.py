@@ -29,13 +29,13 @@ def _roadmap_slides(plan):
 
 def test_load_plugins_finds_expected_ids():
     ids = {p.id for p in load_plugins()}
-    assert {"kbr_filter", "apptitle_grouping"} <= ids
+    assert "apptitle_grouping" in ids
 
 
 def test_resolve_conflicts_no_conflict():
     applicable, conflicts = resolve_conflicts(load_plugins())
     assert conflicts == []
-    assert {p.id for p in applicable} == {"kbr_filter", "apptitle_grouping"}
+    assert {p.id for p in applicable} == {"apptitle_grouping"}
 
 
 class _FakeGroupingA:
@@ -69,42 +69,6 @@ def test_resolve_conflicts_detects_same_kind():
     assert applicable == []
     assert len(conflicts) == 1
     assert "grouping" in conflicts[0]
-
-
-# ---------------------------------------------------------------------------
-# kbr_filter
-# ---------------------------------------------------------------------------
-
-def test_kbr_filter_keeps_only_yes(load_fixture):
-    model = _model(load_fixture, "missing_optional_fields.json")
-    plan = build_slide_plan(model, {})
-    slide = _roadmap_slides(plan)[0]
-    texts = {b.text for b in slide.columns[0].bullets}
-    # 4 требования: 2 с Kbr=Yes, 2 без Kbr (не проходят фильтр)
-    assert texts == {"Complete", "No StC"}
-
-
-def test_kbr_filter_excludes_no():
-    data = [{
-        "Product": "Kaspersky Next",
-        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
-            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
-            "Requirements": [
-                {"Id": 11, "Kbr": "Yes", "MarketingTitle": "keep"},
-                {"Id": 12, "Kbr": "No", "MarketingTitle": "drop"},
-            ],
-        }]}]}],
-    }]
-    plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
-    slide = _roadmap_slides(plan)[0]
-    assert {b.text for b in slide.columns[0].bullets} == {"keep"}
-
-
-def test_kbr_filter_disabled_keeps_all(load_fixture):
-    model = _model(load_fixture, "missing_optional_fields.json")
-    plan = build_slide_plan(model, {"global": {"kbr_filter": {"enabled": False}}})
-    slide = _roadmap_slides(plan)[0]
-    assert len(slide.columns[0].bullets) == 4
 
 
 # ---------------------------------------------------------------------------
@@ -243,13 +207,10 @@ def test_stream_dash_has_no_stream_divider():
     assert len(_roadmap_slides(plan)) == 1
 
 
-def test_empty_tier_after_filter_skipped():
+def test_empty_tier_skipped():
     data = [{
         "Product": "Kaspersky Next",
-        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
-            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
-            "Requirements": [{"Id": 11, "Kbr": "No", "MarketingTitle": "drop"}],
-        }]}]}],
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": []}]}],
     }]
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
     # только титульный + спасибо, без roadmap/divider

@@ -2,49 +2,45 @@
   "ordering": {
     "order": {
       "": [
-        "Kaspersky Next",
-        "Kaspersky Hybrid Cloud Security",
-        "Kaspersky Next Generation Firewall",
-        "Kaspersky Automated Security Awareness Platform",
-        "Kaspersky Vulnerability Management",
-        "Kaspersky Anti Targeted Attack",
-        "Threat Intelligence Portal",
-        "Kaspersky Unified Monitoring and Analysis Platform",
-        "Kaspersky CyberTrace",
-        "Kaspersky Managed Detection and Response",
-        "Kaspersky SD-WAN",
-        "Kaspersky Container Security",
-        "Kaspersky Embedded Systems Security",
-        "Kaspersky Private Security Network",
-        "Kaspersky Industrial CyberSecurity",
-        "Kaspersky Fraud Prevention",
-        "Kaspersky Scan Engine",
-        "Kaspersky Anti-Virus SDK",
-        "Kaspersky Mobile Security SDK",
-        "Kaspersky Security for Mail Server"
+        "P4 2Q overflow",
+        "P3 2Q fit",
+        "P5 3Q",
+        "P6 4Q",
+        "P7 5Q pagination",
+        "P1 1Q fit",
+        "P2 1Q overflow"
+      ],
+      "Kaspersky Next > Kaspersky Next Optimum": [
+        "Kaspersky Next EDR Foundations",
+        "Kaspersky Next EDR Optimum",
+        "Kaspersky Next XDR Optimum"
       ]
     },
     "apptitle_priority": [],
     "tier_inheritance_flags": {
       "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Foundations": true,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum": true,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": true,
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum": false,
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": false,
       "Kaspersky Vulnerability Management > - > -": true
     }
   },
   "labels": {
-    "Managed Detection and Response": "жор"
+    "Managed Detection and Response": "555777"
   },
   "linter_rules": [],
   "under_approval_ids": [
-    2,
+    1001,
+    1002,
+    1003,
+    1013,
+    1014,
     8074887,
     8179944
   ],
   "deck_meta": {
     "title": "",
-    "year": "2026",
-    "version": ""
+    "year": "2007",
+    "version": "43"
   },
   "service_strings": {
     "subject_to_change_footnote": {
@@ -72,21 +68,11 @@
       "en": "Roadmap (cont.)"
     }
   },
-  "static_slides": [
-    {
-      "name": "2",
-      "position": "after:Kaspersky Next",
-      "pptx": "вставка.pptx"
-    },
-    {
-      "name": "1",
-      "position": "before:Kaspersky Next",
-      "pptx": ""
-    },
-    {
-      "name": "тт",
-      "position": "before:Kaspersky Next",
-      "pptx": "вставка.pptx"
+  "static_slides": [],
+  "product_languages": {
+    "Kaspersky Next": {
+      "ru": true,
+      "en": false
     }
-  ]
+  }
 }

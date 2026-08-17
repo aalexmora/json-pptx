@@ -258,34 +258,34 @@ def test_normalize_ru_keeps_null_marketing_title_en(load_fixture):
 # Нормализация: мягкие fallback'и опциональных полей
 # ---------------------------------------------------------------------------
 
-def test_normalize_missing_optional_fields_fallbacks(load_fixture):
+def test_normalize_kbr_s2c_fallbacks(load_fixture):
     model = normalize_roadmap(load_fixture("missing_optional_fields.json"), language="ru")
     reqs = model.products[0].streams[0].tiers[0].releases[0].requirements
     by_id = {r.id: r for r in reqs}
 
-    assert by_id[10001].kbr == "Yes"
+    assert by_id[10001].kbr == "No"
     assert by_id[10001].is_subject_to_change is False
 
-    # нет Kbr -> None (не проходит фильтр 'Yes')
-    assert by_id[10002].kbr is None
+    assert by_id[10002].kbr == "Yes"
     assert by_id[10002].is_subject_to_change is True
 
-    # нет IsSubjectToChange -> false
-    assert by_id[10003].kbr == "Yes"
+    # нет Kbr -> None -> не S2C
+    assert by_id[10003].kbr is None
     assert by_id[10003].is_subject_to_change is False
 
     assert by_id[10004].kbr is None
     assert by_id[10004].is_subject_to_change is False
 
-    # warnings: 2 без Kbr, 2 без IsSubjectToChange
+    # warning: 2 без Kbr
     assert any("Kbr" in w for w in model.warnings)
-    assert any("IsSubjectToChange" in w for w in model.warnings)
 
 
-def test_normalize_real_data_warns_missing_stc(real_data):
+def test_normalize_real_data_kbr_yes_means_s2c(real_data):
     model = normalize_roadmap(real_data, language="ru")
-    # реальный файл не содержит IsSubjectToChange -> warning (не ошибка)
-    assert any("IsSubjectToChange" in w for w in model.warnings)
+    next_tier = model.products[0].streams[0].tiers[0]
+    for release in next_tier.releases:
+        for req in release.requirements:
+            assert req.is_subject_to_change is True
 
 
 def test_normalize_stc_absent_is_not_validation_error(load_fixture):

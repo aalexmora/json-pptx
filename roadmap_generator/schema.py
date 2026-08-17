@@ -89,8 +89,8 @@ def validate_roadmap(data) -> List[str]:
     """Собирает все ошибки валидации за один проход.
 
     Возвращает список строк-описаний ошибок; пустой список = данные валидны.
-    Отсутствие опциональных полей (`Kbr`, `MarketingTitleEn`, `IsSubjectToChange`)
-    ошибкой НЕ является — это мягкий fallback + warning в `normalize_roadmap`.
+    Отсутствие опциональных полей (`Kbr`, `MarketingTitleEn`) ошибкой НЕ является —
+    это мягкий fallback + warning в `normalize_roadmap`.
     """
     errors: List[str] = []
 
@@ -202,13 +202,11 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
 
     - вычисляет календарный квартал для каждого Release из `TrDate`;
     - при `language == "en"` отбрасывает Requirements с `MarketingTitleEn == null`;
-    - собирает мягкие fallback'и как warnings (не ошибки): отсутствие `Kbr`
-      (→ не проходит фильтр `Yes`) и `IsSubjectToChange` (→ `false`).
+    - `Kbr == "Yes"` — признак «Subject to Change» (S2C): помечает фичу как под вопросом.
 
     Плагины здесь НЕ применяются.
     """
     products: List[Product] = []
-    missing_stc = 0
     missing_kbr = 0
 
     for raw_product in data:
@@ -225,11 +223,8 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                         if "Kbr" not in raw_req:
                             missing_kbr += 1
 
-                        if "IsSubjectToChange" not in raw_req:
-                            missing_stc += 1
-                            stc = False
-                        else:
-                            stc = bool(raw_req.get("IsSubjectToChange"))
+                        # KBR == "Yes" → фича под вопросом (Subject to Change, S2C)
+                        is_subject_to_change = (kbr == "Yes")
 
                         marketing_title_en = raw_req.get("MarketingTitleEn")
                         if language == "en" and (marketing_title_en is None or marketing_title_en == ""):
@@ -241,7 +236,7 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                             kbr=kbr,
                             marketing_title=raw_req.get("MarketingTitle") or "",
                             marketing_title_en=marketing_title_en,
-                            is_subject_to_change=stc,
+                            is_subject_to_change=is_subject_to_change,
                         ))
 
                     releases.append(Release(
@@ -259,9 +254,7 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
         products.append(Product(name=_normalize_name(raw_product.get("Product")), streams=streams))
 
     warnings: List[str] = []
-    if missing_stc:
-        warnings.append(f"{missing_stc} требований без поля IsSubjectToChange — принято как false")
     if missing_kbr:
-        warnings.append(f"{missing_kbr} требований без поля Kbr — принято как не проходящие фильтр 'Yes'")
+        warnings.append(f"{missing_kbr} требований без поля Kbr — принято как не subject to change")
 
     return RoadmapModel(language=language, products=products, warnings=warnings)

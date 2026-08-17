@@ -18,10 +18,9 @@
                   {
                     "Id": 12001,
                     "Title": "[BRQ] Foundations feature",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Foundations feature",
-                    "MarketingTitle": "Foundations feature",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Foundations feature"
                   }
                 ]
               }
@@ -40,10 +39,9 @@
                   {
                     "Id": 12002,
                     "Title": "[BRQ] Optimum feature",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Optimum feature",
-                    "MarketingTitle": "Optimum feature",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Optimum feature"
                   }
                 ]
               }
@@ -62,10 +60,9 @@
                   {
                     "Id": 12003,
                     "Title": "[BRQ] XDR feature",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "XDR feature",
-                    "MarketingTitle": "XDR feature",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "XDR feature"
                   }
                 ]
               }

@@ -18,7 +18,7 @@ class Bullet:
 
     requirement_id: int
     text: str                          # MarketingTitle (RU) или MarketingTitleEn (EN)
-    kbr: Optional[str]                 # для kbr_filter; None = поле отсутствовало
+    kbr: Optional[str]                 # "Yes" = Subject to Change (S2C); None = отсутствовало
     app_title: str                     # из Release, для apptitle_grouping
     quarter: str                       # "Qx YYYY", для группировки в колонки
     is_subject_to_change: bool

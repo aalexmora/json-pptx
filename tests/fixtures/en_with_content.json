@@ -18,26 +18,23 @@
                   {
                     "Id": 8001,
                     "Title": "[BRQ] Has EN text",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "License management improvements for MSP/MSSP",
-                    "MarketingTitle": "Улучшения лицензирования для MSP/MSSP",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Улучшения лицензирования для MSP/MSSP"
                   },
                   {
                     "Id": 8002,
                     "Title": "[BRQ] Null EN text",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": null,
-                    "MarketingTitle": "Только русский текст требования",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Только русский текст требования"
                   },
                   {
                     "Id": 8003,
                     "Title": "[BRQ] Another EN text",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Android 16 support",
-                    "MarketingTitle": "Поддержка Android 16",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Поддержка Android 16"
                   }
                 ]
               }

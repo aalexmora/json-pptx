@@ -18,18 +18,16 @@
                   {
                     "Id": 6001,
                     "Title": "[BRQ] Feed X",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Feed X",
-                    "MarketingTitle": "Feed X",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Feed X"
                   },
                   {
                     "Id": 6002,
                     "Title": "[BRQ] Feed Y",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Feed Y",
-                    "MarketingTitle": "Feed Y",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Feed Y"
                   }
                 ]
               },
@@ -43,10 +41,9 @@
                   {
                     "Id": 6003,
                     "Title": "[BRQ] Sandbox Z",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Sandbox Z",
-                    "MarketingTitle": "Sandbox Z",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Sandbox Z"
                   }
                 ]
               }

@@ -13,6 +13,9 @@ import io
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.opc.package import Part
+from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
 from roadmap_generator import static_slides
@@ -39,6 +42,7 @@ HEADER_FONT_PT = 14
 def build_presentation(plan: SlidePlan) -> Presentation:
     """Рендерит план слайдов в объект `Presentation` (ещё не сохранённый)."""
     template = Presentation(select_template("roadmap", 4, False))
+    master_slide = _find_master_slide(template)
     prs = Presentation()
     # размер слайда наследуется из шаблона (ТЗ v4 §10)
     prs.slide_width = template.slide_width
@@ -58,8 +62,238 @@ def build_presentation(plan: SlidePlan) -> Presentation:
         elif isinstance(item, StaticSlide):
             _render_static(prs, blank, item, w, h)
         elif isinstance(item, RoadmapSlide):
-            _render_roadmap(prs, blank, item, w, h)
+            _render_roadmap_from_template(prs, master_slide, blank, item, w, h)
     return prs
+
+
+def _find_master_slide(template_prs):
+    """Первый слайд шаблона с шейпом `col_header` (иначе первый слайд)."""
+    for slide in template_prs.slides:
+        if any(sh.name == "col_header" for sh in slide.shapes):
+            return slide
+    return template_prs.slides[0] if len(template_prs.slides) else None
+
+
+def _first_blip_r_id(shape):
+    """Первый `r:embed`/`r:link` в дереве blip (включая SVG-расширение `asvg:svgBlip`)."""
+    try:
+        blip = shape._element.blipFill.blip
+    except AttributeError:
+        return None
+    if blip is None:
+        return None
+    for el in blip.iter():
+        for attr in (qn("r:embed"), qn("r:link")):
+            r_id = el.get(attr)
+            if r_id:
+                return r_id
+    return None
+
+
+def _picture_blob(shape):
+    """Байты картинки шейпа: встроенной или связанной (`r:link` на локальный файл).
+
+    `shape.image.blob` падает, когда ссылка на образ живёт не на самом `a:blip`
+    (связанная картинка или SVG-расширение `asvg:svgBlip`) — тогда blob достаём
+    через relationship. Если и это не удалось — возвращает None.
+    """
+    try:
+        return shape.image.blob
+    except ValueError:
+        pass
+    r_id = _first_blip_r_id(shape)
+    if not r_id:
+        return None
+    try:
+        return shape.part.related_part(r_id).blob
+    except (KeyError, NotImplementedError, OSError, ValueError):
+        return None
+
+
+def _copy_picture_with_media_part(new_slide, shape):
+    """Переносит картинку вместе с медиа-part (SVG и прочие не-растровые).
+
+    `add_picture` умеет только растр; для остальных создаём в целевом пакете
+    новый part, связываем слайд с ним и подменяем rId на скопированном элементе.
+    """
+    r_id = _first_blip_r_id(shape)
+    if not r_id:
+        return False
+    try:
+        src_part = shape.part.related_part(r_id)
+    except (KeyError, ValueError):
+        return False
+    blob = src_part.blob
+    if not blob:
+        return False
+    pkg = new_slide.part.package
+    ext = (src_part.partname.ext or ".svg").lstrip(".")
+    media_part = Part(pkg.next_media_partname(ext), src_part.content_type, pkg, blob)
+    new_r_id = new_slide.part.relate_to(media_part, RT.IMAGE)
+
+    el = copy.deepcopy(shape._element)
+    for sub in el.blipFill.blip.iter():
+        for attr in (qn("r:embed"), qn("r:link")):
+            if sub.get(attr) == r_id:
+                sub.set(attr, new_r_id)
+    new_slide.shapes._spTree.append(el)
+    return True
+
+
+def _append_shape(new_slide, shape):
+    """Копирует шейп на слайд, пересоздавая картинки через add_picture.
+
+    Растровые картинки перевстраиваются; SVG и прочие не-растровые переносятся
+    как media part; если образ недоступен вовсе — копируем XML как есть.
+    """
+    if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+        blob = _picture_blob(shape)
+        if blob is not None:
+            try:
+                new_slide.shapes.add_picture(
+                    io.BytesIO(blob), shape.left, shape.top, shape.width, shape.height,
+                )
+                return
+            except (ValueError, OSError):
+                if _copy_picture_with_media_part(new_slide, shape):
+                    return
+    new_slide.shapes._spTree.append(copy.deepcopy(shape._element))
+
+
+def _is_skipped(shape) -> bool:
+    """Шейпы с префиксом `_` в имени — сервисные/направляющие — в слайд не копируются."""
+    return shape.name.startswith("_")
+
+
+def _clone_slide(prs, source_slide):
+    """Клонирует слайд шаблона в целевую презентацию (картинки — через add_picture)."""
+    new_slide = prs.slides.add_slide(prs.slide_layouts[6])
+    for shape in source_slide.shapes:
+        if _is_skipped(shape):
+            continue
+        _append_shape(new_slide, shape)
+    return new_slide
+
+
+def _base_format(tf):
+    """Формат (размер, имя шрифта, жирность, RGB-цвет) первого run'а — для сохранения стиля."""
+    if tf.paragraphs and tf.paragraphs[0].runs:
+        r = tf.paragraphs[0].runs[0]
+        color = None
+        try:
+            if r.font.color and r.font.color.rgb:
+                color = r.font.color.rgb
+        except Exception:
+            color = None
+        return (
+            r.font.size.pt if r.font.size else None,
+            r.font.name,
+            r.font.bold,
+            color,
+        )
+    return None, None, None, None
+
+
+def _apply_format(run, size, name, bold, color):
+    if size:
+        run.font.size = Pt(size)
+    if name:
+        run.font.name = name
+    if bold is not None:
+        run.font.bold = bold
+    if color is not None:
+        run.font.color.rgb = color
+
+
+def _set_text(shape, text: str) -> None:
+    if shape is None:
+        return
+    tf = shape.text_frame
+    size, name, bold, color = _base_format(tf)
+    tf.text = text
+    if tf.paragraphs and tf.paragraphs[0].runs:
+        _apply_format(tf.paragraphs[0].runs[0], size, name, bold, color)
+
+
+def _clear(shape) -> None:
+    if shape is not None:
+        shape.text_frame.text = ""
+
+
+def _fill_bullets_shape(shape, col) -> None:
+    if shape is None:
+        return
+    tf = shape.text_frame
+    tf.word_wrap = True
+    base_size, base_name, _, base_color = _base_format(tf)
+    size = base_size if base_size else BASE_FONT_PT
+    tf.text = ""
+
+    paragraphs: list = []
+    if col.grouped:
+        for group in col.groups:
+            paragraphs.append((group.app_title, True))
+            for b in group.bullets:
+                paragraphs.append((_bullet_text(b), False))
+    else:
+        for b in col.bullets:
+            paragraphs.append((_bullet_text(b), False))
+
+    for i, (text, bold) in enumerate(paragraphs):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.text = text
+        for run in p.runs:
+            _apply_format(run, size, base_name, bold, base_color)
+
+
+def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide, w: float, h: float) -> None:
+    if master_slide is None:
+        _render_roadmap(prs, blank, slide, w, h)
+        return
+    new_slide = _clone_slide(prs, master_slide)
+    by_name = {sh.name: sh for sh in new_slide.shapes if sh.has_text_frame}
+
+    eyebrow = get_service_string("roadmap_cont_title" if slide.continuation else "roadmap_title", slide.language)
+    _set_text(by_name.get("eyebrow"), eyebrow)
+    _set_text(by_name.get("slide_title"), slide.tier)
+
+    header_proto = by_name.get("col_header")
+    bullets_proto = by_name.get("col_bullets")
+    if header_proto is None or bullets_proto is None:
+        return
+
+    n_cols = len(slide.columns)
+    col_w = bullets_proto.width
+    gap = Inches(0.25)
+
+    for i, col in enumerate(slide.columns):
+        if i == 0:
+            header, bullets = header_proto, bullets_proto
+        else:
+            header = _clone_shape(new_slide, header_proto)
+            bullets = _clone_shape(new_slide, bullets_proto)
+        x = header_proto.left + i * (col_w + gap)
+        header.left = x
+        bullets.left = x
+        _set_text(header, col.quarter)
+        _fill_bullets_shape(bullets, col)
+
+    if slide.inheritance_note:
+        _set_paragraph(
+            new_slide.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.8), Inches(w - 2 * MARGIN), Inches(0.3)),
+            slide.inheritance_note, 12, bold=False,
+        )
+    if slide.footnote:
+        _set_paragraph(
+            new_slide.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.45), Inches(w - 2 * MARGIN), Inches(0.3)),
+            slide.footnote, 10, bold=False,
+        )
+
+
+def _clone_shape(slide, source_shape):
+    """Клонирует фигуру в слайд (deepcopy + _spTree) и возвращает новый Shape."""
+    slide.shapes._spTree.append(copy.deepcopy(source_shape._element))
+    return list(slide.shapes)[-1]
 
 
 def _render_static(prs, layout, slide: StaticSlide, w: float, h: float) -> None:
@@ -86,12 +320,7 @@ def _copy_slides_from(prs, source_path: str) -> None:
     for source_slide in source.slides:
         new_slide = prs.slides.add_slide(blank)
         for shape in source_slide.shapes:
-            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                new_slide.shapes.add_picture(
-                    io.BytesIO(shape.image.blob), shape.left, shape.top, shape.width, shape.height,
-                )
-            else:
-                new_slide.shapes._spTree.append(copy.deepcopy(shape._element))
+            _append_shape(new_slide, shape)
 
 
 def _render_title(prs, layout, slide: TitleSlide, w: float, h: float) -> None:

@@ -18,10 +18,9 @@
                   {
                     "Id": 2001,
                     "Title": "[BRQ] Feature A",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Feature A",
-                    "MarketingTitle": "Feature A",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Feature A"
                   }
                 ]
               },
@@ -35,10 +34,9 @@
                   {
                     "Id": 2002,
                     "Title": "[BRQ] Feature B",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Feature B",
-                    "MarketingTitle": "Feature B",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Feature B"
                   }
                 ]
               },
@@ -52,10 +50,9 @@
                   {
                     "Id": 2003,
                     "Title": "[BRQ] Feature C",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Feature C",
-                    "MarketingTitle": "Feature C",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Feature C"
                   }
                 ]
               },
@@ -69,10 +66,9 @@
                   {
                     "Id": 2004,
                     "Title": "[BRQ] Feature D",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Feature D",
-                    "MarketingTitle": "Feature D",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Feature D"
                   }
                 ]
               },
@@ -86,10 +82,9 @@
                   {
                     "Id": 2005,
                     "Title": "[BRQ] Feature E",
-                    "Kbr": "Yes",
+                    "Kbr": "No",
                     "MarketingTitleEn": "Feature E",
-                    "MarketingTitle": "Feature E",
-                    "IsSubjectToChange": false
+                    "MarketingTitle": "Feature E"
                   }
                 ]
               }

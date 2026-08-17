@@ -77,6 +77,10 @@ export async function setActiveTemplate(filename: string | null): Promise<void> 
   })
 }
 
+export async function deleteTemplate(filename: string): Promise<void> {
+  await fetch(`/api/templates/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+}
+
 export async function getProfile(): Promise<Profile> {
   const res = await fetch('/api/profile')
   return res.json()

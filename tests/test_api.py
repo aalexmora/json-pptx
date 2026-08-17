@@ -46,16 +46,16 @@ def test_plan_endpoint_invalid_json():
 
 
 def test_plan_reflects_plugin_settings(load_fixture):
-    data = load_fixture("missing_optional_fields.json")
+    data = load_fixture("non_next_product_flat.json")
     with TestClient(app) as c:
-        # по умолчанию kbr_filter включён → 2 фичи
-        on = _plan(c, data).json()
-        n_on = sum(len(col["bullets"]) for s in on["plan"]["slides"] for col in s.get("columns", []))
-        # выключаем kbr_filter → 4 фичи
-        off = _plan(c, data, plugin_settings={"global": {"kbr_filter": {"enabled": False}}}).json()
-        n_off = sum(len(col["bullets"]) for s in off["plan"]["slides"] for col in s.get("columns", []))
-        assert n_on == 2
-        assert n_off == 4
+        # по умолчанию (auto) не-Next → группировка выключена
+        auto = _plan(c, data).json()
+        auto_cols = [col for s in auto["plan"]["slides"] for col in s.get("columns", [])]
+        assert auto_cols and all(col["grouped"] is False for col in auto_cols)
+        # включаем группировку → grouped
+        on = _plan(c, data, plugin_settings={"global": {"apptitle_grouping": {"enabled": True}}}).json()
+        on_cols = [col for s in on["plan"]["slides"] for col in s.get("columns", [])]
+        assert on_cols and all(col["grouped"] is True for col in on_cols)
 
 
 def test_pptx_endpoint(load_fixture):
@@ -73,7 +73,7 @@ def test_lint_issues_in_plan_response():
         "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
             "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
             "Requirements": [
-                {"Id": 10, "Kbr": "Yes", "MarketingTitle": "ok", "MarketingTitleEn": "Русский", "IsSubjectToChange": False},
+                {"Id": 10, "Kbr": "Yes", "MarketingTitle": "ok", "MarketingTitleEn": "Русский"},
             ],
         }]}]}],
     }]
@@ -88,13 +88,13 @@ def test_diff_endpoint():
     old = [{
         "Product": "P", "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
             "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
-            "Requirements": [{"Id": 10, "Kbr": "Yes", "MarketingTitle": "old", "IsSubjectToChange": False}],
+            "Requirements": [{"Id": 10, "Kbr": "Yes", "MarketingTitle": "old"}],
         }]}]}],
     }]
     new = [{
         "Product": "P", "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
             "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
-            "Requirements": [{"Id": 10, "Kbr": "Yes", "MarketingTitle": "new", "IsSubjectToChange": False}],
+            "Requirements": [{"Id": 10, "Kbr": "Yes", "MarketingTitle": "new"}],
         }]}]}],
     }]
     with TestClient(app) as c:

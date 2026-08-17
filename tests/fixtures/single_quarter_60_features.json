@@ -1,0 +1,446 @@
+[
+  {
+    "Product": "Kaspersky Next",
+    "Streams": [
+      {
+        "Stream": "Kaspersky Next Optimum",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Next EDR Foundations",
+            "Releases": [
+              {
+                "Id": 1,
+                "Title": "Q1 2025",
+                "AppId": 1,
+                "AppTitle": "Managed Detection and Response",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [
+                  {
+                    "Id": 100,
+                    "Title": "[BRQ] Feature 1",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 1",
+                    "MarketingTitle": "Feature 1"
+                  },
+                  {
+                    "Id": 101,
+                    "Title": "[BRQ] Feature 2",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 2",
+                    "MarketingTitle": "Feature 2"
+                  },
+                  {
+                    "Id": 102,
+                    "Title": "[BRQ] Feature 3",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 3",
+                    "MarketingTitle": "Feature 3"
+                  },
+                  {
+                    "Id": 103,
+                    "Title": "[BRQ] Feature 4",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 4",
+                    "MarketingTitle": "Feature 4"
+                  },
+                  {
+                    "Id": 104,
+                    "Title": "[BRQ] Feature 5",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 5",
+                    "MarketingTitle": "Feature 5"
+                  },
+                  {
+                    "Id": 105,
+                    "Title": "[BRQ] Feature 6",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 6",
+                    "MarketingTitle": "Feature 6"
+                  },
+                  {
+                    "Id": 106,
+                    "Title": "[BRQ] Feature 7",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 7",
+                    "MarketingTitle": "Feature 7"
+                  },
+                  {
+                    "Id": 107,
+                    "Title": "[BRQ] Feature 8",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 8",
+                    "MarketingTitle": "Feature 8"
+                  },
+                  {
+                    "Id": 108,
+                    "Title": "[BRQ] Feature 9",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 9",
+                    "MarketingTitle": "Feature 9"
+                  },
+                  {
+                    "Id": 109,
+                    "Title": "[BRQ] Feature 10",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 10",
+                    "MarketingTitle": "Feature 10"
+                  },
+                  {
+                    "Id": 110,
+                    "Title": "[BRQ] Feature 11",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 11",
+                    "MarketingTitle": "Feature 11"
+                  },
+                  {
+                    "Id": 111,
+                    "Title": "[BRQ] Feature 12",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 12",
+                    "MarketingTitle": "Feature 12"
+                  },
+                  {
+                    "Id": 112,
+                    "Title": "[BRQ] Feature 13",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 13",
+                    "MarketingTitle": "Feature 13"
+                  },
+                  {
+                    "Id": 113,
+                    "Title": "[BRQ] Feature 14",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 14",
+                    "MarketingTitle": "Feature 14"
+                  },
+                  {
+                    "Id": 114,
+                    "Title": "[BRQ] Feature 15",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 15",
+                    "MarketingTitle": "Feature 15"
+                  },
+                  {
+                    "Id": 115,
+                    "Title": "[BRQ] Feature 16",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 16",
+                    "MarketingTitle": "Feature 16"
+                  },
+                  {
+                    "Id": 116,
+                    "Title": "[BRQ] Feature 17",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 17",
+                    "MarketingTitle": "Feature 17"
+                  },
+                  {
+                    "Id": 117,
+                    "Title": "[BRQ] Feature 18",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 18",
+                    "MarketingTitle": "Feature 18"
+                  },
+                  {
+                    "Id": 118,
+                    "Title": "[BRQ] Feature 19",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 19",
+                    "MarketingTitle": "Feature 19"
+                  },
+                  {
+                    "Id": 119,
+                    "Title": "[BRQ] Feature 20",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 20",
+                    "MarketingTitle": "Feature 20"
+                  },
+                  {
+                    "Id": 120,
+                    "Title": "[BRQ] Feature 21",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 21",
+                    "MarketingTitle": "Feature 21"
+                  },
+                  {
+                    "Id": 121,
+                    "Title": "[BRQ] Feature 22",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 22",
+                    "MarketingTitle": "Feature 22"
+                  },
+                  {
+                    "Id": 122,
+                    "Title": "[BRQ] Feature 23",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 23",
+                    "MarketingTitle": "Feature 23"
+                  },
+                  {
+                    "Id": 123,
+                    "Title": "[BRQ] Feature 24",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 24",
+                    "MarketingTitle": "Feature 24"
+                  },
+                  {
+                    "Id": 124,
+                    "Title": "[BRQ] Feature 25",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 25",
+                    "MarketingTitle": "Feature 25"
+                  },
+                  {
+                    "Id": 125,
+                    "Title": "[BRQ] Feature 26",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 26",
+                    "MarketingTitle": "Feature 26"
+                  },
+                  {
+                    "Id": 126,
+                    "Title": "[BRQ] Feature 27",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 27",
+                    "MarketingTitle": "Feature 27"
+                  },
+                  {
+                    "Id": 127,
+                    "Title": "[BRQ] Feature 28",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 28",
+                    "MarketingTitle": "Feature 28"
+                  },
+                  {
+                    "Id": 128,
+                    "Title": "[BRQ] Feature 29",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 29",
+                    "MarketingTitle": "Feature 29"
+                  },
+                  {
+                    "Id": 129,
+                    "Title": "[BRQ] Feature 30",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 30",
+                    "MarketingTitle": "Feature 30"
+                  },
+                  {
+                    "Id": 130,
+                    "Title": "[BRQ] Feature 31",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 31",
+                    "MarketingTitle": "Feature 31"
+                  },
+                  {
+                    "Id": 131,
+                    "Title": "[BRQ] Feature 32",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 32",
+                    "MarketingTitle": "Feature 32"
+                  },
+                  {
+                    "Id": 132,
+                    "Title": "[BRQ] Feature 33",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 33",
+                    "MarketingTitle": "Feature 33"
+                  },
+                  {
+                    "Id": 133,
+                    "Title": "[BRQ] Feature 34",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 34",
+                    "MarketingTitle": "Feature 34"
+                  },
+                  {
+                    "Id": 134,
+                    "Title": "[BRQ] Feature 35",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 35",
+                    "MarketingTitle": "Feature 35"
+                  },
+                  {
+                    "Id": 135,
+                    "Title": "[BRQ] Feature 36",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 36",
+                    "MarketingTitle": "Feature 36"
+                  },
+                  {
+                    "Id": 136,
+                    "Title": "[BRQ] Feature 37",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 37",
+                    "MarketingTitle": "Feature 37"
+                  },
+                  {
+                    "Id": 137,
+                    "Title": "[BRQ] Feature 38",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 38",
+                    "MarketingTitle": "Feature 38"
+                  },
+                  {
+                    "Id": 138,
+                    "Title": "[BRQ] Feature 39",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 39",
+                    "MarketingTitle": "Feature 39"
+                  },
+                  {
+                    "Id": 139,
+                    "Title": "[BRQ] Feature 40",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 40",
+                    "MarketingTitle": "Feature 40"
+                  },
+                  {
+                    "Id": 140,
+                    "Title": "[BRQ] Feature 41",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 41",
+                    "MarketingTitle": "Feature 41"
+                  },
+                  {
+                    "Id": 141,
+                    "Title": "[BRQ] Feature 42",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 42",
+                    "MarketingTitle": "Feature 42"
+                  },
+                  {
+                    "Id": 142,
+                    "Title": "[BRQ] Feature 43",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 43",
+                    "MarketingTitle": "Feature 43"
+                  },
+                  {
+                    "Id": 143,
+                    "Title": "[BRQ] Feature 44",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 44",
+                    "MarketingTitle": "Feature 44"
+                  },
+                  {
+                    "Id": 144,
+                    "Title": "[BRQ] Feature 45",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 45",
+                    "MarketingTitle": "Feature 45"
+                  },
+                  {
+                    "Id": 145,
+                    "Title": "[BRQ] Feature 46",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 46",
+                    "MarketingTitle": "Feature 46"
+                  },
+                  {
+                    "Id": 146,
+                    "Title": "[BRQ] Feature 47",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 47",
+                    "MarketingTitle": "Feature 47"
+                  },
+                  {
+                    "Id": 147,
+                    "Title": "[BRQ] Feature 48",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 48",
+                    "MarketingTitle": "Feature 48"
+                  },
+                  {
+                    "Id": 148,
+                    "Title": "[BRQ] Feature 49",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 49",
+                    "MarketingTitle": "Feature 49"
+                  },
+                  {
+                    "Id": 149,
+                    "Title": "[BRQ] Feature 50",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 50",
+                    "MarketingTitle": "Feature 50"
+                  },
+                  {
+                    "Id": 150,
+                    "Title": "[BRQ] Feature 51",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 51",
+                    "MarketingTitle": "Feature 51"
+                  },
+                  {
+                    "Id": 151,
+                    "Title": "[BRQ] Feature 52",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 52",
+                    "MarketingTitle": "Feature 52"
+                  },
+                  {
+                    "Id": 152,
+                    "Title": "[BRQ] Feature 53",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 53",
+                    "MarketingTitle": "Feature 53"
+                  },
+                  {
+                    "Id": 153,
+                    "Title": "[BRQ] Feature 54",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 54",
+                    "MarketingTitle": "Feature 54"
+                  },
+                  {
+                    "Id": 154,
+                    "Title": "[BRQ] Feature 55",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 55",
+                    "MarketingTitle": "Feature 55"
+                  },
+                  {
+                    "Id": 155,
+                    "Title": "[BRQ] Feature 56",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 56",
+                    "MarketingTitle": "Feature 56"
+                  },
+                  {
+                    "Id": 156,
+                    "Title": "[BRQ] Feature 57",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 57",
+                    "MarketingTitle": "Feature 57"
+                  },
+                  {
+                    "Id": 157,
+                    "Title": "[BRQ] Feature 58",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 58",
+                    "MarketingTitle": "Feature 58"
+                  },
+                  {
+                    "Id": 158,
+                    "Title": "[BRQ] Feature 59",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 59",
+                    "MarketingTitle": "Feature 59"
+                  },
+                  {
+                    "Id": 159,
+                    "Title": "[BRQ] Feature 60",
+                    "Kbr": "No",
+                    "MarketingTitleEn": "Feature 60",
+                    "MarketingTitle": "Feature 60"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

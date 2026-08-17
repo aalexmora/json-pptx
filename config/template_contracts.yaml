@@ -1,42 +1,15 @@
-# Состав обязательных именованных шейпов на комбинацию
-# `slide_type × columns_count × grouped_by_apptitle`.
+# Шаблон-«конструктор»: ОДИН слайд с ОДНОЙ колонкой-прототипом.
+# Builder клонирует колонку под каждый квартал (1–N), поэтому поддерживает всю
+# вариативность (1/2/3/4+ колонок, переполнение, пагинацию) без доп. шаблонов.
 #
-# Это ЕДИНСТВЕННОЕ место, где описан состав шейпов — template_registry.py читает
-# его отсюда, а не хардкодит имена в коде (ТЗ v4 раздел 10). Изменение состава
-# слотов (в т.ч. при появлении финального дизайн-шаблона) — правка только этого
-# файла, без правок .py.
+# Конвенция имён (обязательные):
+#   col_header   — заголовок квартала («Q1 2025») — прототип колонки
+#   col_bullets  — список фич (заголовки групп — жирные абзацы внутри)
 #
-# Конвенция имён (ТЗ v4 раздел 12):
-#   col_{n}_header          — заголовок n-й колонки-квартала (n = 1..4)
-#   col_{n}_bullets         — список bullet'ов n-й колонки
-#   col_{n}_group_{m}_header — подзаголовок AppTitle-группы m внутри колонки n (m=1 — слот, клонируется)
-#
-# Аннотации (Subject to Change, Under approval, наследование тиров) — это ТЕКСТ,
-# а не выделенные шейпы шаблона (согласовано с заказчиком), поэтому здесь их нет.
+# Необязательные:
+#   eyebrow      — «Roadmap» / «Roadmap (cont.)»
+#   slide_title  — название тира
 
 roadmap:
-  columns_1_flat: [col_1_header, col_1_bullets]
-  columns_1_grouped: [col_1_header, col_1_bullets, col_1_group_1_header]
-  columns_2_flat: [col_1_header, col_1_bullets, col_2_header, col_2_bullets]
-  columns_2_grouped:
-    [col_1_header, col_1_bullets, col_1_group_1_header, col_2_header, col_2_bullets, col_2_group_1_header]
-  columns_3_flat:
-    [col_1_header, col_1_bullets, col_2_header, col_2_bullets, col_3_header, col_3_bullets]
-  columns_3_grouped:
-    [
-      col_1_header, col_1_bullets, col_1_group_1_header,
-      col_2_header, col_2_bullets, col_2_group_1_header,
-      col_3_header, col_3_bullets, col_3_group_1_header,
-    ]
-  columns_4_flat:
-    [
-      col_1_header, col_1_bullets, col_2_header, col_2_bullets,
-      col_3_header, col_3_bullets, col_4_header, col_4_bullets,
-    ]
-  columns_4_grouped:
-    [
-      col_1_header, col_1_bullets, col_1_group_1_header,
-      col_2_header, col_2_bullets, col_2_group_1_header,
-      col_3_header, col_3_bullets, col_3_group_1_header,
-      col_4_header, col_4_bullets, col_4_group_1_header,
-    ]
+  base: [col_header, col_bullets]
+  optional: [eyebrow, slide_title, col_group_header]

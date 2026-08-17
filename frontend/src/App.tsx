@@ -17,6 +17,7 @@ import type {
   Tree,
 } from './types'
 import {
+  deleteTemplate,
   downloadPptx,
   fetchDiff,
   fetchPlan,
@@ -130,6 +131,52 @@ function computeInsertPoints(slides: Slide[]): { index: number; position: string
   return points.sort((a, b) => a.index - b.index)
 }
 
+interface TierNode {
+  tier: string
+  slides: RoadmapSlide[]
+}
+interface StreamNode {
+  stream: string
+  tiers: TierNode[]
+}
+interface ProductNode {
+  product: string
+  streams: StreamNode[]
+}
+
+function groupSlides(slides: Slide[]): { top: Slide[]; products: ProductNode[] } {
+  const top: Slide[] = []
+  const products: ProductNode[] = []
+  const prodIndex = new Map<string, ProductNode>()
+  const streamIndex = new Map<string, StreamNode>()
+
+  for (const s of slides) {
+    if (isTitle(s) || isThankYou(s) || isStatic(s)) {
+      top.push(s)
+      continue
+    }
+    if (isDivider(s)) continue // разделители подразумеваются группировкой
+    const r = s as RoadmapSlide
+    let prod = prodIndex.get(r.product)
+    if (!prod) {
+      prod = { product: r.product, streams: [] }
+      products.push(prod)
+      prodIndex.set(r.product, prod)
+    }
+    const streamKey = r.product + '||' + r.stream
+    let stream = streamIndex.get(streamKey)
+    if (!stream) {
+      stream = { stream: r.stream, tiers: [] }
+      prod.streams.push(stream)
+      streamIndex.set(streamKey, stream)
+    }
+    const last = stream.tiers[stream.tiers.length - 1]
+    if (last && last.tier === r.tier) last.slides.push(r)
+    else stream.tiers.push({ tier: r.tier, slides: [r] })
+  }
+  return { top, products }
+}
+
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
   const next = [...arr]
   const [moved] = next.splice(from, 1)
@@ -152,7 +199,6 @@ export default function App() {
   const [jsonText, setJsonText] = useState('')
   const [jsonData, setJsonData] = useState<unknown>(null)
   const [language, setLanguage] = useState<'ru' | 'en'>('ru')
-  const [kbrEnabled, setKbrEnabled] = useState(true)
   const [apptitleMode, setApptitleMode] = useState<'auto' | 'on' | 'off'>('auto')
   const [result, setResult] = useState<PlanResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -198,7 +244,6 @@ export default function App() {
 
   function buildSettings(): Record<string, unknown> {
     const global: Record<string, unknown> = {}
-    if (!kbrEnabled) global.kbr_filter = { enabled: false }
     if (apptitleMode !== 'auto') global.apptitle_grouping = { enabled: apptitleMode === 'on' }
     return Object.keys(global).length ? { global } : {}
   }
@@ -229,7 +274,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [jsonData, language, kbrEnabled, apptitleMode, refreshKey, profileLoaded])
+  }, [jsonData, language, apptitleMode, refreshKey, profileLoaded])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -437,6 +482,15 @@ export default function App() {
     persist({ ...profile, static_slides: slides })
   }
 
+  function handleProductLanguage(name: string, lang: 'ru' | 'en', visible: boolean) {
+    if (!profile) return
+    const current = profile.product_languages?.[name] ?? { ru: true, en: true }
+    persist({
+      ...profile,
+      product_languages: { ...profile.product_languages, [name]: { ...current, [lang]: visible } },
+    })
+  }
+
   const dropHandlers: DropHandlerFactory = (parentPath, index, siblings) => ({
     draggable: true,
     onDragStart: (e) => {
@@ -538,18 +592,6 @@ export default function App() {
           </div>
         )}
 
-        {result && result.tree && profile && (
-          <details className="section" open>
-            <summary>Дерево порядка слайдов</summary>
-            <TreeView
-              tree={result.tree}
-              dropHandlers={dropHandlers}
-              onToggleInheritance={handleToggleInheritance}
-              newTierPaths={newTierPaths}
-            />
-          </details>
-        )}
-
         <details className="section">
           <summary>Библиотека шаблонов</summary>
           <TemplatesPanel />
@@ -573,20 +615,18 @@ export default function App() {
               <button onClick={() => openStaticSlideModal()}>＋ Статичный слайд</button>
             </div>
             <div className="slides">
-              {slideItems.map((item, i) =>
-                item.kind === 'marker' ? (
-                  <InsertMarker key={`m${i}`} position={item.position} onInsert={openStaticSlideModal} />
-                ) : (
-                  <SlideCard
-                    key={`s${i}`}
-                    slide={item.slide}
-                    newReqIds={newReqIds}
-                    changedReqIds={changedReqIds}
-                    expanded={!collapsedSlides.has(item.index)}
-                    onToggle={() => toggleSlide(item.index)}
-                  />
-                ),
-              )}
+              <GroupedSlides
+                slides={result.plan.slides}
+                dropHandlers={dropHandlers}
+                newReqIds={newReqIds}
+                changedReqIds={changedReqIds}
+                collapsedSlides={collapsedSlides}
+                toggleSlide={toggleSlide}
+                tierInheritanceFlags={profile?.ordering.tier_inheritance_flags ?? {}}
+                onToggleInheritance={handleToggleInheritance}
+                newTierPaths={newTierPaths}
+                productLanguages={profile?.product_languages ?? {}}
+              />
             </div>
           </>
         )}
@@ -617,10 +657,56 @@ export default function App() {
               <option value="en">EN</option>
             </select>
           </label>
-          <label>
-            <input type="checkbox" checked={kbrEnabled} onChange={(e) => setKbrEnabled(e.target.checked)} />
-            KBR-фильтр (только Yes)
-          </label>
+        </div>
+
+        {profile && productNames.length > 0 && (
+          <details className="section">
+            <summary>Языки продуктов</summary>
+            <ProductLanguagesPanel
+              productNames={productNames}
+              languages={profile.product_languages ?? {}}
+              onChange={handleProductLanguage}
+            />
+          </details>
+        )}
+
+        {profile && (
+          <details className="section">
+            <summary>Статичные слайды</summary>
+            <StaticSlidesList slides={profile.static_slides ?? []} onDelete={handleDeleteStaticSlide} />
+          </details>
+        )}
+
+        {result && (result.releases ?? []).length > 0 && profile && (
+          <details className="section">
+            <summary>Под согласованием</summary>
+            <ApprovalList
+              releases={result.releases}
+              approvedIds={profile.under_approval_ids}
+              onToggle={handleToggleApproval}
+            />
+          </details>
+        )}
+
+        {profile && (
+          <details className="section">
+            <summary>App group mapping</summary>
+            <SynonymsPanel labels={profile.labels} appTitles={appTitles} onChange={handleLabel} />
+          </details>
+        )}
+
+        {profile && (
+          <details className="section">
+            <summary>Приоритет AppTitle</summary>
+            <PriorityPanel
+              priority={profile.ordering.apptitle_priority}
+              appTitles={appTitles}
+              onChange={handlePriority}
+            />
+          </details>
+        )}
+
+        <div className="controls">
           <label>
             Группировка по AppTitle:
             <select
@@ -656,46 +742,11 @@ export default function App() {
             </div>
           </div>
         </div>
-        {result && (result.releases ?? []).length > 0 && profile && (
-          <details className="section">
-            <summary>Под согласованием</summary>
-            <ApprovalList
-              releases={result.releases}
-              approvedIds={profile.under_approval_ids}
-              onToggle={handleToggleApproval}
-            />
-          </details>
-        )}
 
         {profile && profile.service_strings && (
           <details className="section">
             <summary>Служебные строки (RU/EN)</summary>
             <ServiceStringsPanel strings={profile.service_strings} onChange={handleServiceString} />
-          </details>
-        )}
-
-        {profile && (
-          <details className="section">
-            <summary>App group mapping</summary>
-            <SynonymsPanel labels={profile.labels} appTitles={appTitles} onChange={handleLabel} />
-          </details>
-        )}
-
-        {profile && (
-          <details className="section">
-            <summary>Приоритет AppTitle</summary>
-            <PriorityPanel
-              priority={profile.ordering.apptitle_priority}
-              appTitles={appTitles}
-              onChange={handlePriority}
-            />
-          </details>
-        )}
-
-        {profile && (
-          <details className="section">
-            <summary>Статичные слайды</summary>
-            <StaticSlidesList slides={profile.static_slides ?? []} onDelete={handleDeleteStaticSlide} />
           </details>
         )}
       </aside>
@@ -1056,6 +1107,16 @@ function TemplatesPanel() {
     await refresh()
   }
 
+  async function remove(filename: string) {
+    if (!window.confirm(`Удалить шаблон «${filename}»?`)) return
+    try {
+      await deleteTemplate(filename)
+      await refresh()
+    } catch (err) {
+      alert('Ошибка удаления: ' + err)
+    }
+  }
+
   return (
     <div className="templates">
       <input ref={fileRef} type="file" accept=".pptx" style={{ display: 'none' }} onChange={onFile} />
@@ -1071,13 +1132,18 @@ function TemplatesPanel() {
                 {t.filename}
                 {t.active && <span className="badge">Активен</span>}
               </div>
-              {t.valid ? (
-                <div className="template-ok">✓ все шейпы на месте</div>
+              {(t.issues ?? []).length > 0 ? (
+                <div className="template-err">
+                  {(t.issues ?? []).map((msg, i) => (
+                    <div key={i}>{msg}</div>
+                  ))}
+                </div>
               ) : (
-                <div className="template-err">отсутствуют: {t.missing_shapes.join(', ')}</div>
+                <div className="template-ok">✓ все шейпы на месте</div>
               )}
             </div>
             {!t.active && <button onClick={() => activate(t.filename)}>Сделать активным</button>}
+            <button className="danger" onClick={() => remove(t.filename)}>Удалить</button>
           </div>
         ))}
         {templates.length === 0 && (
@@ -1115,6 +1181,144 @@ function StaticSlidesList({
           </button>
         </div>
       ))}
+    </div>
+  )
+}
+
+function GroupedSlides({
+  slides,
+  dropHandlers,
+  newReqIds,
+  changedReqIds,
+  collapsedSlides,
+  toggleSlide,
+  tierInheritanceFlags,
+  onToggleInheritance,
+  newTierPaths,
+  productLanguages,
+}: {
+  slides: Slide[]
+  dropHandlers: DropHandlerFactory
+  newReqIds: Set<number>
+  changedReqIds: Set<number>
+  collapsedSlides: Set<number>
+  toggleSlide: (i: number) => void
+  tierInheritanceFlags: Record<string, boolean>
+  onToggleInheritance: (tierPath: string, flag: boolean) => void
+  newTierPaths: Set<string>
+  productLanguages: Record<string, { ru: boolean; en: boolean }>
+}) {
+  const { top, products } = groupSlides(slides)
+
+  const langLabel = (name: string): string | null => {
+    const l = productLanguages[name] ?? { ru: true, en: true }
+    if (!l.ru && !l.en) return 'скрыт'
+    if (!l.ru) return 'только EN'
+    if (!l.en) return 'только RU'
+    return null
+  }
+
+  const card = (s: Slide, idx: number, collapsible: boolean) => (
+    <SlideCard
+      key={idx}
+      slide={s}
+      newReqIds={newReqIds}
+      changedReqIds={changedReqIds}
+      expanded={collapsible ? !collapsedSlides.has(idx) : true}
+      onToggle={collapsible ? () => toggleSlide(idx) : () => {}}
+    />
+  )
+
+  return (
+    <div className="grouped">
+      {top.filter(isTitle).map((s) => card(s, slides.indexOf(s), false))}
+      {products.map((p) => (
+        <div key={p.product} className="group">
+          <div
+            {...dropHandlers('', products.indexOf(p), products.map((x) => x.product))}
+            className="group-header product-h"
+          >
+            <span className="badge">PRODUCT</span>
+            <span className="group-title">{p.product}</span>
+            {langLabel(p.product) && <span className="lang-badge">{langLabel(p.product)}</span>}
+          </div>
+          {p.streams.map((st) => (
+            <div key={st.stream} className="group">
+              {st.stream !== '-' && (
+                <div
+                  {...dropHandlers(p.product, p.streams.indexOf(st), p.streams.map((x) => x.stream))}
+                  className="group-header stream-h"
+                >
+                  <span className="badge">STREAM</span>
+                  <span className="group-title">{st.stream}</span>
+                </div>
+              )}
+              {st.tiers.map((t, ti) => (
+                <div key={t.tier} className="group">
+                  <div
+                    {...dropHandlers(
+                      `${p.product} > ${st.stream}`,
+                      ti,
+                      st.tiers.map((x) => x.tier),
+                    )}
+                    className="group-header tier-h"
+                  >
+                    <span className="badge">TIER</span>
+                    <span className="group-title">{t.tier}</span>
+                    {newTierPaths.has(`${p.product} > ${st.stream} > ${t.tier}`) && (
+                      <span className="tree-badge">новое</span>
+                    )}
+                    {ti > 0 && (
+                      <label className="inheritance-check">
+                        <input
+                          type="checkbox"
+                          checked={!!tierInheritanceFlags[`${p.product} > ${st.stream} > ${t.tier}`]}
+                          onChange={(e) =>
+                            onToggleInheritance(`${p.product} > ${st.stream} > ${t.tier}`, e.target.checked)
+                          }
+                        />
+                        наследование
+                      </label>
+                    )}
+                  </div>
+                  {t.slides.map((r) => card(r, slides.indexOf(r), true))}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+      {top.filter(isStatic).map((s) => card(s, slides.indexOf(s), false))}
+      {top.filter(isThankYou).map((s) => card(s, slides.indexOf(s), false))}
+    </div>
+  )
+}
+
+function ProductLanguagesPanel({
+  productNames,
+  languages,
+  onChange,
+}: {
+  productNames: string[]
+  languages: Record<string, { ru: boolean; en: boolean }>
+  onChange: (name: string, lang: 'ru' | 'en', visible: boolean) => void
+}) {
+  return (
+    <div className="product-langs">
+      {productNames.map((name) => {
+        const l = languages[name] ?? { ru: true, en: true }
+        return (
+          <div key={name} className="product-lang-row">
+            <span className="product-lang-name">{name}</span>
+            <button className={'lang-chip' + (l.ru ? ' on' : '')} onClick={() => onChange(name, 'ru', !l.ru)}>
+              RU
+            </button>
+            <button className={'lang-chip' + (l.en ? ' on' : '')} onClick={() => onChange(name, 'en', !l.en)}>
+              EN
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -28,15 +28,12 @@ def load_contracts() -> dict:
 
 
 def get_required_shapes(slide_type: str, columns_count: int, grouped_by_apptitle: bool) -> List[str]:
-    """Обязательные шейпы для комбинации `columns_count × grouped`.
+    """Обязательные шейпы шаблона-«конструктора» (одна колонка-прототип).
 
-    `slide_type` (`roadmap`/`roadmap_cont`) принят для fidelity сигнатуры, но оба
-    типа делят один и тот же контракт разметки roadmap-слайда.
+    `columns_count`/`grouped` приняты для fidelity сигнатуры, но контракт один:
+    builder сам клонирует колонку под каждый квартал.
     """
-    contracts = load_contracts()
-    grouping = "grouped" if grouped_by_apptitle else "flat"
-    key = f"columns_{columns_count}_{grouping}"
-    return list(contracts["roadmap"][key])
+    return list(load_contracts()["roadmap"]["base"])
 
 
 def validate_template_shapes(template_path: str, required_shape_names: List[str]) -> List[str]:
@@ -50,6 +47,83 @@ def validate_template_shapes(template_path: str, required_shape_names: List[str]
         for shape in slide.shapes:
             present.add(shape.name)
     return [name for name in required_shape_names if name not in present]
+
+
+# Понятные дизайнеру подсказки: что за шейп и зачем он нужен
+_SHAPE_HINTS = {
+    "eyebrow": "маленький ярлык над заголовком («Roadmap»)",
+    "slide_title": "заголовок слайда — название тира/продукта",
+    "col_header": "заголовок квартала (Q1, Q2, …)",
+    "col_bullets": "список фич колонки",
+}
+
+
+def _consulted_shapes() -> List[str]:
+    """Все имена шейпов, которые билдер ищет по имени (обязательные + опциональные)."""
+    cfg = load_contracts()["roadmap"]
+    return list(cfg.get("base", [])) + list(cfg.get("optional", []))
+
+
+def validate_template_full(template_path: str) -> dict:
+    """Проверяет шаблон и возвращает готовые замечания для дизайнера.
+
+    Возвращает:
+    - `missing_shapes` — отсутствующие обязательные шейпы;
+    - `duplicate_shapes` — имена, встречающиеся больше одного раза;
+    - `issues` — человекочитаемые строки-инструкции на русском (что исправить).
+    """
+    prs = pptx.Presentation(template_path)
+    names: List[str] = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            names.append(shape.name)
+
+    from collections import Counter
+    counts = Counter(names)
+    required = list(load_contracts()["roadmap"]["base"])
+    consulted = _consulted_shapes()
+
+    missing = [name for name in required if counts.get(name, 0) == 0]
+    duplicates = sorted(name for name in consulted if counts.get(name, 0) > 1)
+
+    issues: List[str] = []
+    if not missing and not duplicates:
+        return {"missing_shapes": missing, "duplicate_shapes": duplicates, "issues": issues}
+
+    issues.append(
+        "Шаблон не пройдёт автоматическую вёрстку. Исправьте шейпы и загрузите снова. "
+        "Переименование: выделить фигуру → «Главная» → «Упорядочить» → «Область выделения» (Alt+F10). "
+        "Префикс «_» в начале имени скрывает шейп (не попадает в слайд)."
+    )
+    for name in missing:
+        hint = _SHAPE_HINTS.get(name, "")
+        issues.append(
+            f"Нет шейпа «{name}»{(' — ' + hint) if hint else ''}. "
+            f"Добавьте его и назовите ровно {name}."
+        )
+    for name in duplicates:
+        hint = _SHAPE_HINTS.get(name, "")
+        issues.append(_duplicate_message(name, counts[name], hint))
+    return {"missing_shapes": missing, "duplicate_shapes": duplicates, "issues": issues}
+
+
+def _duplicate_message(name: str, count: int, hint: str) -> str:
+    what = f" — это {hint}" if hint else ""
+    base = f"Имя «{name}» встречается {count} раза, а нужен ровно один шейп{what}."
+    if name == "col_bullets":
+        fix = (
+            " Оставьте один (прототип со списком фич), а лишние переименуйте: "
+            "ярлык-заголовок («Roadmap») → eyebrow, примеры содержания → _sample, "
+            "декоративные → _dot."
+        )
+    elif name == "col_header":
+        fix = (
+            " Оставьте один (прототип заголовка квартала), а лишние переименуйте: "
+            "декоративные → _dot, примеры → _sample."
+        )
+    else:
+        fix = " Оставьте один, лишние переименуйте (например _sample, _dot)."
+    return base + fix
 
 
 def select_template(slide_type: str, columns_count: int, grouped_by_apptitle: bool) -> str:
@@ -76,13 +150,7 @@ def _soffice() -> Optional[str]:
 
 
 def _all_required_shapes() -> List[str]:
-    contracts = load_contracts()
-    names: List[str] = []
-    for value in contracts.get("roadmap", {}).values():
-        for name in value:
-            if name not in names:
-                names.append(name)
-    return names
+    return list(load_contracts()["roadmap"]["base"])
 
 
 def save_template(filename: str, data: bytes) -> dict:
@@ -91,12 +159,14 @@ def save_template(filename: str, data: bytes) -> dict:
     path = TEMPLATES_LIBRARY / filename
     path.write_bytes(data)
 
-    missing = validate_template_shapes(str(path), _all_required_shapes())
+    check = validate_template_full(str(path))
     preview = generate_preview(filename)
     return {
         "filename": filename,
-        "missing_shapes": missing,
-        "valid": not missing,
+        "missing_shapes": check["missing_shapes"],
+        "duplicate_shapes": check["duplicate_shapes"],
+        "issues": check["issues"],
+        "valid": not check["missing_shapes"] and not check["duplicate_shapes"],
         "preview": preview,
     }
 
@@ -139,11 +209,13 @@ def list_templates() -> List[dict]:
     """Список загруженных шаблонов с валидацией и превью."""
     result: List[dict] = []
     for path in sorted(TEMPLATES_LIBRARY.glob("*.pptx")):
-        missing = validate_template_shapes(str(path), _all_required_shapes())
+        check = validate_template_full(str(path))
         result.append({
             "filename": path.name,
-            "missing_shapes": missing,
-            "valid": not missing,
+            "missing_shapes": check["missing_shapes"],
+            "duplicate_shapes": check["duplicate_shapes"],
+            "issues": check["issues"],
+            "valid": not check["missing_shapes"] and not check["duplicate_shapes"],
             "preview": preview_path(path.name),
             "active": get_active_template_path() == str(path),
         })
@@ -156,6 +228,15 @@ def set_active_template(filename: Optional[str]) -> None:
         ACTIVE_TEMPLATE_FILE.write_text(filename, encoding="utf-8")
     else:
         ACTIVE_TEMPLATE_FILE.unlink(missing_ok=True)
+
+
+def delete_template(filename: str) -> None:
+    """Удаляет шаблон (и его превью); если он активен — сбрасывает активность."""
+    path = TEMPLATES_LIBRARY / filename
+    if get_active_template_path() == str(path):
+        set_active_template(None)
+    path.unlink(missing_ok=True)
+    (TEMPLATES_LIBRARY / "previews" / f"{Path(filename).stem}-1.jpg").unlink(missing_ok=True)
 
 
 def get_active_template_path() -> Optional[str]:
