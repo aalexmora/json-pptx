@@ -1,0 +1,32 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Git
+.git/
+.gitignore
+
+# Рантайм-данные (монтируются как volumes, не копируются в образ)
+data/
+templates_library/
+output/
+
+# Тесты и артефакты QA — в образ не нужны
+tests/
+qa/
+*.jpg
+*.jpeg
+*.png
+
+# macOS / прочее
+.DS_Store
+README.md
+AGENTS.md

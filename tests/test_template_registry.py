@@ -82,3 +82,26 @@ def test_validate_full_clean_template_has_no_issues(synthetic_template_path):
     assert check["missing_shapes"] == []
     assert check["duplicate_shapes"] == []
     assert check["issues"] == []
+
+
+def test_list_templates_skips_lock_files(tmp_path, monkeypatch):
+    """Блокировки PowerPoint (`~$…`) не должны ломать список шаблонов."""
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    # реальный шаблон
+    real = tr.validate_template_full(str(_template_with(tmp_path, "real.pptx", ["col_header", "col_bullets"])))
+    # не-pptx «блокировка»
+    (lib / "~$real.pptx").write_bytes(b"not a real pptx")
+
+    monkeypatch.setattr(tr, "TEMPLATES_LIBRARY", lib)
+    # копируем реальный шаблон в lib
+    import shutil
+    shutil.copy(_template_with(tmp_path, "real.pptx", ["col_header", "col_bullets"]), lib / "real.pptx")
+
+    result = tr.list_templates()
+    filenames = [t["filename"] for t in result]
+    assert "~$real.pptx" not in filenames
+    assert "real.pptx" in filenames
+    # валидный шаблон — без замечаний
+    real_item = next(t for t in result if t["filename"] == "real.pptx")
+    assert real_item["valid"] is True

@@ -205,17 +205,32 @@ def preview_path(filename: str) -> Optional[str]:
     return str(jpg) if jpg.exists() else None
 
 
+def _is_ignored_template(path: Path) -> bool:
+    """Пропускает служебные файлы: блокировки PowerPoint (`~$…`) и прочие не-шаблоны."""
+    return path.name.startswith("~$") or path.name.startswith(".")
+
+
 def list_templates() -> List[dict]:
     """Список загруженных шаблонов с валидацией и превью."""
     result: List[dict] = []
     for path in sorted(TEMPLATES_LIBRARY.glob("*.pptx")):
-        check = validate_template_full(str(path))
+        if _is_ignored_template(path):
+            continue
+        try:
+            check = validate_template_full(str(path))
+        except pptx.exc.PackageNotFoundError:
+            # повреждённый/не-pptx файл не должен ронять весь список
+            check = {
+                "missing_shapes": [],
+                "duplicate_shapes": [],
+                "issues": ["Файл повреждён или не является .pptx — удалите его."],
+            }
         result.append({
             "filename": path.name,
             "missing_shapes": check["missing_shapes"],
             "duplicate_shapes": check["duplicate_shapes"],
             "issues": check["issues"],
-            "valid": not check["missing_shapes"] and not check["duplicate_shapes"],
+            "valid": not check["missing_shapes"] and not check["duplicate_shapes"] and not check["issues"],
             "preview": preview_path(path.name),
             "active": get_active_template_path() == str(path),
         })

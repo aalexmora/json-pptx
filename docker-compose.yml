@@ -1,0 +1,16 @@
+services:
+  roadmap:
+    build: .
+    container_name: roadmap-pptx
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Персистентное состояние: профиль, активный шаблон, загруженные шаблоны,
+      # превью, статичные слайды — переживают пересборку контейнера.
+      - roadmap-data:/app/data
+      - roadmap-templates:/app/templates_library
+
+volumes:
+  roadmap-data:
+  roadmap-templates:

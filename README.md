@@ -32,6 +32,23 @@ cd frontend && npm install && npm run dev   # проксирует /api на :80
 Собрать фронтенд для продакшна: `cd frontend && npm run build` (после этого
 `uvicorn` раздаёт `frontend/dist`).
 
+## Docker (деплой на сервер)
+
+Один контейнер: FastAPI + собранный фронтенд. Без LibreOffice — PNG-превью
+шаблонов в контейнере не генерируются (валидация и сами шаблоны работают).
+
+```bash
+docker compose up -d --build
+```
+
+- Образ собран multi-stage (Node → Python), без dev-зависимостей.
+- Состояние (профиль `data/`, шаблоны `templates_library/`) — в named volumes,
+  переживает пересборку.
+- Порт `8000`, healthcheck на `/api/health`.
+- За reverse-proxy (nginx) достаточно проксировать на `127.0.0.1:8000`;
+  для загрузки `.pptx`/JSON поднимите `client_max_body_size` (напр. `50m`).
+- Один воркер: состояние хранится in-memory + файлы, реплицировать нельзя.
+
 ## Как пользоваться
 
 1. **Загрузите JSON** (вставка, файл или пример).
