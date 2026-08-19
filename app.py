@@ -13,13 +13,13 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, static_slides, strings, template_registry
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.diffing import compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
@@ -189,6 +189,33 @@ async def upload_static_slide_pptx(file: UploadFile = File(...)):
     return {"filename": saved, "extracted_title": static_slides.extract_slide_title(saved)}
 
 
+@app.post("/api/product-logos/upload")
+async def upload_product_logo(product_name: str = Form(...), file: UploadFile = File(...)):
+    data = await file.read()
+    ext = Path(file.filename or "logo.png").suffix.lstrip(".").lower() or "png"
+    filename = product_logos.save_logo(product_name, data, ext)
+    return {"filename": filename, "url": product_logos.logo_url(product_name)}
+
+
+@app.post("/api/product-logos/status")
+def product_logos_status(payload: dict):
+    products = payload.get("products", [])
+    return {"logos": product_logos.status(products)}
+
+
+@app.get("/api/product-logos")
+def list_product_logos():
+    return {"logos": product_logos.list_all()}
+
+
+@app.delete("/api/product-logos")
+def delete_product_logo(product_name: str):
+    removed = product_logos.delete_logo(product_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail="logo not found")
+    return {"status": "ok"}
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -221,6 +248,11 @@ def save_profile(profile: dict):
     _save_profile()
     return {"status": "ok"}
 
+
+# Логотипы продуктов: data/img/* раздаётся по /img/* (до фронтенда, иначе
+# catch-all "/" перехватит).
+product_logos.IMG_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/img", StaticFiles(directory=str(product_logos.IMG_DIR)), name="product-logos")
 
 # Статика фронтенда (после `cd frontend && npm run build`)
 if FRONTEND_DIST.exists():

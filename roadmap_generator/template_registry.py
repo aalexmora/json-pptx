@@ -51,10 +51,15 @@ def validate_template_shapes(template_path: str, required_shape_names: List[str]
 
 # Понятные дизайнеру подсказки: что за шейп и зачем он нужен
 _SHAPE_HINTS = {
-    "eyebrow": "маленький ярлык над заголовком («Roadmap»)",
+    "eyebrow": "маленький ярлык над заголовком («Roadmap») — легаси, лучше назвать roadmap",
     "slide_title": "заголовок слайда — название тира/продукта",
     "col_header": "заголовок квартала (Q1, Q2, …)",
     "col_bullets": "список фич колонки",
+    "roadmap": "статичный ярлык «Roadmap» — текст билдер не меняет",
+    "logo": "картинка-логотип — билдер подставит лого продукта из библиотеки",
+    "dot": "декоративная точка-отсечка квартала",
+    "s2c": "сноска Subject to Change — показывается один раз",
+    "number": "порядковый номер слайда",
 }
 
 
@@ -62,6 +67,23 @@ def _consulted_shapes() -> List[str]:
     """Все имена шейпов, которые билдер ищет по имени (обязательные + опциональные)."""
     cfg = load_contracts()["roadmap"]
     return list(cfg.get("base", [])) + list(cfg.get("optional", []))
+
+
+def placeholder_names() -> List[str]:
+    """Имена плейсхолдеров + их варианты с префиксом `_` (напр. `_roadmap`).
+
+    Префикс «_» в имени шейпа делает его сервисным/направляющим и он не попадает
+    в слайд — КРОМЕ случаев, когда имя после «_» совпадает с плейсхолдером:
+    такие шейпы копируются и заполняются билдером.
+    """
+    return list(_consulted_shapes()) + ["_" + n for n in _consulted_shapes()]
+
+
+def _normalize_placeholder(name: str) -> str:
+    """Сводит `_roadmap` → `roadmap`: префикс «_» не мешает распознаванию плейсхолдера."""
+    if name.startswith("_") and name[1:] in _consulted_shapes():
+        return name[1:]
+    return name
 
 
 def validate_template_full(template_path: str) -> dict:
@@ -76,7 +98,7 @@ def validate_template_full(template_path: str) -> dict:
     names: List[str] = []
     for slide in prs.slides:
         for shape in slide.shapes:
-            names.append(shape.name)
+            names.append(_normalize_placeholder(shape.name))
 
     from collections import Counter
     counts = Counter(names)
@@ -93,7 +115,8 @@ def validate_template_full(template_path: str) -> dict:
     issues.append(
         "Шаблон не пройдёт автоматическую вёрстку. Исправьте шейпы и загрузите снова. "
         "Переименование: выделить фигуру → «Главная» → «Упорядочить» → «Область выделения» (Alt+F10). "
-        "Префикс «_» в начале имени скрывает шейп (не попадает в слайд)."
+        "Префикс «_» в начале имени — сервисный шейп (не попадает в слайд), НО если после «_» "
+        "стоит имя плейсхолдера (например «_roadmap») — шейп обрабатывается билдером."
     )
     for name in missing:
         hint = _SHAPE_HINTS.get(name, "")

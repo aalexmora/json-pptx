@@ -17,16 +17,20 @@ import type {
   Tree,
 } from './types'
 import {
+  deleteProductLogo,
   deleteTemplate,
   downloadPptx,
   fetchDiff,
   fetchPlan,
+  getProductLogoStatuses,
   getProfile,
   listTemplates,
   saveProfile,
   setActiveTemplate,
+  uploadProductLogo,
   uploadStaticSlidePptx,
   uploadTemplate,
+  type ProductLogoStatus,
 } from './api'
 
 const SAMPLE = JSON.stringify(
@@ -218,6 +222,8 @@ export default function App() {
   const [rightWidth, setRightWidth] = useState(320)
   const [collapsedSlides, setCollapsedSlides] = useState<Set<number>>(new Set())
   const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '' })
+  const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
+  const [logoRefresh, setLogoRefresh] = useState(0)
 
   const newReqIds = useMemo(() => new Set(diff?.diff?.new_requirement_ids ?? []), [diff])
   const changedReqIds = useMemo(() => new Set(diff?.diff?.changed_requirement_ids ?? []), [diff])
@@ -227,6 +233,21 @@ export default function App() {
     [result],
   )
   const productNames = useMemo(() => (result?.tree?.products ?? []).map((p) => p.name), [result])
+
+  // Статус логотипов продуктов обновляется при смене списка продуктов и после
+  // загрузки/удаления лого (logoRefresh). Сами файлы живут на бэке (data/img/…).
+  useEffect(() => {
+    if (!productNames.length) return
+    let alive = true
+    getProductLogoStatuses(productNames)
+      .then((statuses) => {
+        if (alive) setLogoStatus(statuses)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [productNames, logoRefresh])
 
   const slideItems = useMemo(() => {
     const slides = result?.plan?.slides ?? []
@@ -491,6 +512,18 @@ export default function App() {
     })
   }
 
+  function handleUploadLogo(name: string, file: File) {
+    uploadProductLogo(name, file)
+      .then(() => setLogoRefresh((n) => n + 1))
+      .catch(() => window.alert('Не удалось загрузить лого'))
+  }
+
+  function handleDeleteLogo(name: string) {
+    deleteProductLogo(name)
+      .then(() => setLogoRefresh((n) => n + 1))
+      .catch(() => window.alert('Не удалось удалить лого'))
+  }
+
   const dropHandlers: DropHandlerFactory = (parentPath, index, siblings) => ({
     draggable: true,
     onDragStart: (e) => {
@@ -666,6 +699,18 @@ export default function App() {
               productNames={productNames}
               languages={profile.product_languages ?? {}}
               onChange={handleProductLanguage}
+            />
+          </details>
+        )}
+
+        {profile && productNames.length > 0 && (
+          <details className="section">
+            <summary>Логотипы продуктов</summary>
+            <ProductLogosPanel
+              productNames={productNames}
+              statuses={logoStatus}
+              onUpload={handleUploadLogo}
+              onDelete={handleDeleteLogo}
             />
           </details>
         )}
@@ -1316,6 +1361,54 @@ function ProductLanguagesPanel({
             <button className={'lang-chip' + (l.en ? ' on' : '')} onClick={() => onChange(name, 'en', !l.en)}>
               EN
             </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ProductLogosPanel({
+  productNames,
+  statuses,
+  onUpload,
+  onDelete,
+}: {
+  productNames: string[]
+  statuses: Record<string, ProductLogoStatus>
+  onUpload: (name: string, file: File) => void
+  onDelete: (name: string) => void
+}) {
+  return (
+    <div className="product-logos">
+      {productNames.map((name) => {
+        const st = statuses[name]
+        return (
+          <div key={name} className="product-logo-row">
+            <span className="product-logo-name" title={name}>
+              {name}
+            </span>
+            {st?.has_logo ? (
+              <>
+                <img className="product-logo-img" src={st.url ?? ''} alt={name} />
+                <button className="logo-delete" onClick={() => onDelete(name)} title="Удалить лого">
+                  ✕
+                </button>
+              </>
+            ) : (
+              <label className="logo-upload">
+                Загрузить
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) onUpload(name, f)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            )}
           </div>
         )
       })}

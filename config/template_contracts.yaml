@@ -7,9 +7,18 @@
 #   col_bullets  — список фич (заголовки групп — жирные абзацы внутри)
 #
 # Необязательные:
-#   eyebrow      — «Roadmap» / «Roadmap (cont.)»
+#   eyebrow      — «Roadmap» / «Roadmap (cont.)» (легаси, заменён на roadmap)
 #   slide_title  — название тира
+#   roadmap      — статичный ярлык «Roadmap» — текст НЕ меняется
+#   logo         — картинка-логотип: билдер подставит лого продукта из библиотеки
+#   dot          — декоративная точка-отсечка квартала
+#   s2c          — сноска «Subject to Change» — показывается один раз для всех колонок
+#   number       — порядковый номер слайда
+#
+# Префикс «_» в начале имени шейпа = сервисный/направляющий (не попадает в слайд),
+# НО если имя после «_» совпадает с плейсхолдером выше (например «_roadmap») —
+# шейп копируется и обрабатывается билдером.
 
 roadmap:
   base: [col_header, col_bullets]
-  optional: [eyebrow, slide_title, col_group_header]
+  optional: [eyebrow, slide_title, col_group_header, roadmap, logo, dot, s2c, number]

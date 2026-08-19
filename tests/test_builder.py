@@ -221,3 +221,132 @@ def test_underscore_named_shapes_are_skipped(load_fixture, tmp_path, monkeypatch
     monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
     prs = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
     assert not any("THIS SHOULD NOT APPEAR" in t for t in _all_texts(prs))
+
+
+def _png_rgb(r: int, g: int, b: int) -> bytes:
+    """Генерирует валидный 1x1 PNG заданного цвета (для различимых лого в тестах)."""
+    import struct
+    import zlib
+
+    def chunk(typ: bytes, data: bytes) -> bytes:
+        c = typ + data
+        return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    idat = zlib.compress(b"\x00" + bytes([r, g, b]))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
+
+
+def _template_with_named_shapes(tmp_path, name, shapes):
+    """Шаблон с обязательными шейпами и дополнительными именованными (текст/картинка).
+
+    `shapes` — список dict: {"name": ..., "kind": "text"|"picture", "text": ...,
+    "bytes": ...}. Возвращает путь к .pptx.
+    """
+    tpl = Presentation()
+    tpl.slide_width = Inches(13.333)
+    tpl.slide_height = Inches(7.5)
+    slide = tpl.slides.add_slide(tpl.slide_layouts[6])
+    header = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(3), Inches(0.4))
+    header.name = "col_header"
+    bullets = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(2.9), Inches(5))
+    bullets.name = "col_bullets"
+    for spec in shapes:
+        if spec["kind"] == "picture":
+            pic = slide.shapes.add_picture(
+                io.BytesIO(spec["bytes"]), Inches(9), Inches(0.2), Inches(2), Inches(1.5),
+            )
+            pic.name = spec["name"]
+        else:
+            box = slide.shapes.add_textbox(Inches(0.5), Inches(6.0), Inches(3), Inches(0.4))
+            box.name = spec["name"]
+            box.text_frame.text = spec.get("text", "")
+    path = tmp_path / name
+    tpl.save(str(path))
+    return str(path)
+
+
+def _shape_text_by_name(slide, name: str):
+    for sh in slide.shapes:
+        if sh.name == name and sh.has_text_frame:
+            return sh.text_frame.text
+    return None
+
+
+def _roadmap_slide(prs):
+    """Первый слайд с заголовком квартала (т.е. рендер roadmap-слайда из шаблона)."""
+    for s in prs.slides:
+        if any(sh.name == "col_header" for sh in s.shapes):
+            return s
+    return None
+
+
+def test_static_roadmap_label_not_overwritten(load_fixture, tmp_path, monkeypatch):
+    """Ярлык `_roadmap` в шаблоне статичный — билдер не заменяет его текст."""
+    tpl_path = _template_with_named_shapes(
+        tmp_path, "roadmap_label.pptx",
+        [{"name": "_roadmap", "kind": "text", "text": "Roadmap"}],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    prs = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+    slide = _roadmap_slide(prs)
+    assert slide is not None
+    assert _shape_text_by_name(slide, "_roadmap") == "Roadmap"
+
+
+def test_s2c_footnote_shown_once(load_fixture, tmp_path, monkeypatch):
+    """Сноска Subject to Change заполняется в `_s2c` ОДИН раз, без дубля-текстбокса."""
+    tpl_path = _template_with_named_shapes(
+        tmp_path, "s2c_template.pptx",
+        [{"name": "_s2c", "kind": "text", "text": "PLACEHOLDER S2C"}],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    prs = build_presentation(_plan(load_fixture, "subject_to_change_mixed.json"))
+
+    footnote = "* Могут быть внесены изменения"
+    slide = _roadmap_slide(prs)
+    assert slide is not None
+    # плейсхолдер-текст заменён на сноску, и сноска встречается ровно один раз
+    assert _shape_text_by_name(slide, "_s2c") == footnote
+    all_text = "\n".join(_all_texts(prs))
+    assert all_text.count(footnote) == 1
+    assert "PLACEHOLDER S2C" not in all_text
+
+
+def test_number_placeholder_filled_with_ordinal(load_fixture, tmp_path, monkeypatch):
+    """Плейсхолдер `_number` заполняется порядковым номером слайда (1-based)."""
+    tpl_path = _template_with_named_shapes(
+        tmp_path, "number_template.pptx",
+        [{"name": "_number", "kind": "text", "text": "1"}],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    prs = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+    slide = _roadmap_slide(prs)
+    assert slide is not None
+    expected = str(list(prs.slides).index(slide) + 1)
+    assert _shape_text_by_name(slide, "_number") == expected
+
+
+def test_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):
+    """Плейсхолдер `_logo` подменяется лого продукта из библиотеки."""
+    blue = _png_rgb(0, 0, 255)
+    red = _png_rgb(255, 0, 0)
+
+    logo_dir = tmp_path / "logos"
+    monkeypatch.setattr("roadmap_generator.product_logos.LOGO_DIR", logo_dir)
+    from roadmap_generator import product_logos
+
+    product_logos.save_logo("Kaspersky Threat Intelligence", blue, "png")
+
+    tpl_path = _template_with_named_shapes(
+        tmp_path, "logo_template.pptx",
+        [{"name": "_logo", "kind": "picture", "bytes": red}],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    prs = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+
+    slide = _roadmap_slide(prs)
+    assert slide is not None
+    pics = [sh for sh in slide.shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert pics, "логотип должен остаться картинкой на слайде"
+    assert any(p.image.blob == blue for p in pics), "картинка должна быть заменена на лого из библиотеки"

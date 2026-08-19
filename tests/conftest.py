@@ -12,7 +12,7 @@ from typing import Callable
 
 import pytest
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, static_slides, strings, template_registry
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry
 from roadmap_generator.synthetic_template import make_synthetic_template
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +38,7 @@ def _reset_state():
     static_slides._reset_state()
     product_languages._reset_state()
     template_registry._reset_template_state()
+    product_logos.reset_logo_state()
     yield
     ordering._reset_state()
     labels._reset_state()
@@ -48,6 +49,7 @@ def _reset_state():
     static_slides._reset_state()
     product_languages._reset_state()
     template_registry._reset_template_state()
+    product_logos.reset_logo_state()
 
 
 def load_json(path: Path):

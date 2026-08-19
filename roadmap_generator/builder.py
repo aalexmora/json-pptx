@@ -18,7 +18,7 @@ from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-from roadmap_generator import static_slides
+from roadmap_generator import product_logos, static_slides
 from roadmap_generator.layout import fit_bullets_dynamic
 from roadmap_generator.strings import get_service_string
 from roadmap_generator.plugins_engine import (
@@ -29,7 +29,7 @@ from roadmap_generator.plugins_engine import (
     ThankYouSlide,
     TitleSlide,
 )
-from roadmap_generator.template_registry import select_template
+from roadmap_generator.template_registry import placeholder_names, select_template
 
 MARGIN = 0.5
 GAP = 0.25
@@ -37,6 +37,12 @@ BASE_FONT_PT = 14
 EYEBROW_FONT_PT = 12
 TITLE_FONT_PT = 20
 HEADER_FONT_PT = 14
+
+# Все известные плейсхолдеры шаблона (с префиксом «_» и без) — читаются из
+# template_contracts.yaml. Базовые (без «_») используются для распознавания:
+# шейп «_roadmap» — это плейсхолдер «roadmap».
+_PLACEHOLDER_NAMES = set(placeholder_names())
+_PLACEHOLDER_BASE = {n for n in _PLACEHOLDER_NAMES if not n.startswith("_")}
 
 
 def build_presentation(plan: SlidePlan) -> Presentation:
@@ -150,9 +156,10 @@ def _append_shape(new_slide, shape):
         blob = _picture_blob(shape)
         if blob is not None:
             try:
-                new_slide.shapes.add_picture(
+                pic = new_slide.shapes.add_picture(
                     io.BytesIO(blob), shape.left, shape.top, shape.width, shape.height,
                 )
+                pic.name = shape.name
                 return
             except (ValueError, OSError):
                 if _copy_picture_with_media_part(new_slide, shape):
@@ -161,8 +168,46 @@ def _append_shape(new_slide, shape):
 
 
 def _is_skipped(shape) -> bool:
-    """Шейпы с префиксом `_` в имени — сервисные/направляющие — в слайд не копируются."""
-    return shape.name.startswith("_")
+    """Сервисные шейпы с префиксом «_» в слайд не копируются — кроме плейсхолдеров.
+
+    Префикс «_» = сервисный/направляющий (не попадает в слайд), НО если имя после
+    «_» совпадает с известным плейсхолдером («_roadmap», «_logo», «_dot», «_s2c»,
+    «_number») — шейп копируется и обрабатывается билдером.
+    """
+    name = shape.name
+    if not name.startswith("_"):
+        return False
+    return name[1:] not in _PLACEHOLDER_BASE
+
+
+def _normalize_name(name: str) -> str:
+    """«_roadmap» → «roadmap»: префикс «_» не мешает поиску плейсхолдера."""
+    if name.startswith("_") and name[1:] in _PLACEHOLDER_BASE:
+        return name[1:]
+    return name
+
+
+def _replace_logo(new_slide, shape, product_name) -> bool:
+    """Подменяет картинку-логотип на лого продукта из библиотеки.
+
+    Возвращает True, если лого нашлось и подставилось. Сохраняет позицию, размер
+    и z-order исходного шейпа. Если лого нет — шейп шаблона остаётся как есть.
+    """
+    path = product_logos.logo_path(product_name)
+    if path is None:
+        return False
+    try:
+        pic = new_slide.shapes.add_picture(
+            io.BytesIO(path.read_bytes()), shape.left, shape.top, shape.width, shape.height,
+        )
+    except (ValueError, OSError):
+        return False
+    sp = shape._element
+    parent = sp.getparent()
+    index = list(parent).index(sp)
+    parent.remove(sp)
+    parent.insert(index, pic._element)
+    return True
 
 
 def _clone_slide(prs, source_slide):
@@ -251,18 +296,38 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
         _render_roadmap(prs, blank, slide, w, h)
         return
     new_slide = _clone_slide(prs, master_slide)
-    by_name = {sh.name: sh for sh in new_slide.shapes if sh.has_text_frame}
 
+    # Поиск плейсхолдеров без учёта префикса «_»: «_roadmap» == «roadmap».
+    # setdefault — первый встреченный шейп (прототип), чтобы дубли не ломали вёрстку.
+    all_by_name: dict = {}
+    text_by_name: dict = {}
+    for sh in new_slide.shapes:
+        norm = _normalize_name(sh.name)
+        all_by_name.setdefault(norm, sh)
+        if sh.has_text_frame:
+            text_by_name.setdefault(norm, sh)
+
+    # Ярлык «roadmap» в шаблоне статичный — текст не меняем. Старый «eyebrow»
+    # заполняем, только если он остался в шаблоне (легаси).
     eyebrow = get_service_string("roadmap_cont_title" if slide.continuation else "roadmap_title", slide.language)
-    _set_text(by_name.get("eyebrow"), eyebrow)
-    _set_text(by_name.get("slide_title"), slide.tier)
+    _set_text(text_by_name.get("eyebrow"), eyebrow)
+    _set_text(text_by_name.get("slide_title"), slide.tier)
 
-    header_proto = by_name.get("col_header")
-    bullets_proto = by_name.get("col_bullets")
+    # Порядковый номер слайда (слайд уже добавлен в prs — len включает его).
+    number = text_by_name.get("number")
+    if number is not None:
+        _set_text(number, str(len(prs.slides)))
+
+    # Логотип продукта из библиотеки (плейсхолдер logo/_logo в шаблоне).
+    logo_shape = all_by_name.get("logo")
+    if logo_shape is not None and logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+        _replace_logo(new_slide, logo_shape, slide.product)
+
+    header_proto = text_by_name.get("col_header")
+    bullets_proto = text_by_name.get("col_bullets")
     if header_proto is None or bullets_proto is None:
         return
 
-    n_cols = len(slide.columns)
     col_w = bullets_proto.width
     gap = Inches(0.25)
 
@@ -283,7 +348,16 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
             new_slide.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.8), Inches(w - 2 * MARGIN), Inches(0.3)),
             slide.inheritance_note, 12, bold=False,
         )
-    if slide.footnote:
+
+    # Сноска Subject to Change — показывается ОДИН раз в шейпе s2c/_s2c.
+    # Текстовый блок поверх — только если такого плейсхолдера в шаблоне нет.
+    s2c = text_by_name.get("s2c")
+    if s2c is not None:
+        if slide.footnote:
+            _set_text(s2c, slide.footnote)
+        else:
+            _clear(s2c)
+    elif slide.footnote:
         _set_paragraph(
             new_slide.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.45), Inches(w - 2 * MARGIN), Inches(0.3)),
             slide.footnote, 10, bold=False,
