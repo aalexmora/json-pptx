@@ -11,6 +11,7 @@
 #   slide_title  — название тира
 #   roadmap      — статичный ярлык «Roadmap» — текст НЕ меняется
 #   logo         — картинка-логотип: билдер подставит лого продукта из библиотеки
+#   logo_tier    — картинка-логотип тира: билдер подставит лого тира из библиотеки
 #   dot          — декоративная точка-отсечка квартала
 #   s2c          — сноска «Subject to Change» — показывается один раз для всех колонок
 #   number       — порядковый номер слайда
@@ -21,4 +22,4 @@
 
 roadmap:
   base: [col_header, col_bullets]
-  optional: [eyebrow, slide_title, col_group_header, roadmap, logo, dot, s2c, number]
+  optional: [eyebrow, slide_title, col_group_header, roadmap, logo, logo_tier, dot, s2c, number]

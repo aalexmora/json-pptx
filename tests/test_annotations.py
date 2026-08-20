@@ -90,6 +90,65 @@ def test_tier_inheritance_note_lists_all_previous_tiers(load_fixture):
     assert "Kaspersky Next EDR Optimum" in xdr.inheritance_note
 
 
+# ---------------------------------------------------------------------------
+# Наследование: дедупликация фич
+# ---------------------------------------------------------------------------
+
+def _all_bullet_texts(slide):
+    """Тексты всех фич слайда (учитывает grouped/groups)."""
+    out = []
+    for col in slide.columns:
+        if col.grouped:
+            out.extend(b.text for g in col.groups for b in g.bullets)
+        else:
+            out.extend(b.text for b in col.bullets)
+    return out
+
+
+def _two_tier_data():
+    return [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [
+            {"Tier": "Junior", "Releases": [
+                {"Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+                 "Requirements": [{"Id": 1001, "Kbr": "Yes", "MarketingTitle": "Junior feature"}]}
+            ]},
+            {"Tier": "Senior", "Releases": [
+                {"Id": 2, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+                 "Requirements": [
+                     {"Id": 1001, "Kbr": "Yes", "MarketingTitle": "Junior feature"},  # дубль из младшего
+                     {"Id": 1002, "Kbr": "Yes", "MarketingTitle": "Senior feature"},  # уникальная
+                 ]}
+            ]},
+        ]}],
+    }]
+
+
+def test_tier_inheritance_dedup_removes_junior_features():
+    """При включённом наследовании старший тир не дублирует фичи младшего."""
+    ordering.save_tier_inheritance_flag("Kaspersky Next > S > Senior", True)
+    plan = build_slide_plan(normalize_roadmap(_two_tier_data(), language="ru"), {})
+    slides = _roadmap_slides(plan)
+
+    junior = next(s for s in slides if s.tier == "Junior")
+    senior = next(s for s in slides if s.tier == "Senior")
+
+    assert "Junior feature" in _all_bullet_texts(junior)
+    assert "Junior feature" not in _all_bullet_texts(senior)
+    assert "Senior feature" in _all_bullet_texts(senior)
+
+
+def test_tier_inheritance_disabled_keeps_duplicates():
+    """Без галки наследования старший тир показывает все свои фичи (включая дубли)."""
+    plan = build_slide_plan(normalize_roadmap(_two_tier_data(), language="ru"), {})
+    slides = _roadmap_slides(plan)
+
+    senior = next(s for s in slides if s.tier == "Senior")
+    texts = _all_bullet_texts(senior)
+    assert "Junior feature" in texts
+    assert "Senior feature" in texts
+
+
 def test_service_strings_override(load_fixture):
     strings.save_service_strings({"thank_you": {"ru": "Пока!", "en": "Bye!"}})
     model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="ru")

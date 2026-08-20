@@ -78,7 +78,8 @@ def test_validate_bad_trdate():
     assert any("TrDate" in e for e in errors)
 
 
-def test_validate_duplicate_release_id():
+def test_validate_allows_duplicate_release_id():
+    """Общие релизы повторяются в разных Streams/Tiers — неуникальный Id не ошибка."""
     data = [
         {
             "Product": "P",
@@ -99,7 +100,7 @@ def test_validate_duplicate_release_id():
                                     "Id": 1,
                                     "AppTitle": "B",
                                     "TrDate": "15.01.2025 21:00:00",
-                                    "Requirements": [{"Id": 11, "MarketingTitle": "ok"}],
+                                    "Requirements": [{"Id": 10, "MarketingTitle": "ok"}],
                                 },
                             ],
                         }
@@ -108,8 +109,40 @@ def test_validate_duplicate_release_id():
             ],
         }
     ]
-    errors = validate_roadmap(data)
-    assert any("дублируется" in e for e in errors)
+    assert validate_roadmap(data) == []
+    model = normalize_roadmap(data, language="ru")
+    assert any("неуникальными Id" in w for w in model.warnings)
+
+
+def test_validate_parses_us_12h_date():
+    """Продакшен-выгрузка присылает US-дату «6/29/2026 9:00:00 PM» — должна парситься."""
+    data = [
+        {
+            "Product": "P",
+            "Streams": [
+                {
+                    "Stream": "S",
+                    "Tiers": [
+                        {
+                            "Tier": "T",
+                            "Releases": [
+                                {
+                                    "Id": 1,
+                                    "AppTitle": "A",
+                                    "TrDate": "6/29/2026 9:00:00 PM",
+                                    "Requirements": [{"Id": 10, "MarketingTitle": "ok"}],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    assert validate_roadmap(data) == []
+    model = normalize_roadmap(data, language="ru")
+    # 29.06.2026 → Q2 2026
+    assert model.products[0].streams[0].tiers[0].releases[0].quarter == "Q2 2026"
 
 
 def test_validate_missing_marketing_title():

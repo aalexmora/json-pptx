@@ -13,8 +13,25 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Literal, Optional
 
-DATE_FORMAT = "%d.%m.%Y %H:%M:%S"
+# Поддерживаемые форматы `TrDate`: исходный из ТЗ и фактическая выгрузка из продакшена.
+# В продакшене даты приходят в US-формате 12-часового цикла («6/29/2026 9:00:00 PM»).
+DATE_FORMATS = (
+    "%d.%m.%Y %H:%M:%S",     # «15.01.2025 21:00:00»
+    "%m/%d/%Y %I:%M:%S %p",  # «6/29/2026 9:00:00 PM»
+)
 Language = Literal["ru", "en"]
+
+
+def _parse_date(value) -> datetime:
+    """Парсит `TrDate`, перебирая известные форматы; ValueError — если ни один не подошёл."""
+    if not isinstance(value, str):
+        raise ValueError(f"ожидалась строка, получен {type(value).__name__}")
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"'{value}' не парсится ни одним из форматов {DATE_FORMATS}")
 
 
 @dataclass
@@ -97,9 +114,6 @@ def validate_roadmap(data) -> List[str]:
     if not isinstance(data, list) or len(data) == 0:
         return ["входные данные должны быть непустым списком (array)"]
 
-    seen_release_ids: set[int] = set()
-    seen_requirement_ids: set[int] = set()
-
     for pi, product in enumerate(data):
         prefix = f"Product[{pi}]"
         if not isinstance(product, dict):
@@ -152,10 +166,6 @@ def validate_roadmap(data) -> List[str]:
                     rid = release.get("Id")
                     if not isinstance(rid, int):
                         errors.append(f"{rprefix}: поле 'Id' должно быть int")
-                    elif rid in seen_release_ids:
-                        errors.append(f"{rprefix}: 'Id'={rid} дублируется (должен быть уникален глобально)")
-                    else:
-                        seen_release_ids.add(rid)
 
                     if not isinstance(release.get("AppTitle"), str):
                         errors.append(f"{rprefix}: отсутствует поле 'AppTitle' (строка)")
@@ -165,10 +175,10 @@ def validate_roadmap(data) -> List[str]:
                         errors.append(f"{rprefix}: отсутствует поле 'TrDate' (строка)")
                     else:
                         try:
-                            datetime.strptime(trdate, DATE_FORMAT)
+                            _parse_date(trdate)
                         except ValueError:
                             errors.append(
-                                f"{rprefix}: 'TrDate'='{trdate}' не парсится как {DATE_FORMAT}"
+                                f"{rprefix}: 'TrDate'='{trdate}' не парсится (форматы: {DATE_FORMATS})"
                             )
 
                     reqs = release.get("Requirements")
@@ -185,10 +195,6 @@ def validate_roadmap(data) -> List[str]:
                         qid = req.get("Id")
                         if not isinstance(qid, int):
                             errors.append(f"{qprefix}: поле 'Id' должно быть int")
-                        elif qid in seen_requirement_ids:
-                            errors.append(f"{qprefix}: 'Id'={qid} дублируется (должен быть уникален глобально)")
-                        else:
-                            seen_requirement_ids.add(qid)
 
                         mtitle = req.get("MarketingTitle")
                         if not isinstance(mtitle, str) or not mtitle.strip():
@@ -208,6 +214,10 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     """
     products: List[Product] = []
     missing_kbr = 0
+    seen_release_ids: set[int] = set()
+    seen_req_ids: set[int] = set()
+    dup_releases = 0
+    dup_reqs = 0
 
     for raw_product in data:
         streams: List[Stream] = []
@@ -216,9 +226,17 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
             for raw_tier in raw_stream.get("Tiers", []):
                 releases: List[Release] = []
                 for raw_release in raw_tier.get("Releases", []):
-                    tr_date = datetime.strptime(raw_release["TrDate"], DATE_FORMAT)
+                    tr_date = _parse_date(raw_release["TrDate"])
+                    rid = raw_release["Id"]
+                    if rid in seen_release_ids:
+                        dup_releases += 1
+                    seen_release_ids.add(rid)
                     requirements: List[Requirement] = []
                     for raw_req in raw_release.get("Requirements", []):
+                        qid = raw_req["Id"]
+                        if qid in seen_req_ids:
+                            dup_reqs += 1
+                        seen_req_ids.add(qid)
                         kbr = raw_req.get("Kbr")
                         if "Kbr" not in raw_req:
                             missing_kbr += 1
@@ -256,5 +274,10 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     warnings: List[str] = []
     if missing_kbr:
         warnings.append(f"{missing_kbr} требований без поля Kbr — принято как не subject to change")
+    if dup_releases or dup_reqs:
+        warnings.append(
+            f"{dup_releases} релизов и {dup_reqs} требований с неуникальными Id — "
+            f"общие сущности повторяются в разных Streams/Tiers, принято как есть"
+        )
 
     return RoadmapModel(language=language, products=products, warnings=warnings)

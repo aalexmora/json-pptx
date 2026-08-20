@@ -19,17 +19,20 @@ import type {
 import {
   deleteProductLogo,
   deleteTemplate,
+  deleteTierLogo,
   downloadPptx,
   fetchDiff,
   fetchPlan,
   getProductLogoStatuses,
   getProfile,
+  getTierLogoStatuses,
   listTemplates,
   saveProfile,
   setActiveTemplate,
   uploadProductLogo,
   uploadStaticSlidePptx,
   uploadTemplate,
+  uploadTierLogo,
   type ProductLogoStatus,
 } from './api'
 
@@ -224,6 +227,8 @@ export default function App() {
   const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '' })
   const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [logoRefresh, setLogoRefresh] = useState(0)
+  const [tierLogoStatus, setTierLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
+  const [tierLogoRefresh, setTierLogoRefresh] = useState(0)
 
   const newReqIds = useMemo(() => new Set(diff?.diff?.new_requirement_ids ?? []), [diff])
   const changedReqIds = useMemo(() => new Set(diff?.diff?.changed_requirement_ids ?? []), [diff])
@@ -233,6 +238,10 @@ export default function App() {
     [result],
   )
   const productNames = useMemo(() => (result?.tree?.products ?? []).map((p) => p.name), [result])
+  const tierNames = useMemo(
+    () => (result?.tree?.products ?? []).flatMap((p) => p.streams.flatMap((s) => s.tiers.map((t) => t.name))),
+    [result],
+  )
 
   // Статус логотипов продуктов обновляется при смене списка продуктов и после
   // загрузки/удаления лого (logoRefresh). Сами файлы живут на бэке (data/img/…).
@@ -248,6 +257,20 @@ export default function App() {
       alive = false
     }
   }, [productNames, logoRefresh])
+
+  // Статус логотипов тиров.
+  useEffect(() => {
+    if (!tierNames.length) return
+    let alive = true
+    getTierLogoStatuses(tierNames)
+      .then((statuses) => {
+        if (alive) setTierLogoStatus(statuses)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [tierNames, tierLogoRefresh])
 
   const slideItems = useMemo(() => {
     const slides = result?.plan?.slides ?? []
@@ -524,6 +547,18 @@ export default function App() {
       .catch(() => window.alert('Не удалось удалить лого'))
   }
 
+  function handleUploadTierLogo(name: string, file: File) {
+    uploadTierLogo(name, file)
+      .then(() => setTierLogoRefresh((n) => n + 1))
+      .catch(() => window.alert('Не удалось загрузить лого тира'))
+  }
+
+  function handleDeleteTierLogo(name: string) {
+    deleteTierLogo(name)
+      .then(() => setTierLogoRefresh((n) => n + 1))
+      .catch(() => window.alert('Не удалось удалить лого тира'))
+  }
+
   const dropHandlers: DropHandlerFactory = (parentPath, index, siblings) => ({
     draggable: true,
     onDragStart: (e) => {
@@ -711,6 +746,18 @@ export default function App() {
               statuses={logoStatus}
               onUpload={handleUploadLogo}
               onDelete={handleDeleteLogo}
+            />
+          </details>
+        )}
+
+        {profile && tierNames.length > 0 && (
+          <details className="section">
+            <summary>Логотипы тиров</summary>
+            <ProductLogosPanel
+              productNames={tierNames}
+              statuses={tierLogoStatus}
+              onUpload={handleUploadTierLogo}
+              onDelete={handleDeleteTierLogo}
             />
           </details>
         )}

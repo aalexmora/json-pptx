@@ -2,26 +2,32 @@
   "ordering": {
     "order": {
       "": [
-        "P4 2Q overflow",
-        "P3 2Q fit",
-        "P5 3Q",
-        "P6 4Q",
-        "P7 5Q pagination",
-        "P1 1Q fit",
-        "P2 1Q overflow"
+        "Kaspersky Next",
+        "Kaspersky Vulnerability Management"
       ],
       "Kaspersky Next > Kaspersky Next Optimum": [
         "Kaspersky Next EDR Foundations",
         "Kaspersky Next EDR Optimum",
         "Kaspersky Next XDR Optimum"
+      ],
+      "Kaspersky Next": [
+        "Kaspersky Next Optimum",
+        "Kaspersky Next Expert",
+        "Security Modules"
+      ],
+      "Kaspersky Next > Kaspersky Next Expert": [
+        "Kaspersky Next EDR Expert",
+        "Kaspersky Next XDR Expert"
       ]
     },
     "apptitle_priority": [],
     "tier_inheritance_flags": {
       "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Foundations": true,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum": false,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": false,
-      "Kaspersky Vulnerability Management > - > -": true
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum": true,
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": true,
+      "Kaspersky Vulnerability Management > - > -": true,
+      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next MXDR Optimum": true,
+      "Kaspersky Next > Kaspersky Next Expert > Kaspersky Next XDR Expert": true
     }
   },
   "labels": {

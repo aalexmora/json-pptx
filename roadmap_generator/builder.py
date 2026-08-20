@@ -187,13 +187,12 @@ def _normalize_name(name: str) -> str:
     return name
 
 
-def _replace_logo(new_slide, shape, product_name) -> bool:
-    """Подменяет картинку-логотип на лого продукта из библиотеки.
+def _replace_picture(new_slide, shape, path) -> bool:
+    """Подменяет картинку-шейп картинкой из файла `path`.
 
-    Возвращает True, если лого нашлось и подставилось. Сохраняет позицию, размер
-    и z-order исходного шейпа. Если лого нет — шейп шаблона остаётся как есть.
+    Возвращает True, если подставилось. Сохраняет позицию, размер и z-order
+    исходного шейпа. Если файла нет — шейп шаблона остаётся как есть.
     """
-    path = product_logos.logo_path(product_name)
     if path is None:
         return False
     try:
@@ -325,7 +324,12 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
     # Логотип продукта из библиотеки (плейсхолдер logo/_logo в шаблоне).
     logo_shape = all_by_name.get("logo")
     if logo_shape is not None and logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-        _replace_logo(new_slide, logo_shape, slide.product)
+        _replace_picture(new_slide, logo_shape, product_logos.logo_path(slide.product))
+
+    # Логотип тира из библиотеки (плейсхолдер logo_tier/_logo_tier в шаблоне).
+    tier_logo_shape = all_by_name.get("logo_tier")
+    if tier_logo_shape is not None and tier_logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+        _replace_picture(new_slide, tier_logo_shape, product_logos.tier_logo_path(slide.tier))
 
     header_proto = text_by_name.get("col_header")
     bullets_proto = text_by_name.get("col_bullets")

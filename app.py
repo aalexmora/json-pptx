@@ -216,6 +216,33 @@ def delete_product_logo(product_name: str):
     return {"status": "ok"}
 
 
+@app.post("/api/tier-logos/upload")
+async def upload_tier_logo(tier_name: str = Form(...), file: UploadFile = File(...)):
+    data = await file.read()
+    ext = Path(file.filename or "logo.png").suffix.lstrip(".").lower() or "png"
+    filename = product_logos.save_tier_logo(tier_name, data, ext)
+    return {"filename": filename, "url": product_logos.tier_logo_url(tier_name)}
+
+
+@app.post("/api/tier-logos/status")
+def tier_logos_status(payload: dict):
+    tiers = payload.get("tiers", [])
+    return {"logos": product_logos.tier_status(tiers)}
+
+
+@app.get("/api/tier-logos")
+def list_tier_logos():
+    return {"logos": product_logos.list_tier_logos()}
+
+
+@app.delete("/api/tier-logos")
+def delete_tier_logo(tier_name: str):
+    removed = product_logos.delete_tier_logo(tier_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail="logo not found")
+    return {"status": "ok"}
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}

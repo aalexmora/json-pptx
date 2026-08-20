@@ -123,3 +123,28 @@ export async function deleteProductLogo(productName: string): Promise<void> {
   const res = await fetch(`/api/product-logos?product_name=${encodeURIComponent(productName)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
+
+export async function uploadTierLogo(tierName: string, file: File): Promise<{ filename: string; url: string | null }> {
+  const form = new FormData()
+  form.append('tier_name', tierName)
+  form.append('file', file)
+  const res = await fetch('/api/tier-logos/upload', { method: 'POST', body: form })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function getTierLogoStatuses(tiers: string[]): Promise<Record<string, ProductLogoStatus>> {
+  const res = await fetch('/api/tier-logos/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tiers }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.logos as Record<string, ProductLogoStatus>
+}
+
+export async function deleteTierLogo(tierName: string): Promise<void> {
+  const res = await fetch(`/api/tier-logos?tier_name=${encodeURIComponent(tierName)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}

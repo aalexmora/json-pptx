@@ -1,0 +1,648 @@
+[
+  {
+    "Product": "Kaspersky Mobile Security SDK",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Anti-Virus SDK",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Scan Engine",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Fraud Prevention",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Industrial CyberSecurity",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Industrial CyberSecurity for Nodes",
+            "Releases": []
+          },
+          {
+            "Tier": "Kaspersky Industrial CyberSecurity for Networks",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Private Security Network",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Embedded Systems Security",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Embedded Systems Security Compliance Edition",
+            "Releases": []
+          },
+          {
+            "Tier": "Kaspersky Embedded Systems Security",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Container Security",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Container Security Advanced",
+            "Releases": []
+          },
+          {
+            "Tier": "Kaspersky Container Security Standard",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky SD-WAN",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Managed Detection and Response",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Threat Intelligence Portal",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky CyberTrace",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Unified Monitoring and Analysis Platform",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Vulnerability Management",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": [
+              {
+                "Id": 8333969,
+                "Title": "Vulnerability Management 1.0",
+                "AppId": 8333948,
+                "AppTitle": "Vulnerability Management",
+                "TrDate": "6/29/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8367652,
+                    "Title": "[VM][Widgets & Reports] Отчёт об обнаруженных уязвимостях",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Detected Vulnerabilities Report",
+                    "MarketingTitle": "Отчёт об обнаруженных уязвимостях",
+                    "Visibility": "RU and ENG",
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Anti Targeted Attack",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Next Generation Firewall",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Security for Mail Server",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Security for Mail Server Plus",
+            "Releases": []
+          },
+          {
+            "Tier": "Kaspersky Security for Mail Server",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Automated Security Awareness Platform",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "-",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Hybrid Cloud Security",
+    "Streams": [
+      {
+        "Stream": "-",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Hybrid Cloud Security Enterprise",
+            "Releases": []
+          },
+          {
+            "Tier": "Kaspersky Hybrid Cloud Security",
+            "Releases": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "Product": "Kaspersky Next",
+    "Streams": [
+      {
+        "Stream": "Security Modules",
+        "Tiers": [
+          {
+            "Tier": "Threat Lookup&Analysis",
+            "Releases": []
+          },
+          {
+            "Tier": "Vulnerability Management",
+            "Releases": [
+              {
+                "Id": 8333969,
+                "Title": "Vulnerability Management 1.0",
+                "AppId": 8333948,
+                "AppTitle": "Vulnerability Management",
+                "TrDate": "6/29/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8367652,
+                    "Title": "[VM][Widgets & Reports] Отчёт об обнаруженных уязвимостях",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Detected Vulnerabilities Report",
+                    "MarketingTitle": "Отчёт об обнаруженных уязвимостях",
+                    "Visibility": "RU and ENG",
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Tier": "Workload Security",
+            "Releases": []
+          },
+          {
+            "Tier": "Email Security",
+            "Releases": []
+          },
+          {
+            "Tier": "Security Awareness",
+            "Releases": []
+          }
+        ]
+      },
+      {
+        "Stream": "Kaspersky Next Expert",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Next XDR Expert",
+            "Releases": [
+              {
+                "Id": 9376428,
+                "Title": "Kaspersky Secure Mobility Management TR 60",
+                "AppId": 8072330,
+                "AppTitle": "Kaspersky Secure Mobility Management",
+                "TrDate": "12/20/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 6979032,
+                    "Title": "[BRQ] Улучшение сценариев удаления KES Android (на девайсе)",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Ability to securely uninstall KES for Android locally",
+                    "MarketingTitle": "Улучшение сценариев удаления KES Android (локально)",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 8177575,
+                "Title": "Kaspersky Endpoint Security Cloud 24.16",
+                "AppId": 2910468,
+                "AppTitle": "Kaspersky Endpoint Security Cloud Program (B2B Cloud)",
+                "TrDate": "2/26/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8810938,
+                    "Title": "[BRQ] KES Android - Код разблокировки при удалении устройства из консоли",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Prevention of Android Device Lockout upon Console Removal",
+                    "MarketingTitle": "Предотвращение блокировки устройств Android при удалении из консоли",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Tier": "Kaspersky Next EDR Expert",
+            "Releases": [
+              {
+                "Id": 9376428,
+                "Title": "Kaspersky Secure Mobility Management TR 60",
+                "AppId": 8072330,
+                "AppTitle": "Kaspersky Secure Mobility Management",
+                "TrDate": "12/20/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 6979032,
+                    "Title": "[BRQ] Улучшение сценариев удаления KES Android (на девайсе)",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Ability to securely uninstall KES for Android locally",
+                    "MarketingTitle": "Улучшение сценариев удаления KES Android (локально)",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 8177575,
+                "Title": "Kaspersky Endpoint Security Cloud 24.16",
+                "AppId": 2910468,
+                "AppTitle": "Kaspersky Endpoint Security Cloud Program (B2B Cloud)",
+                "TrDate": "2/26/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8810938,
+                    "Title": "[BRQ] KES Android - Код разблокировки при удалении устройства из консоли",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Prevention of Android Device Lockout upon Console Removal",
+                    "MarketingTitle": "Предотвращение блокировки устройств Android при удалении из консоли",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "Stream": "Kaspersky Next Optimum",
+        "Tiers": [
+          {
+            "Tier": "Kaspersky Next MXDR Optimum",
+            "Releases": [
+              {
+                "Id": 9376428,
+                "Title": "Kaspersky Secure Mobility Management TR 60",
+                "AppId": 8072330,
+                "AppTitle": "Kaspersky Secure Mobility Management",
+                "TrDate": "12/20/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 6979032,
+                    "Title": "[BRQ] Улучшение сценариев удаления KES Android (на девайсе)",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Ability to securely uninstall KES for Android locally",
+                    "MarketingTitle": "Улучшение сценариев удаления KES Android (локально)",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 8177575,
+                "Title": "Kaspersky Endpoint Security Cloud 24.16",
+                "AppId": 2910468,
+                "AppTitle": "Kaspersky Endpoint Security Cloud Program (B2B Cloud)",
+                "TrDate": "2/26/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8810938,
+                    "Title": "[BRQ] KES Android - Код разблокировки при удалении устройства из консоли",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Prevention of Android Device Lockout upon Console Removal",
+                    "MarketingTitle": "Предотвращение блокировки устройств Android при удалении из консоли",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 9334229,
+                "Title": "EDR Optimum 4.2 (Program)",
+                "AppId": 8508816,
+                "AppTitle": "Kaspersky Endpoint Detection and Response Optimum",
+                "TrDate": "12/29/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 7616445,
+                    "Title": "[BRQ][LTP-2022][Win] Extended IoC Scan",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Support for searching IoCs in historical data on the host (Windows)",
+                    "MarketingTitle": "Поддержка поиска IoC в ретроспективных данных на хосте (Windows)",
+                    "Visibility": "RU and ENG",
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Tier": "Kaspersky Next XDR Optimum",
+            "Releases": [
+              {
+                "Id": 9376428,
+                "Title": "Kaspersky Secure Mobility Management TR 60",
+                "AppId": 8072330,
+                "AppTitle": "Kaspersky Secure Mobility Management",
+                "TrDate": "12/20/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 6979032,
+                    "Title": "[BRQ] Улучшение сценариев удаления KES Android (на девайсе)",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Ability to securely uninstall KES for Android locally",
+                    "MarketingTitle": "Улучшение сценариев удаления KES Android (локально)",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 8177575,
+                "Title": "Kaspersky Endpoint Security Cloud 24.16",
+                "AppId": 2910468,
+                "AppTitle": "Kaspersky Endpoint Security Cloud Program (B2B Cloud)",
+                "TrDate": "2/26/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8810938,
+                    "Title": "[BRQ] KES Android - Код разблокировки при удалении устройства из консоли",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Prevention of Android Device Lockout upon Console Removal",
+                    "MarketingTitle": "Предотвращение блокировки устройств Android при удалении из консоли",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 9334229,
+                "Title": "EDR Optimum 4.2 (Program)",
+                "AppId": 8508816,
+                "AppTitle": "Kaspersky Endpoint Detection and Response Optimum",
+                "TrDate": "12/29/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 7616445,
+                    "Title": "[BRQ][LTP-2022][Win] Extended IoC Scan",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Support for searching IoCs in historical data on the host (Windows)",
+                    "MarketingTitle": "Поддержка поиска IoC в ретроспективных данных на хосте (Windows)",
+                    "Visibility": "RU and ENG",
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Tier": "Kaspersky Next EDR Optimum",
+            "Releases": [
+              {
+                "Id": 9376428,
+                "Title": "Kaspersky Secure Mobility Management TR 60",
+                "AppId": 8072330,
+                "AppTitle": "Kaspersky Secure Mobility Management",
+                "TrDate": "12/20/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 6979032,
+                    "Title": "[BRQ] Улучшение сценариев удаления KES Android (на девайсе)",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Ability to securely uninstall KES for Android locally",
+                    "MarketingTitle": "Улучшение сценариев удаления KES Android (локально)",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 8177575,
+                "Title": "Kaspersky Endpoint Security Cloud 24.16",
+                "AppId": 2910468,
+                "AppTitle": "Kaspersky Endpoint Security Cloud Program (B2B Cloud)",
+                "TrDate": "2/26/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8810938,
+                    "Title": "[BRQ] KES Android - Код разблокировки при удалении устройства из консоли",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Prevention of Android Device Lockout upon Console Removal",
+                    "MarketingTitle": "Предотвращение блокировки устройств Android при удалении из консоли",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              },
+              {
+                "Id": 9334229,
+                "Title": "EDR Optimum 4.2 (Program)",
+                "AppId": 8508816,
+                "AppTitle": "Kaspersky Endpoint Detection and Response Optimum",
+                "TrDate": "12/29/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 7616445,
+                    "Title": "[BRQ][LTP-2022][Win] Extended IoC Scan",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Support for searching IoCs in historical data on the host (Windows)",
+                    "MarketingTitle": "Поддержка поиска IoC в ретроспективных данных на хосте (Windows)",
+                    "Visibility": "RU and ENG",
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "Tier": "Kaspersky Next EDR Foundations",
+            "Releases": [
+              {
+                "Id": 8177575,
+                "Title": "Kaspersky Endpoint Security Cloud 24.16",
+                "AppId": 2910468,
+                "AppTitle": "Kaspersky Endpoint Security Cloud Program (B2B Cloud)",
+                "TrDate": "2/26/2026 9:00:00 PM",
+                "Requirements": [
+                  {
+                    "Id": 8810938,
+                    "Title": "[BRQ] KES Android - Код разблокировки при удалении устройства из консоли",
+                    "Kbr": "Yes",
+                    "MarketingTitleEn": "Prevention of Android Device Lockout upon Console Removal",
+                    "MarketingTitle": "Предотвращение блокировки устройств Android при удалении из консоли",
+                    "Visibility": null,
+                    "MarketingPriority": null
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

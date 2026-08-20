@@ -149,18 +149,21 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
             stream_slides: List[RoadmapSlide] = []
             tier_names = [t.name for t in stream.tiers]
             ordered_tiers = get_effective_order(f"{pname}{SEPARATOR}{sname}", tier_names)
+            seen_req_ids: set = set()
             for idx, tname in enumerate(ordered_tiers):
                 tier = next(t for t in stream.tiers if t.name == tname)
                 tier_path = f"{pname}{SEPARATOR}{sname}{SEPARATOR}{tname}"
+                inherit = idx > 0 and get_tier_inheritance_flag(tier_path)
                 inheritance_note = None
-                if idx > 0 and get_tier_inheritance_flag(tier_path):
+                if inherit:
                     previous = ", ".join(ordered_tiers[:idx])
                     inheritance_note = f"{get_service_string('inheritance_prefix', model.language)} {previous}"
-                stream_slides.extend(
-                    _build_tier_slides(
-                        model.language, pname, sname, tname, tier, filters, groupers, plugin_settings, inheritance_note,
-                    )
+                slides, shown_ids = _build_tier_slides(
+                    model.language, pname, sname, tname, tier, filters, groupers, plugin_settings,
+                    inheritance_note, exclude_req_ids=(seen_req_ids if inherit else None),
                 )
+                seen_req_ids.update(shown_ids)
+                stream_slides.extend(slides)
             if stream_slides:
                 if sname != "-":
                     deck_items.append(DividerSlide("stream", sname))
@@ -197,7 +200,7 @@ def _assemble_with_static(product_decks, static_slides) -> List[Union[DividerSli
     return result
 
 
-def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings, inheritance_note=None):
+def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings, inheritance_note=None, exclude_req_ids=None):
     parent_path = f"{product}{SEPARATOR}{stream}{SEPARATOR}{tier}"
 
     bullets: List[Bullet] = []
@@ -221,7 +224,14 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
     for plugin in filters:
         plugin.apply(context, _resolve_plugin_settings(plugin, plugin_settings, product, parent_path))
     if not context.bullets:
-        return []
+        return [], set()
+
+    # Наследование (дедупликация): скрыть фичи, чей Id уже показывался в предыдущих
+    # тирах того же Stream. Заметка о наследовании при этом остаётся на слайде.
+    if exclude_req_ids:
+        context.bullets = [b for b in context.bullets if b.requirement_id not in exclude_req_ids]
+    if not context.bullets:
+        return [], set()
 
     # 1) одна колонка-прототип на квартал; группировка по AppTitle плагином.
     quarter_columns = _group_by_quarter(context.bullets)
@@ -235,7 +245,9 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
     _apply_under_approval(columns, language)
     _apply_group_order_and_labels(columns)
 
-    return _paginate(product, stream, tier, columns, language, inheritance_note)
+    slides = _paginate(product, stream, tier, columns, language, inheritance_note)
+    shown_ids = {b.requirement_id for b in context.bullets}
+    return slides, shown_ids
 
 
 def _resolve_plugin_settings(plugin, plugin_settings, product_name, parent_path) -> dict:

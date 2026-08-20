@@ -378,3 +378,27 @@ def test_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):
     pics = [sh for sh in slide.shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
     assert pics, "логотип должен остаться картинкой на слайде"
     assert any(p.image.blob == blue for p in pics), "картинка должна быть заменена на лого из библиотеки"
+
+
+def test_tier_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):
+    """Плейсхолдер `_logo_tier` подменяется лого тира из библиотеки."""
+    blue = _png_rgb(0, 0, 255)
+    red = _png_rgb(255, 0, 0)
+
+    logo_dir = tmp_path / "tier_logos"
+    monkeypatch.setattr("roadmap_generator.product_logos.TIER_LOGO_DIR", logo_dir)
+    from roadmap_generator import product_logos
+
+    product_logos.save_tier_logo("Threat Data Feeds", blue, "png")
+
+    tpl_path = _template_with_named_shapes(
+        tmp_path, "tier_logo_template.pptx",
+        [{"name": "_logo_tier", "kind": "picture", "bytes": red}],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    prs = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+
+    slide = _roadmap_slide(prs)
+    assert slide is not None
+    pics = [sh for sh in slide.shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert any(p.image.blob == blue for p in pics), "картинка должна быть заменена на лого тира"
