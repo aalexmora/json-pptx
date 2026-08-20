@@ -80,10 +80,13 @@ def test_dividers_render_titles(load_fixture, synthetic_template_path):
     assert any("STREAM" in t and "Kaspersky Next Optimum" in t for t in texts)
 
 
-def test_continuation_eyebrow(load_fixture, synthetic_template_path):
+def test_continuation_is_pure_table(load_fixture, synthetic_template_path):
+    """Слайд-продолжение = только таблица (без заголовка роадмапа/легенды, TOR v2)."""
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
-    # RU-заголовок продолжения — «Роадмап (продолжение)»
-    assert any("продолжение" in t for t in _all_texts(prs))
+    joined = "\n".join(_all_texts(prs))
+    # нет ярлыка «Роадмап (продолжение)» — на продолжении остаются только слоты
+    assert "продолжение" not in joined
+    assert "Q1 2026" in joined
 
 
 def test_flat_column_bullets(load_fixture, synthetic_template_path):
@@ -100,16 +103,16 @@ def test_group_headers_rendered(load_fixture, synthetic_template_path):
 
 
 def test_single_quarter_60_features(load_fixture, synthetic_template_path):
-    """60 фич в одном квартале → 6 колонок по 10 → 2 roadmap-слайда, фичи не теряются."""
+    """60 фич в одном квартале → 3 слота по вместимости (~21/слот), фичи не теряются."""
     plan = _plan(load_fixture, "single_quarter_60_features.json")
     roadmap = [s for s in plan.slides if isinstance(s, RoadmapSlide)]
-    assert len(roadmap) == 2
-    # 4 колонки на первом слайде, 2 на продолжении
-    assert len(roadmap[0].columns) == 4 and not roadmap[0].continuation
-    assert len(roadmap[1].columns) == 2 and roadmap[1].continuation
-    # ровно по 10 фич в колонке, все 60 на месте
-    counts = [len(c.bullets) for s in roadmap for c in s.columns]
-    assert counts == [10] * 6
+    assert len(roadmap) == 1
+    assert len(roadmap[0].columns) == 3 and not roadmap[0].continuation
+    counts = [
+        sum(len(g.bullets) for g in c.groups) if c.grouped else len(c.bullets)
+        for c in roadmap[0].columns
+    ]
+    assert counts == [21, 21, 18]
     texts = "\n".join(_all_texts(build_presentation(plan)))
     for i in range(1, 61):
         assert f"Feature {i}" in texts
@@ -122,8 +125,31 @@ def test_inherits_slide_size(load_fixture, synthetic_template_path):
     assert prs.slide_height == template.slide_height
 
 
+def test_header_shown_only_on_first_subslot(load_fixture, tmp_path, monkeypatch):
+    """Заголовок квартала — только в первом под-слоте (у остальных шапка пустая)."""
+    tpl_path = _template_with_named_shapes(tmp_path, "hdr_template.pptx", [])
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [{"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"f{i}"} for i in range(25)],
+        }]}]}],
+    }]
+    plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    prs = build_presentation(plan)
+    headers = [
+        sh.text_frame.text
+        for s in prs.slides for sh in s.shapes
+        if sh.name == "col_header"
+    ]
+    # 2 слота одного квартала → заголовок ровно один раз, второй слот пустой
+    assert headers.count("Q1 2025") == 1
+    assert all(h == "" for h in headers if h != "Q1 2025")
+
+
 def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_template_path):
-    # 200 фич в одном квартале → 20 колонок → 5 roadmap-слайдов (гибкая раскладка)
+    # 200 фич в одном квартале → 10 слотов → 3 слайда (4+4+2), квартал растягивается
     data = [{
         "Product": "Kaspersky Next",
         "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
@@ -136,10 +162,12 @@ def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_temp
     }]
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
     roadmap_slides = [s for s in plan.slides if isinstance(s, RoadmapSlide)]
-    assert len(roadmap_slides) == 5  # 200/10 = 20 колонок → 5 слайдов
+    assert len(roadmap_slides) == 3
+    assert [len(s.columns) for s in roadmap_slides] == [4, 4, 2]
+    assert [s.continuation for s in roadmap_slides] == [False, True, True]
     prs = build_presentation(plan)
-    # титульный + product + stream + 5 roadmap + спасибо = 9 слайдов
-    assert len(prs.slides) == 9
+    # титульный + product + stream + 3 roadmap + спасибо = 7 слайдов
+    assert len(prs.slides) == 7
 
 
 def test_title_and_thank_you_slides(load_fixture, synthetic_template_path):

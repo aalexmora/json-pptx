@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Tuple, Union
 
-from plugins._base import Bullet, Column, RoadmapPlugin, SlideBuildContext
+from plugins._base import Bullet, Column, Group, RoadmapPlugin, SlideBuildContext
 from roadmap_generator.approval import is_under_approval
 from roadmap_generator.labels import get_apptitle_label
 from roadmap_generator.product_languages import is_product_visible
@@ -25,15 +25,18 @@ from roadmap_generator.schema import RoadmapModel
 from roadmap_generator.deck_meta import get_deck_meta
 from roadmap_generator.static_slides import get_static_slides
 from roadmap_generator.strings import get_service_string
+from roadmap_generator.layout import estimate_bullet_height_pt, estimate_group_height_pt
 
 PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
 
 _PLUGIN_ATTRS = ("id", "label", "kind", "scope", "default_settings", "apply")
 
-# Гибкая раскладка: максимум фич в одной колонке-квартале (v1-прокси «сколько влезает»).
-# При переполнении квартал занимает несколько колонок. Позже может стать текст-зависимым
-# (fit_bullets_dynamic) или настраиваться в админке как «фиксированный лимит» (ТЗ v4 §4.2 п.8).
-MAX_BULLETS_PER_COLUMN = 10
+# Геометрия слота для оценки вместимости (TOR v2 §3: ровно 4 фикс. слота, высота по
+# тексту). Точные размеры уточняются в builder'е по реальному шаблону; здесь — оценки
+# для плана/превью (слайд 16:9, шапка/сноска/поля вычтены приблизительно).
+SLOT_WIDTH_IN = 3.0   # ≈ (13.333 − 2×0.5) / 4
+SLOT_HEIGHT_IN = 5.0  # тело слайда (7.5 − шапка ~1.0 − сноска ~0.4 − поля)
+BASE_FONT_PT = 14
 
 
 @dataclass
@@ -220,15 +223,19 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
     if not context.bullets:
         return []
 
-    context.columns = _allocate_columns(context.bullets)
-    _apply_under_approval(context.columns, language)
-
+    # 1) одна колонка-прототип на квартал; группировка по AppTitle плагином.
+    quarter_columns = _group_by_quarter(context.bullets)
+    context.columns = quarter_columns
     for plugin in groupers:
         plugin.apply(context, _resolve_plugin_settings(plugin, plugin_settings, product, parent_path))
 
-    _apply_group_order_and_labels(context.columns)
+    # 2) атомарная упаковка групп/фич в слоты по высоте (TOR v2 §4 шаг 1).
+    columns = _pack_quarters(context.columns)
 
-    return _paginate(product, stream, tier, context.columns, language, inheritance_note)
+    _apply_under_approval(columns, language)
+    _apply_group_order_and_labels(columns)
+
+    return _paginate(product, stream, tier, columns, language, inheritance_note)
 
 
 def _resolve_plugin_settings(plugin, plugin_settings, product_name, parent_path) -> dict:
@@ -251,21 +258,15 @@ def _resolve_plugin_settings(plugin, plugin_settings, product_name, parent_path)
     return settings
 
 
-def _allocate_columns(bullets: List[Bullet]) -> List[Column]:
-    """Гибкая раскладка: квартал с переполнением занимает несколько колонок.
-
-    Пули группируются по кварталу хронологически; каждый квартал режется на колонки
-    по `MAX_BULLETS_PER_COLUMN`, сохраняя порядок фич внутри квартала.
-    """
+def _group_by_quarter(bullets: List[Bullet]) -> List[Column]:
+    """Одна колонка-прототип на квартал (хронологически q1..q4) — до группировки/упаковки."""
     by_quarter: dict = defaultdict(list)
     for bullet in bullets:
         by_quarter[bullet.quarter].append(bullet)
-    columns: List[Column] = []
-    for quarter in sorted(by_quarter, key=_quarter_sort_key):
-        quarter_bullets = by_quarter[quarter]
-        for i in range(0, len(quarter_bullets), MAX_BULLETS_PER_COLUMN):
-            columns.append(Column(quarter=quarter, bullets=quarter_bullets[i:i + MAX_BULLETS_PER_COLUMN]))
-    return columns
+    return [
+        Column(quarter=quarter, bullets=by_quarter[quarter])
+        for quarter in sorted(by_quarter, key=_quarter_sort_key)
+    ]
 
 
 def _quarter_sort_key(quarter: str) -> Tuple[int, int]:
@@ -273,20 +274,112 @@ def _quarter_sort_key(quarter: str) -> Tuple[int, int]:
     return (int(year_part), int(num_part[1:]))
 
 
+def _pack_quarters(quarter_columns: List[Column]) -> List[Column]:
+    """Атомарная упаковка (TOR v2 §4 шаг 1): квартал → 1..N слотов по высоте.
+
+    Группы (AppTitle) атомарны — не рвутся между слотами; исключение — группа выше
+    целого пустого слота разрывается по фичам (fallback). Плоский список фич упаковывается
+    по высоте ячеек, а не фиксированным числом фич.
+    """
+    slot_height_pt = SLOT_HEIGHT_IN * 72.0
+    slots: List[Column] = []
+    for quarter_col in quarter_columns:
+        quarter = quarter_col.quarter
+        if quarter_col.grouped:
+            for groups in _pack_groups(quarter_col.groups, slot_height_pt):
+                slots.append(Column(quarter=quarter, groups=groups, grouped=True))
+        else:
+            for bullets in _pack_bullets(quarter_col.bullets, slot_height_pt):
+                slots.append(Column(quarter=quarter, bullets=bullets))
+    return slots
+
+
+def _pack_groups(groups: List[Group], slot_height_pt: float) -> List[List[Group]]:
+    """Упаковывает атомарные группы в слоты по высоте."""
+    slots: List[List[Group]] = []
+    current: List[Group] = []
+    current_height = 0.0
+    for group in groups:
+        gh = estimate_group_height_pt([b.text for b in group.bullets], SLOT_WIDTH_IN, BASE_FONT_PT)
+        if gh > slot_height_pt:
+            # группа выше целого слота → принудительный разрыв (fallback)
+            if current:
+                slots.append(current)
+                current = []
+                current_height = 0.0
+            slots.extend(_split_oversized_group(group, slot_height_pt))
+        elif current and current_height + gh > slot_height_pt:
+            slots.append(current)
+            current = [group]
+            current_height = gh
+        else:
+            current.append(group)
+            current_height += gh
+    if current:
+        slots.append(current)
+    return slots
+
+
+def _split_oversized_group(group: Group, slot_height_pt: float) -> List[List[Group]]:
+    """Разрывает слишком высокую группу на слоты по одной фиче (с тем же AppTitle)."""
+    result: List[List[Group]] = []
+    current: List[Group] = []
+    current_height = 0.0
+    for bullet in group.bullets:
+        bh = estimate_bullet_height_pt(bullet.text, SLOT_WIDTH_IN, BASE_FONT_PT)
+        if current and current_height + bh > slot_height_pt:
+            result.append(current)
+            current = []
+            current_height = 0.0
+        if current and current[-1].app_title == group.app_title:
+            current[-1].bullets.append(bullet)
+        else:
+            current.append(Group(app_title=group.app_title, bullets=[bullet]))
+        current_height += bh
+    if current:
+        result.append(current)
+    return result
+
+
+def _pack_bullets(bullets: List[Bullet], slot_height_pt: float) -> List[List[Bullet]]:
+    """Упаковывает плоский список фич в слоты по высоте ячеек."""
+    slots: List[List[Bullet]] = []
+    current: List[Bullet] = []
+    current_height = 0.0
+    for bullet in bullets:
+        bh = estimate_bullet_height_pt(bullet.text, SLOT_WIDTH_IN, BASE_FONT_PT)
+        if current and current_height + bh > slot_height_pt:
+            slots.append(current)
+            current = []
+            current_height = 0.0
+        current.append(bullet)
+        current_height += bh
+    if current:
+        slots.append(current)
+    return slots
+
+
 def _apply_under_approval(columns: List[Column], language: str) -> None:
-    """Помечает колонку-квартал бейджем, если в ней есть релиз «под согласованием»."""
+    """Бейдж «под согласованием» — на первом слоте квартала, где есть такой релиз."""
     badge = get_service_string("under_approval_badge", language)
+    first_of_quarter: dict = {}
     for column in columns:
-        if any(is_under_approval(b.release_id) for b in column.bullets):
-            column.under_approval_badge = badge
+        if column.quarter not in first_of_quarter:
+            first_of_quarter[column.quarter] = column
+        if any(is_under_approval(b.release_id) for b in _column_all_bullets(column)):
+            first_of_quarter[column.quarter].under_approval_badge = badge
 
 
 def _apply_group_order_and_labels(columns: List[Column]) -> None:
     for column in columns:
         if column.grouped:
-            ordered = resolve_apptitle_order([(g.app_title, len(g.bullets)) for g in column.groups])
-            by_title = {g.app_title: g for g in column.groups}
-            column.groups = [by_title[t] for t in ordered]
+            # уникальные заголовки в порядке первого появления; счёт = сумма по дублям
+            titles = list(dict.fromkeys(g.app_title for g in column.groups))
+            counts = {t: sum(len(g.bullets) for g in column.groups if g.app_title == t) for t in titles}
+            ordered = resolve_apptitle_order([(t, counts[t]) for t in titles])
+            rank = {t: i for i, t in enumerate(ordered)}
+            # стабильная сортировка: неконсекутивные группы одного заголовка идут подряд
+            column.groups.sort(key=lambda g: rank[g.app_title])
             for group in column.groups:
                 group.app_title = get_apptitle_label(group.app_title)
                 # сначала подтверждённые (false), затем «под вопросом» (true)
@@ -309,20 +402,52 @@ def _paginate(
     language: str,
     inheritance_note: str,
 ) -> List[RoadmapSlide]:
+    """TOR v2 §4 шаг 2: раскладка слотов по слайдам (ровно 4 слота на слайд).
+
+    Квартал переносится целиком (не рвётся между слайдами), кроме случая, когда квартал
+    сам больше целого слайда (>4 слотов) — тогда он растягивается на несколько слайдов
+    подряд, и имя квартала показывается на каждом.
+    """
+    runs: List[Tuple[str, List[Column]]] = []
+    for col in columns:
+        if runs and runs[-1][0] == col.quarter:
+            runs[-1][1].append(col)
+        else:
+            runs.append((col.quarter, [col]))
+
     slides: List[RoadmapSlide] = []
-    for i in range(0, len(columns), 4):
-        chunk = columns[i:i + 4]
-        has_stc = any(b.is_subject_to_change for col in chunk for b in _column_all_bullets(col))
+    current: List[Column] = []
+
+    def make_slide(slots: List[Column], continuation: bool) -> RoadmapSlide:
+        has_stc = any(b.is_subject_to_change for col in slots for b in _column_all_bullets(col))
         footnote = get_service_string("subject_to_change_footnote", language) if has_stc else ""
-        note = inheritance_note if (i == 0 and inheritance_note) else ""
-        slides.append(RoadmapSlide(
+        note = inheritance_note if (not continuation and inheritance_note) else ""
+        return RoadmapSlide(
             product=product, stream=stream, tier=tier,
-            columns=chunk, continuation=(i > 0),
+            columns=slots, continuation=continuation,
             has_subject_to_change=has_stc,
             footnote=footnote,
             inheritance_note=note,
             language=language,
-        ))
+        )
+
+    def flush() -> None:
+        nonlocal current
+        if current:
+            slides.append(make_slide(current, continuation=len(slides) > 0))
+            current = []
+
+    for _, slots in runs:
+        if len(slots) > 4:
+            # квартал больше целого слайда → свои слайды по 4 слота, имя квартала на каждом
+            flush()
+            for i in range(0, len(slots), 4):
+                slides.append(make_slide(slots[i:i + 4], continuation=len(slides) > 0))
+            continue
+        if len(current) + len(slots) > 4:
+            flush()
+        current.extend(slots)
+    flush()
     return slides
 
 

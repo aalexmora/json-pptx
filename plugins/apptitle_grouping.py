@@ -3,6 +3,9 @@
 Порядок групп и переименование заголовков применяет движок (`build_slide_plan`)
 через `ordering.resolve_apptitle_order` и `labels.get_apptitle_label` — плагин
 делает только механическую группировку по значению AppTitle.
+
+Группа = набор **идущих подряд** Feature с одинаковым AppTitle (TOR v2 §2);
+неконсекутивные вхождения одного AppTitle считаются отдельными группами.
 """
 from __future__ import annotations
 
@@ -22,13 +25,12 @@ class AppTitleGrouping:
         if not settings.get("enabled", False):
             return context
         for column in context.columns:
-            buckets: dict = {}
-            order: list = []
+            groups = []
             for bullet in column.bullets:
-                if bullet.app_title not in buckets:
-                    buckets[bullet.app_title] = []
-                    order.append(bullet.app_title)
-                buckets[bullet.app_title].append(bullet)
-            column.groups = [Group(app_title=title, bullets=buckets[title]) for title in order]
+                if groups and groups[-1].app_title == bullet.app_title:
+                    groups[-1].bullets.append(bullet)
+                else:
+                    groups.append(Group(app_title=bullet.app_title, bullets=[bullet]))
+            column.groups = groups
             column.grouped = True
         return context

@@ -15,6 +15,28 @@ LINE_HEIGHT_FACTOR = 1.2
 CHAR_WIDTH_FACTOR = 0.5  # средняя ширина символа ≈ 0.5 em (латиница)
 
 
+def estimate_text_lines(text: str, slot_width_in: float, font_pt: int) -> int:
+    """Число строк, которое займёт текст при переносе по ширине слота (TOR v2 §3).
+
+    `chars_per_line = floor(slot_width_pt / (CHAR_WIDTH_FACTOR * font_pt))`,
+    `line_count = ceil(len(text) / chars_per_line)` — минимум 1 строка.
+    """
+    width_pt = slot_width_in * 72.0
+    chars_per_line = max(1, int(width_pt / (CHAR_WIDTH_FACTOR * font_pt)))
+    return max(1, math.ceil(len(text) / chars_per_line))
+
+
+def estimate_bullet_height_pt(text: str, slot_width_in: float, font_pt: int) -> float:
+    """Высота ячейки одной фичи в пунктах: строки × высота строки."""
+    return estimate_text_lines(text, slot_width_in, font_pt) * font_pt * LINE_HEIGHT_FACTOR
+
+
+def estimate_group_height_pt(bullet_texts: List[str], slot_width_in: float, font_pt: int) -> float:
+    """Высота группы AppTitle: строка-заголовок + сумма высот фич."""
+    header_pt = font_pt * LINE_HEIGHT_FACTOR
+    return header_pt + sum(estimate_bullet_height_pt(t, slot_width_in, font_pt) for t in bullet_texts)
+
+
 def fit_bullets_dynamic(
     bullets: List[str],
     textbox_height_in: float,

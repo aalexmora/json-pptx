@@ -23,6 +23,13 @@ def _roadmap_slides(plan):
     return [s for s in plan.slides if isinstance(s, RoadmapSlide)]
 
 
+def _col_bullet_count(c):
+    """Число фич в слоте-колонке (учитывает grouped/groups)."""
+    if c.grouped:
+        return sum(len(g.bullets) for g in c.groups)
+    return len(c.bullets)
+
+
 # ---------------------------------------------------------------------------
 # Загрузка и конфликты
 # ---------------------------------------------------------------------------
@@ -137,10 +144,10 @@ def test_flexible_columns_split_heavy_quarter():
     }]
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
     slides = _roadmap_slides(plan)
-    # 25 фич в одном квартале → 3 колонки (10+10+5) → 1 слайд (≤4)
+    # 25 фич в одном квартале → 2 слота по вместимости (~21/слот), не фиксированные 10
     assert len(slides) == 1
-    assert len(slides[0].columns) == 3
-    assert [len(c.bullets) for c in slides[0].columns] == [10, 10, 5]
+    assert len(slides[0].columns) == 2
+    assert [_col_bullet_count(c) for c in slides[0].columns] == [21, 4]
 
 
 def test_flexible_columns_heavy_quarter_spans_columns_in_order():
@@ -158,8 +165,8 @@ def test_flexible_columns_heavy_quarter_spans_columns_in_order():
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
     slides = _roadmap_slides(plan)
     assert len(slides) == 1
-    assert len(slides[0].columns) == 4
-    assert [c.quarter for c in slides[0].columns] == ["Q1 2025", "Q1 2025", "Q1 2025", "Q2 2025"]
+    assert len(slides[0].columns) == 3
+    assert [c.quarter for c in slides[0].columns] == ["Q1 2025", "Q1 2025", "Q2 2025"]
 
 
 def test_flexible_columns_paginate_when_over_four():
@@ -169,18 +176,41 @@ def test_flexible_columns_paginate_when_over_four():
             "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
             "Requirements": [
                 {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"f{i}"}
-                for i in range(45)
+                for i in range(85)
             ],
         }]}]}],
     }]
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
     slides = _roadmap_slides(plan)
-    # 45 фич → 5 колонок (10×4 + 5) → 2 слайда (4 + 1)
+    # 85 фич → 5 слотов → 2 слайда (4 + 1); квартал больше целого слайда (TOR v2)
     assert len(slides) == 2
     assert slides[0].continuation is False
     assert slides[1].continuation is True
     assert len(slides[0].columns) == 4
     assert len(slides[1].columns) == 1
+
+
+def test_group_atomicity_not_split_across_slots():
+    """Группа AppTitle атомарна — не рвётся между под-слотами (TOR v2 §1)."""
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [
+            {"Id": 1, "AppTitle": "Alpha", "TrDate": "15.01.2025 21:00:00", "Requirements": [
+                {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"a{i}"} for i in range(12)
+            ]},
+            {"Id": 2, "AppTitle": "Beta", "TrDate": "15.01.2025 21:00:00", "Requirements": [
+                {"Id": 2000 + i, "Kbr": "Yes", "MarketingTitle": f"b{i}"} for i in range(12)
+            ]},
+        ]}]}],
+    }]
+    plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    slides = _roadmap_slides(plan)
+    assert len(slides) == 1
+    # две группы по 12 фич влезают каждая в слот, вместе — нет → 2 слота, группы целы
+    assert len(slides[0].columns) == 2
+    for c in slides[0].columns:
+        assert len(c.groups) == 1
+        assert _col_bullet_count(c) == 12
 
 
 def test_product_divider_precedes_slides(load_fixture):

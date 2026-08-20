@@ -307,11 +307,15 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
         if sh.has_text_frame:
             text_by_name.setdefault(norm, sh)
 
-    # Ярлык «roadmap» в шаблоне статичный — текст не меняем. Старый «eyebrow»
-    # заполняем, только если он остался в шаблоне (легаси).
-    eyebrow = get_service_string("roadmap_cont_title" if slide.continuation else "roadmap_title", slide.language)
-    _set_text(text_by_name.get("eyebrow"), eyebrow)
-    _set_text(text_by_name.get("slide_title"), slide.tier)
+    # Слайд-продолжение = только таблица (без заголовка роадмапа/легенды, TOR v2 §1).
+    # Ярлык «roadmap» в шаблоне статичный — текст не меняем.
+    if slide.continuation:
+        _clear(text_by_name.get("eyebrow"))
+        _clear(text_by_name.get("slide_title"))
+    else:
+        eyebrow = get_service_string("roadmap_title", slide.language)
+        _set_text(text_by_name.get("eyebrow"), eyebrow)
+        _set_text(text_by_name.get("slide_title"), slide.tier)
 
     # Порядковый номер слайда (слайд уже добавлен в prs — len включает его).
     number = text_by_name.get("number")
@@ -328,19 +332,27 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
     if header_proto is None or bullets_proto is None:
         return
 
-    col_w = bullets_proto.width
-    gap = Inches(0.25)
+    # Геометрия: ровно 4 слота, ширина слота = (ширина слайда − 2×margin) / 4.
+    slot_width = Inches((w - 2 * MARGIN) / 4)
 
+    prev_quarter = None
     for i, col in enumerate(slide.columns):
         if i == 0:
             header, bullets = header_proto, bullets_proto
         else:
             header = _clone_shape(new_slide, header_proto)
             bullets = _clone_shape(new_slide, bullets_proto)
-        x = header_proto.left + i * (col_w + gap)
+        x = Inches(MARGIN) + i * slot_width
         header.left = x
         bullets.left = x
-        _set_text(header, col.quarter)
+        bullets.width = slot_width
+        # Заголовок квартала — только в первом под-слоте (у остальных шапка пустая).
+        if i == 0 or col.quarter != prev_quarter:
+            header_text = col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
+            _set_text(header, header_text)
+        else:
+            _clear(header)
+        prev_quarter = col.quarter
         _fill_bullets_shape(bullets, col)
 
     if slide.inheritance_note:
