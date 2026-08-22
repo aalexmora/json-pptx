@@ -1,5 +1,10 @@
 import type { DiffResponse, PlanResponse, Profile, TemplateInfo } from './types'
 
+export async function fetchHealth(): Promise<{ status: string; version: string }> {
+  const res = await fetch('/api/health')
+  return res.json()
+}
+
 export async function fetchPlan(
   jsonData: unknown,
   language: string,

@@ -17,7 +17,9 @@ def test_health():
     with TestClient(app) as c:
         r = c.get("/api/health")
         assert r.status_code == 200
-        assert r.json() == {"status": "ok"}
+        body = r.json()
+        assert body["status"] == "ok"
+        assert isinstance(body["version"], str) and body["version"]
 
 
 def test_plan_endpoint(load_fixture):

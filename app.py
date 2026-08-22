@@ -26,6 +26,7 @@ from roadmap_generator.linter import lint_model
 from roadmap_generator.plugins_engine import build_slide_plan, build_tree, list_releases
 from roadmap_generator.schema import normalize_roadmap, validate_roadmap
 from roadmap_generator.synthetic_template import ensure_synthetic_template
+from roadmap_generator.version import APP_VERSION
 
 FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
 
@@ -245,7 +246,7 @@ def delete_tier_logo(tier_name: str):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 @app.get("/api/profile")

@@ -22,6 +22,7 @@ import {
   deleteTierLogo,
   downloadPptx,
   fetchDiff,
+  fetchHealth,
   fetchPlan,
   getProductLogoStatuses,
   getProfile,
@@ -209,6 +210,7 @@ export default function App() {
   const [apptitleMode, setApptitleMode] = useState<'auto' | 'on' | 'off'>('auto')
   const [result, setResult] = useState<PlanResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [appVersion, setAppVersion] = useState('')
   const [loading, setLoading] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     localStorage.getItem('theme') === 'dark' ? 'dark' : 'light',
@@ -297,6 +299,12 @@ export default function App() {
       .then((p) => setProfile(p))
       .catch(() => {})
       .finally(() => setProfileLoaded(true))
+  }, [])
+
+  useEffect(() => {
+    fetchHealth()
+      .then((h) => setAppVersion(h.version))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -595,6 +603,7 @@ export default function App() {
             {leftCollapsed ? '☰' : '✕'}
           </button>
           <h1>Roadmap → PPTX</h1>
+          {appVersion && <span className="app-version" title="Версия приложения">v{appVersion}</span>}
         </div>
         <div className="header-actions">
           <button onClick={toggleTheme} title="Переключить тему">
