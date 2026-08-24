@@ -16,6 +16,14 @@ def test_get_required_shapes_base():
     assert tr.get_required_shapes("roadmap", 4, True) == ["col_header", "col_bullets"]
 
 
+def test_layout_separator_names_come_from_contract():
+    assert tr.get_layout_shape_names("separators") == [
+        "col_separator_1",
+        "col_separator_2",
+        "col_separator_3",
+    ]
+
+
 def test_synthetic_template_satisfies_all_contracts(synthetic_template_path):
     required = tr.get_required_shapes("roadmap", 3, False)
     missing = tr.validate_template_shapes(str(synthetic_template_path), required)

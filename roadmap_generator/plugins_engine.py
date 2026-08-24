@@ -18,7 +18,7 @@ from roadmap_generator.product_languages import is_product_visible
 from roadmap_generator.ordering import (
     SEPARATOR,
     get_effective_order,
-    get_tier_inheritance_flag,
+    get_product_inheritance_flag,
     resolve_apptitle_order,
 )
 from roadmap_generator.schema import RoadmapModel
@@ -142,27 +142,29 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
         if not is_product_visible(pname, model.language):
             continue
         product = products_by_name[pname]
+        product_inheritance = get_product_inheritance_flag(pname)
         deck_items: List[Union[DividerSlide, RoadmapSlide]] = []
+        seen_req_ids: set = set()
+        previous_tiers: List[str] = []
 
         for sname in get_effective_order(pname, [s.name for s in product.streams]):
             stream = next(s for s in product.streams if s.name == sname)
             stream_slides: List[RoadmapSlide] = []
             tier_names = [t.name for t in stream.tiers]
             ordered_tiers = get_effective_order(f"{pname}{SEPARATOR}{sname}", tier_names)
-            seen_req_ids: set = set()
-            for idx, tname in enumerate(ordered_tiers):
+            for tname in ordered_tiers:
                 tier = next(t for t in stream.tiers if t.name == tname)
-                tier_path = f"{pname}{SEPARATOR}{sname}{SEPARATOR}{tname}"
-                inherit = idx > 0 and get_tier_inheritance_flag(tier_path)
+                inherit = bool(previous_tiers) and product_inheritance
                 inheritance_note = None
                 if inherit:
-                    previous = ", ".join(ordered_tiers[:idx])
+                    previous = ", ".join(previous_tiers)
                     inheritance_note = f"{get_service_string('inheritance_prefix', model.language)} {previous}"
                 slides, shown_ids = _build_tier_slides(
                     model.language, pname, sname, tname, tier, filters, groupers, plugin_settings,
                     inheritance_note, exclude_req_ids=(seen_req_ids if inherit else None),
                 )
                 seen_req_ids.update(shown_ids)
+                previous_tiers.append(f"{sname} / {tname}")
                 stream_slides.extend(slides)
             if stream_slides:
                 if sname != "-":
@@ -227,7 +229,7 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
         return [], set()
 
     # Наследование (дедупликация): скрыть фичи, чей Id уже показывался в предыдущих
-    # тирах того же Stream. Заметка о наследовании при этом остаётся на слайде.
+    # Tier любого Stream того же Product. Заметка при этом остаётся на слайде.
     if exclude_req_ids:
         context.bullets = [b for b in context.bullets if b.requirement_id not in exclude_req_ids]
     if not context.bullets:
@@ -474,10 +476,13 @@ def build_tree(model: RoadmapModel) -> dict:
             stream = next(s for s in product.streams if s.name == sname)
             tiers = []
             for tname in get_effective_order(f"{pname}{SEPARATOR}{sname}", [t.name for t in stream.tiers]):
-                tier_path = f"{pname}{SEPARATOR}{sname}{SEPARATOR}{tname}"
-                tiers.append({"name": tname, "inheritance_flag": get_tier_inheritance_flag(tier_path)})
+                tiers.append({"name": tname})
             streams.append({"name": sname, "tiers": tiers})
-        products.append({"name": pname, "streams": streams})
+        products.append({
+            "name": pname,
+            "inheritance_flag": get_product_inheritance_flag(pname),
+            "streams": streams,
+        })
     return {"products": products}
 
 

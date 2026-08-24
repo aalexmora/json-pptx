@@ -1,18 +1,18 @@
 """Генерация синтетического шаблона разработки (ТЗ v4 §12).
 
-Создаёт `.pptx` «мастер-шаблон»: один слайд с 4 колонками и именованными шейпами
-по конвенции (`col_{n}_header`, `col_{n}_bullets`, `col_{n}_group_{m}_header`).
-Builder клонирует этот слайд и заполняет шейпы под конкретный roadmap-слайд
-(заполненные колонки — данными, неиспользованные — очищаются).
+Создаёт `.pptx`-шаблон с одной колонкой-прототипом и тремя именованными
+разделителями. Builder клонирует колонку под данные и переставляет разделители
+для адаптивной сетки 1/2/3/4 колонки.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.enum.shapes import MSO_CONNECTOR
 from pptx.util import Inches
 
-from roadmap_generator.template_registry import load_contracts
+from roadmap_generator.template_registry import get_layout_shape_names
 
 SYNTHETIC_TEMPLATE_PATH = (
     Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "synthetic_template.pptx"
@@ -44,6 +44,17 @@ def make_synthetic_template(path) -> None:
     bullets.name = "col_bullets"
     bullets.text_frame.text = "• feature"
     bullets.text_frame.word_wrap = True
+
+    for index, name in enumerate(get_layout_shape_names("separators"), start=1):
+        x = margin + index * ((13.333 - 2 * margin) / 4)
+        separator = slide.shapes.add_connector(
+            MSO_CONNECTOR.STRAIGHT,
+            Inches(x),
+            Inches(1.1),
+            Inches(x),
+            Inches(6.8),
+        )
+        separator.name = name
 
     prs.save(str(path))
 

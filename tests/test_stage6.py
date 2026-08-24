@@ -47,7 +47,7 @@ def test_profile_roundtrip():
         "ordering": {
             "order": {"": ["B", "A"]},
             "apptitle_priority": ["X"],
-            "tier_inheritance_flags": {"a > b > c": True},
+            "product_inheritance_flags": {"A": True},
         },
         "labels": {"Old": "New"},
         "linter_rules": [{"pattern": "Android", "description": "x"}],
@@ -59,6 +59,7 @@ def test_profile_roundtrip():
         got = c.get("/api/profile").json()
         assert got["ordering"]["order"] == {"": ["B", "A"]}
         assert got["ordering"]["apptitle_priority"] == ["X"]
+        assert got["ordering"]["product_inheritance_flags"] == {"A": True}
         assert got["labels"] == {"Old": "New"}
         assert got["linter_rules"] == [{"pattern": "Android", "description": "x"}]
         assert got["under_approval_ids"] == [5, 6]

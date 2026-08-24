@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
@@ -13,6 +14,7 @@ from pptx.util import Inches
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.plugins_engine import RoadmapSlide, build_slide_plan
 from roadmap_generator.schema import normalize_roadmap
+from roadmap_generator.template_registry import get_layout_shape_names
 
 # 1x1 прозрачный PNG
 PNG = bytes.fromhex(
@@ -67,10 +69,49 @@ def _all_texts(prs) -> list:
     return [_slide_text(s) for s in prs.slides]
 
 
+def _sparse_quarters_data(quarter_count: int) -> list:
+    months = [1, 4, 7, 10][:quarter_count]
+    releases = []
+    for index, month in enumerate(months, start=1):
+        releases.append({
+            "Id": index,
+            "AppTitle": f"Application {index}",
+            "TrDate": f"15.{month:02d}.2026 21:00:00",
+            "Requirements": [{
+                "Id": 1000 + index,
+                "Kbr": "Yes",
+                "MarketingTitle": f"Feature {index}",
+            }],
+        })
+    return [{
+        "Product": "Product",
+        "Streams": [{
+            "Stream": "Stream",
+            "Tiers": [{"Tier": "Tier", "Releases": releases}],
+        }],
+    }]
+
+
 def test_pagination_slide_count(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
     # титульный + product + stream + 2 roadmap + спасибо = 6
     assert len(prs.slides) == 6
+
+
+def test_continuation_keeps_fixed_four_slot_geometry(load_fixture, synthetic_template_path):
+    plan = _plan(load_fixture, "pagination_5_quarters.json")
+    prs = build_presentation(plan)
+    roadmap_slides = [
+        slide for slide in prs.slides
+        if any(shape.name == "col_header" for shape in slide.shapes)
+    ]
+    assert len(roadmap_slides) == 2
+    continuation_bodies = [
+        shape for shape in roadmap_slides[1].shapes if shape.name == "col_bullets"
+    ]
+    fixed_width = (prs.slide_width.inches - 1.0) / 4
+    assert len(continuation_bodies) == 1
+    assert continuation_bodies[0].width.inches == pytest.approx(fixed_width)
 
 
 def test_dividers_render_titles(load_fixture, synthetic_template_path):
@@ -102,6 +143,33 @@ def test_group_headers_rendered(load_fixture, synthetic_template_path):
     assert any("Managed Detection and Response" in t for t in _all_texts(prs))
 
 
+@pytest.mark.parametrize("quarter_count", [1, 2, 3, 4])
+def test_sparse_single_slide_columns_fill_available_width(quarter_count, synthetic_template_path):
+    """1/2/3/4 простые колонки занимают 100%/50%/⅓/25% ширины таблицы."""
+    plan = build_slide_plan(normalize_roadmap(_sparse_quarters_data(quarter_count), language="ru"), {})
+    prs = build_presentation(plan)
+    slide = _roadmap_slide(prs)
+    assert slide is not None
+
+    bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
+    expected_width = (prs.slide_width.inches - 1.0) / quarter_count
+    assert len(bodies) == quarter_count
+    assert [shape.width.inches for shape in bodies] == pytest.approx([expected_width] * quarter_count)
+    assert [shape.left.inches for shape in bodies] == pytest.approx([
+        0.5 + index * expected_width for index in range(quarter_count)
+    ])
+
+    separator_names = get_layout_shape_names("separators")
+    separators = {shape.name: shape for shape in slide.shapes if shape.name in separator_names}
+    assert [separators[name].left.inches for name in separator_names[:quarter_count - 1]] == pytest.approx([
+        0.5 + index * expected_width for index in range(1, quarter_count)
+    ])
+    assert all(
+        separators[name].left.inches > prs.slide_width.inches
+        for name in separator_names[quarter_count - 1:]
+    )
+
+
 def test_single_quarter_60_features(load_fixture, synthetic_template_path):
     """60 фич в одном квартале → 3 слота по вместимости (~21/слот), фичи не теряются."""
     plan = _plan(load_fixture, "single_quarter_60_features.json")
@@ -113,6 +181,11 @@ def test_single_quarter_60_features(load_fixture, synthetic_template_path):
         for c in roadmap[0].columns
     ]
     assert counts == [21, 21, 18]
+    prs = build_presentation(plan)
+    slide = _roadmap_slide(prs)
+    bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
+    fixed_width = (prs.slide_width.inches - 1.0) / 4
+    assert [shape.width.inches for shape in bodies] == pytest.approx([fixed_width] * 3)
     texts = "\n".join(_all_texts(build_presentation(plan)))
     for i in range(1, 61):
         assert f"Feature {i}" in texts

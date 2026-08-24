@@ -8,6 +8,7 @@ from roadmap_generator.plugins_engine import (
     StaticSlide,
     ThankYouSlide,
     build_slide_plan,
+    build_tree,
 )
 from roadmap_generator.schema import normalize_roadmap
 
@@ -58,9 +59,7 @@ def test_no_footnote_without_subject_to_change(load_fixture):
 
 def test_tier_inheritance_note_on_subsequent_tier(load_fixture):
     model = normalize_roadmap(load_fixture("tier_hierarchy_next.json"), language="en")
-    ordering.save_tier_inheritance_flag(
-        "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum", True,
-    )
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
     plan = build_slide_plan(model, {})
     slides = _roadmap_slides(plan)
 
@@ -80,9 +79,7 @@ def test_tier_inheritance_note_disabled_by_default(load_fixture):
 
 def test_tier_inheritance_note_lists_all_previous_tiers(load_fixture):
     model = normalize_roadmap(load_fixture("tier_hierarchy_next.json"), language="en")
-    ordering.save_tier_inheritance_flag(
-        "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum", True,
-    )
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
     plan = build_slide_plan(model, {})
     slides = _roadmap_slides(plan)
     xdr = next(s for s in slides if s.tier == "Kaspersky Next XDR Optimum")
@@ -126,7 +123,7 @@ def _two_tier_data():
 
 def test_tier_inheritance_dedup_removes_junior_features():
     """При включённом наследовании старший тир не дублирует фичи младшего."""
-    ordering.save_tier_inheritance_flag("Kaspersky Next > S > Senior", True)
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
     plan = build_slide_plan(normalize_roadmap(_two_tier_data(), language="ru"), {})
     slides = _roadmap_slides(plan)
 
@@ -147,6 +144,86 @@ def test_tier_inheritance_disabled_keeps_duplicates():
     texts = _all_bullet_texts(senior)
     assert "Junior feature" in texts
     assert "Senior feature" in texts
+
+
+def test_tier_inheritance_skips_tier_empty_after_dedup():
+    """Tier без уникальных фич после дедупликации не создаёт roadmap-слайд."""
+    data = _two_tier_data()
+    senior_requirements = data[0]["Streams"][0]["Tiers"][1]["Releases"][0]["Requirements"]
+    senior_requirements[:] = senior_requirements[:1]
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
+
+    plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    tier_names = [slide.tier for slide in _roadmap_slides(plan)]
+
+    assert tier_names == ["Junior"]
+
+
+def test_tier_inheritance_dedup_uses_effective_tree_order():
+    """Предыдущий Tier определяется сохранённым порядком дерева, а не сырого JSON."""
+    ordering.save_order("Kaspersky Next > S", ["Senior", "Junior"])
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
+
+    plan = build_slide_plan(normalize_roadmap(_two_tier_data(), language="ru"), {})
+    slides = _roadmap_slides(plan)
+
+    assert [slide.tier for slide in slides] == ["Senior"]
+    assert "Senior feature" in _all_bullet_texts(slides[0])
+
+
+def test_product_inheritance_deduplicates_across_all_product_streams():
+    """Product-флаг использует единую историю Id для всех Stream продукта."""
+    def make_stream(stream_name, base_text, unique_id):
+        return {
+            "Stream": stream_name,
+            "Tiers": [
+                {"Tier": "Base", "Releases": [{
+                    "Id": unique_id * 10,
+                    "AppTitle": "A",
+                    "TrDate": "15.01.2025 21:00:00",
+                    "Requirements": [{"Id": 1001, "Kbr": "Yes", "MarketingTitle": base_text}],
+                }]},
+                {"Tier": "Senior", "Releases": [{
+                    "Id": unique_id * 10 + 1,
+                    "AppTitle": "A",
+                    "TrDate": "15.01.2025 21:00:00",
+                    "Requirements": [
+                        {"Id": 1001, "Kbr": "Yes", "MarketingTitle": base_text},
+                        {"Id": unique_id, "Kbr": "Yes", "MarketingTitle": f"Unique {stream_name}"},
+                    ],
+                }]},
+            ],
+        }
+
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [make_stream("S1", "Base S1", 2001), make_stream("S2", "Base S2", 2002)],
+    }]
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
+
+    slides = _roadmap_slides(build_slide_plan(normalize_roadmap(data, language="ru"), {}))
+    base_slides = [slide for slide in slides if slide.tier == "Base"]
+    senior_by_stream = {slide.stream: slide for slide in slides if slide.tier == "Senior"}
+
+    assert len(base_slides) == 1
+    assert set(senior_by_stream) == {"S1", "S2"}
+    assert "Base S1" in _all_bullet_texts(base_slides[0])
+    assert _all_bullet_texts(senior_by_stream["S1"]) == ["Unique S1"]
+    assert _all_bullet_texts(senior_by_stream["S2"]) == ["Unique S2"]
+    assert "S1 / Base" in senior_by_stream["S1"].inheritance_note
+    assert "S1 / Senior" in senior_by_stream["S2"].inheritance_note
+    assert "S2 / Base" in senior_by_stream["S2"].inheritance_note
+
+
+def test_product_inheritance_flag_is_exposed_on_product_tree_node(load_fixture):
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
+    model = normalize_roadmap(load_fixture("tier_hierarchy_next.json"), language="en")
+
+    tree = build_tree(model)
+    product = next(item for item in tree["products"] if item["name"] == "Kaspersky Next")
+
+    assert product["inheritance_flag"] is True
+    assert all("inheritance_flag" not in tier for stream in product["streams"] for tier in stream["tiers"])
 
 
 def test_service_strings_override(load_fixture):

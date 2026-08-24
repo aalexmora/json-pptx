@@ -8,7 +8,8 @@
       "Kaspersky Next > Kaspersky Next Optimum": [
         "Kaspersky Next EDR Foundations",
         "Kaspersky Next EDR Optimum",
-        "Kaspersky Next XDR Optimum"
+        "Kaspersky Next XDR Optimum",
+        "Kaspersky Next MXDR Optimum"
       ],
       "Kaspersky Next": [
         "Kaspersky Next Optimum",
@@ -21,13 +22,9 @@
       ]
     },
     "apptitle_priority": [],
-    "tier_inheritance_flags": {
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Foundations": true,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next EDR Optimum": true,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next XDR Optimum": true,
-      "Kaspersky Vulnerability Management > - > -": true,
-      "Kaspersky Next > Kaspersky Next Optimum > Kaspersky Next MXDR Optimum": true,
-      "Kaspersky Next > Kaspersky Next Expert > Kaspersky Next XDR Expert": true
+    "product_inheritance_flags": {
+      "Kaspersky Next": false,
+      "Kaspersky Vulnerability Management": true
     }
   },
   "labels": {
@@ -78,6 +75,14 @@
   "product_languages": {
     "Kaspersky Next": {
       "ru": true,
+      "en": false
+    },
+    "Kaspersky Vulnerability Management": {
+      "ru": true,
+      "en": true
+    },
+    "Kaspersky Mobile Security SDK": {
+      "ru": false,
       "en": false
     }
   }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import io
+from collections import Counter
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -29,7 +30,7 @@ from roadmap_generator.plugins_engine import (
     ThankYouSlide,
     TitleSlide,
 )
-from roadmap_generator.template_registry import placeholder_names, select_template
+from roadmap_generator.template_registry import get_layout_shape_names, placeholder_names, select_template
 
 MARGIN = 0.5
 GAP = 0.25
@@ -45,6 +46,23 @@ _PLACEHOLDER_NAMES = set(placeholder_names())
 _PLACEHOLDER_BASE = {n for n in _PLACEHOLDER_NAMES if not n.startswith("_")}
 
 
+def _roadmap_key(slide: RoadmapSlide) -> tuple[str, str, str]:
+    return (slide.product, slide.stream, slide.tier)
+
+
+def _rendered_column_count(slide: RoadmapSlide, tier_slide_count: int) -> int:
+    """Число равных колонок сетки: адаптивно для простого однослайдового roadmap.
+
+    Один показанный квартал должен занимать ровно одну подколонку. Если квартал уже
+    расщеплён либо у тира есть продолжение, сохраняется базовая сетка 4×25%.
+    """
+    used_columns = len(slide.columns)
+    has_subcolumns = len({column.quarter for column in slide.columns}) != used_columns
+    if tier_slide_count == 1 and 1 <= used_columns <= 4 and not has_subcolumns:
+        return used_columns
+    return 4
+
+
 def build_presentation(plan: SlidePlan) -> Presentation:
     """Рендерит план слайдов в объект `Presentation` (ещё не сохранённый)."""
     template = Presentation(select_template("roadmap", 4, False))
@@ -57,6 +75,9 @@ def build_presentation(plan: SlidePlan) -> Presentation:
     blank = prs.slide_layouts[6]
     w = prs.slide_width.inches
     h = prs.slide_height.inches
+    roadmap_counts = Counter(
+        _roadmap_key(item) for item in plan.slides if isinstance(item, RoadmapSlide)
+    )
 
     for item in plan.slides:
         if isinstance(item, TitleSlide):
@@ -68,7 +89,8 @@ def build_presentation(plan: SlidePlan) -> Presentation:
         elif isinstance(item, StaticSlide):
             _render_static(prs, blank, item, w, h)
         elif isinstance(item, RoadmapSlide):
-            _render_roadmap_from_template(prs, master_slide, blank, item, w, h)
+            column_count = _rendered_column_count(item, roadmap_counts[_roadmap_key(item)])
+            _render_roadmap_from_template(prs, master_slide, blank, item, w, h, column_count)
     return prs
 
 
@@ -290,9 +312,17 @@ def _fill_bullets_shape(shape, col) -> None:
             _apply_format(run, size, base_name, bold, base_color)
 
 
-def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide, w: float, h: float) -> None:
+def _render_roadmap_from_template(
+    prs,
+    master_slide,
+    blank,
+    slide: RoadmapSlide,
+    w: float,
+    h: float,
+    column_count: int,
+) -> None:
     if master_slide is None:
-        _render_roadmap(prs, blank, slide, w, h)
+        _render_roadmap(prs, blank, slide, w, h, column_count)
         return
     new_slide = _clone_slide(prs, master_slide)
 
@@ -336,8 +366,11 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
     if header_proto is None or bullets_proto is None:
         return
 
-    # Геометрия: ровно 4 слота, ширина слота = (ширина слайда − 2×margin) / 4.
-    slot_width = Inches((w - 2 * MARGIN) / 4)
+    # Простой однослайдовый roadmap заполняет всю ширину 1/2/3/4 равными колонками.
+    # Переполнение и подколонки сохраняют базовую геометрию 4×25%.
+    slot_width_in = (w - 2 * MARGIN) / column_count
+    slot_width = Inches(slot_width_in)
+    _position_column_separators(all_by_name, column_count, w)
 
     prev_quarter = None
     for i, col in enumerate(slide.columns):
@@ -346,8 +379,9 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
         else:
             header = _clone_shape(new_slide, header_proto)
             bullets = _clone_shape(new_slide, bullets_proto)
-        x = Inches(MARGIN) + i * slot_width
+        x = Inches(MARGIN + i * slot_width_in)
         header.left = x
+        header.width = slot_width
         bullets.left = x
         bullets.width = slot_width
         # Заголовок квартала — только в первом под-слоте (у остальных шапка пустая).
@@ -378,6 +412,20 @@ def _render_roadmap_from_template(prs, master_slide, blank, slide: RoadmapSlide,
             new_slide.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.45), Inches(w - 2 * MARGIN), Inches(0.3)),
             slide.footnote, 10, bold=False,
         )
+
+
+def _position_column_separators(all_by_name: dict, column_count: int, slide_width_in: float) -> None:
+    """Ставит именованные разделители на границы колонок, лишние уводит за слайд."""
+    separator_names = get_layout_shape_names("separators")
+    slot_width_in = (slide_width_in - 2 * MARGIN) / column_count
+    for index, name in enumerate(separator_names):
+        separator = all_by_name.get(name)
+        if separator is None:
+            continue
+        if index < column_count - 1:
+            separator.left = Inches(MARGIN + (index + 1) * slot_width_in)
+        else:
+            separator.left = Inches(slide_width_in + 1)
 
 
 def _clone_shape(slide, source_shape):
@@ -446,7 +494,14 @@ def _render_divider(prs, layout, slide: DividerSlide, w: float, h: float) -> Non
     _set_paragraph(sub, label, 14, bold=False, align=PP_ALIGN.CENTER)
 
 
-def _render_roadmap(prs, layout, slide: RoadmapSlide, w: float, h: float) -> None:
+def _render_roadmap(
+    prs,
+    layout,
+    slide: RoadmapSlide,
+    w: float,
+    h: float,
+    column_count: int,
+) -> None:
     s = prs.slides.add_slide(layout)
 
     eyebrow = get_service_string("roadmap_cont_title" if slide.continuation else "roadmap_title", slide.language)
@@ -467,8 +522,7 @@ def _render_roadmap(prs, layout, slide: RoadmapSlide, w: float, h: float) -> Non
         )
         top = 1.25
 
-    n = len(slide.columns)
-    col_w = (w - 2 * MARGIN - (n - 1) * GAP) / n
+    col_w = (w - 2 * MARGIN - (column_count - 1) * GAP) / column_count
     body_h = h - top - MARGIN
     x = MARGIN
 

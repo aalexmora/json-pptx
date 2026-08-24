@@ -15,6 +15,8 @@
 #   dot          — декоративная точка-отсечка квартала
 #   s2c          — сноска «Subject to Change» — показывается один раз для всех колонок
 #   number       — порядковый номер слайда
+#   col_separator_1..3 — вертикальные разделители адаптивной сетки; существующие
+#                        линии шаблона нужно переименовать в эти имена
 #
 # Префикс «_» в начале имени шейпа = сервисный/направляющий (не попадает в слайд),
 # НО если имя после «_» совпадает с плейсхолдером выше (например «_roadmap») —
@@ -23,3 +25,5 @@
 roadmap:
   base: [col_header, col_bullets]
   optional: [eyebrow, slide_title, col_group_header, roadmap, logo, logo_tier, dot, s2c, number]
+  layout:
+    separators: [col_separator_1, col_separator_2, col_separator_3]

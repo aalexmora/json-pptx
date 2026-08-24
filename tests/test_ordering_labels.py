@@ -26,6 +26,29 @@ def test_get_effective_order_drops_gone_nodes():
     assert ordering.get_effective_order("root", ["A", "B"]) == ["B", "A"]
 
 
+def test_product_inheritance_flag_roundtrip():
+    ordering.save_product_inheritance_flag("Product A", True)
+
+    state = ordering.export_state()
+    ordering._reset_state()
+    ordering.import_state(state)
+
+    assert ordering.get_product_inheritance_flag("Product A") is True
+    assert ordering.get_product_inheritance_flag("Product B") is False
+
+
+def test_legacy_tier_inheritance_flags_migrate_to_product():
+    ordering.import_state({
+        "tier_inheritance_flags": {
+            "Product A > Stream 1 > Tier 2": True,
+            "Product B > Stream 2 > Tier 2": False,
+        },
+    })
+
+    assert ordering.get_product_inheritance_flag("Product A") is True
+    assert ordering.get_product_inheritance_flag("Product B") is False
+
+
 # ---------------------------------------------------------------------------
 # ordering.resolve_apptitle_order
 # ---------------------------------------------------------------------------

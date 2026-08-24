@@ -70,7 +70,6 @@ export interface LintIssue {
 
 export interface TreeTier {
   name: string
-  inheritance_flag: boolean
 }
 
 export interface TreeStream {
@@ -80,6 +79,7 @@ export interface TreeStream {
 
 export interface TreeProduct {
   name: string
+  inheritance_flag: boolean
   streams: TreeStream[]
 }
 
@@ -101,7 +101,7 @@ export interface Profile {
   ordering: {
     order: Record<string, string[]>
     apptitle_priority: string[]
-    tier_inheritance_flags: Record<string, boolean>
+    product_inheritance_flags: Record<string, boolean>
   }
   labels: Record<string, string>
   linter_rules: { pattern: string; description: string }[]

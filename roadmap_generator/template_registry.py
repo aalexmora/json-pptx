@@ -36,6 +36,12 @@ def get_required_shapes(slide_type: str, columns_count: int, grouped_by_apptitle
     return list(load_contracts()["roadmap"]["base"])
 
 
+def get_layout_shape_names(role: str) -> List[str]:
+    """Имена управляемых layout-шейпов указанной роли из YAML-контракта."""
+    layout = load_contracts()["roadmap"].get("layout", {})
+    return list(layout.get(role, []))
+
+
 def validate_template_shapes(template_path: str, required_shape_names: List[str]) -> List[str]:
     """Проверяет наличие обязательных именованных шейпов в `.pptx`.
 
@@ -67,7 +73,8 @@ _SHAPE_HINTS = {
 def _consulted_shapes() -> List[str]:
     """Все имена шейпов, которые билдер ищет по имени (обязательные + опциональные)."""
     cfg = load_contracts()["roadmap"]
-    return list(cfg.get("base", [])) + list(cfg.get("optional", []))
+    layout_names = [name for names in cfg.get("layout", {}).values() for name in names]
+    return list(cfg.get("base", [])) + list(cfg.get("optional", [])) + layout_names
 
 
 def placeholder_names() -> List[str]:

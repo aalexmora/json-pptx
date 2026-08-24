@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type {
   Bullet,
   Column,
@@ -110,6 +110,61 @@ const SERVICE_STRING_LABELS: Record<string, string> = {
   roadmap_cont_title: 'Заголовок продолжения',
 }
 
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+type AppTitleMode = 'auto' | 'on' | 'off'
+
+const WORKSPACE_SESSION_KEY = 'roadmap-pptx.workspace.v1'
+
+interface WorkspaceSession {
+  version: 1
+  jsonData: unknown
+  jsonText: string
+  language: 'ru' | 'en'
+  apptitleMode: AppTitleMode
+  leftCollapsed: boolean
+  rightCollapsed: boolean
+  rightWidth: number
+  collapsedSlides: number[]
+}
+
+function readWorkspaceSession(): WorkspaceSession | null {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_SESSION_KEY)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as Record<string, unknown>
+    if (saved.version !== 1) return null
+    const language = saved.language === 'en' ? 'en' : 'ru'
+    const apptitleMode: AppTitleMode =
+      saved.apptitleMode === 'on' || saved.apptitleMode === 'off' ? saved.apptitleMode : 'auto'
+    const rightWidth = typeof saved.rightWidth === 'number'
+      ? Math.max(240, Math.min(600, saved.rightWidth))
+      : 320
+    return {
+      version: 1,
+      jsonData: saved.jsonData ?? null,
+      jsonText: typeof saved.jsonText === 'string' ? saved.jsonText : '',
+      language,
+      apptitleMode,
+      leftCollapsed: saved.leftCollapsed === true,
+      rightCollapsed: saved.rightCollapsed === true,
+      rightWidth,
+      collapsedSlides: Array.isArray(saved.collapsedSlides)
+        ? saved.collapsedSlides.filter((item): item is number => Number.isInteger(item) && item >= 0)
+        : [],
+    }
+  } catch {
+    localStorage.removeItem(WORKSPACE_SESSION_KEY)
+    return null
+  }
+}
+
+function positionLabel(position: string): string {
+  if (position === 'end') return 'В конце презентации'
+  if (position.startsWith('before:')) return `Перед продуктом «${position.slice(7)}»`
+  if (position.startsWith('after:')) return `После продукта «${position.slice(6)}»`
+  return position
+}
+
 function isDivider(slide: Slide): slide is DividerSlide {
   return 'divider_type' in slide
 }
@@ -143,45 +198,84 @@ interface TierNode {
   tier: string
   slides: RoadmapSlide[]
 }
+
 interface StreamNode {
   stream: string
   tiers: TierNode[]
 }
+
 interface ProductNode {
   product: string
   streams: StreamNode[]
 }
 
-function groupSlides(slides: Slide[]): { top: Slide[]; products: ProductNode[] } {
+function groupSlides(slides: Slide[], tree: Tree | null): { top: Slide[]; products: ProductNode[] } {
   const top: Slide[] = []
+  const slidesByTier = new Map<string, RoadmapSlide[]>()
+
+  const tierKey = (product: string, stream: string, tier: string) =>
+    JSON.stringify([product, stream, tier])
+
+  for (const slide of slides) {
+    if (isTitle(slide) || isThankYou(slide) || isStatic(slide)) {
+      top.push(slide)
+    } else if (!isDivider(slide)) {
+      const roadmapSlide = slide as RoadmapSlide
+      const key = tierKey(roadmapSlide.product, roadmapSlide.stream, roadmapSlide.tier)
+      const tierSlides = slidesByTier.get(key) ?? []
+      tierSlides.push(roadmapSlide)
+      slidesByTier.set(key, tierSlides)
+    }
+  }
+
+  // Дерево API — единственный источник порядка и состава узлов. Поэтому Tier
+  // остаётся доступен для настройки наследования, даже если после фильтрации или
+  // дедупликации для него не был создан roadmap-слайд.
+  if (tree) {
+    const products = tree.products.map((product) => ({
+      product: product.name,
+      streams: product.streams.map((stream) => ({
+        stream: stream.name,
+        tiers: stream.tiers.map((tier) => ({
+          tier: tier.name,
+          slides: slidesByTier.get(tierKey(product.name, stream.name, tier.name)) ?? [],
+        })),
+      })),
+    }))
+    return { top, products }
+  }
+
   const products: ProductNode[] = []
   const prodIndex = new Map<string, ProductNode>()
   const streamIndex = new Map<string, StreamNode>()
 
-  for (const s of slides) {
-    if (isTitle(s) || isThankYou(s) || isStatic(s)) {
-      top.push(s)
-      continue
+  for (const slide of slides) {
+    if (isTitle(slide) || isThankYou(slide) || isStatic(slide) || isDivider(slide)) continue
+
+    const roadmapSlide = slide as RoadmapSlide
+    let product = prodIndex.get(roadmapSlide.product)
+    if (!product) {
+      product = { product: roadmapSlide.product, streams: [] }
+      products.push(product)
+      prodIndex.set(roadmapSlide.product, product)
     }
-    if (isDivider(s)) continue // разделители подразумеваются группировкой
-    const r = s as RoadmapSlide
-    let prod = prodIndex.get(r.product)
-    if (!prod) {
-      prod = { product: r.product, streams: [] }
-      products.push(prod)
-      prodIndex.set(r.product, prod)
-    }
-    const streamKey = r.product + '||' + r.stream
+
+    const streamKey = `${roadmapSlide.product}||${roadmapSlide.stream}`
     let stream = streamIndex.get(streamKey)
     if (!stream) {
-      stream = { stream: r.stream, tiers: [] }
-      prod.streams.push(stream)
+      stream = { stream: roadmapSlide.stream, tiers: [] }
+      product.streams.push(stream)
       streamIndex.set(streamKey, stream)
     }
-    const last = stream.tiers[stream.tiers.length - 1]
-    if (last && last.tier === r.tier) last.slides.push(r)
-    else stream.tiers.push({ tier: r.tier, slides: [r] })
+
+    const lastTier = stream.tiers[stream.tiers.length - 1]
+    if (lastTier && lastTier.tier === roadmapSlide.tier) {
+      lastTier.slides.push(roadmapSlide)
+    } else {
+      stream.tiers.push({ tier: roadmapSlide.tier, slides: [roadmapSlide] })
+    }
   }
+
   return { top, products }
 }
 
@@ -198,20 +292,30 @@ type DropHandlerFactory = (
   siblings: string[],
 ) => {
   draggable: boolean
+  tabIndex: number
+  role: 'button'
+  'aria-label': string
   onDragStart: (e: DragEvent) => void
+  onDragEnd: (e: DragEvent) => void
   onDragOver: (e: DragEvent) => void
+  onDragLeave: (e: DragEvent) => void
   onDrop: (e: DragEvent) => void
+  onKeyDown: (e: ReactKeyboardEvent) => void
 }
 
 export default function App() {
-  const [jsonText, setJsonText] = useState('')
-  const [jsonData, setJsonData] = useState<unknown>(null)
-  const [language, setLanguage] = useState<'ru' | 'en'>('ru')
-  const [apptitleMode, setApptitleMode] = useState<'auto' | 'on' | 'off'>('auto')
+  const [restoredSession] = useState<WorkspaceSession | null>(() => readWorkspaceSession())
+  const [jsonText, setJsonText] = useState(restoredSession?.jsonText ?? '')
+  const [jsonData, setJsonData] = useState<unknown>(restoredSession?.jsonData ?? null)
+  const [language, setLanguage] = useState<'ru' | 'en'>(restoredSession?.language ?? 'ru')
+  const [apptitleMode, setApptitleMode] = useState<AppTitleMode>(restoredSession?.apptitleMode ?? 'auto')
   const [result, setResult] = useState<PlanResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [appVersion, setAppVersion] = useState('')
   const [loading, setLoading] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     localStorage.getItem('theme') === 'dark' ? 'dark' : 'light',
   )
@@ -222,15 +326,19 @@ export default function App() {
   const projectFileRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<{ parentPath: string; index: number } | null>(null)
   const [diff, setDiff] = useState<DiffResponse | null>(null)
-  const [leftCollapsed, setLeftCollapsed] = useState(false)
-  const [rightCollapsed, setRightCollapsed] = useState(false)
-  const [rightWidth, setRightWidth] = useState(320)
-  const [collapsedSlides, setCollapsedSlides] = useState<Set<number>>(new Set())
+  const [leftCollapsed, setLeftCollapsed] = useState(restoredSession?.leftCollapsed ?? false)
+  const [rightCollapsed, setRightCollapsed] = useState(restoredSession?.rightCollapsed ?? false)
+  const [rightWidth, setRightWidth] = useState(restoredSession?.rightWidth ?? 320)
+  const [collapsedSlides, setCollapsedSlides] = useState<Set<number>>(
+    () => new Set(restoredSession?.collapsedSlides ?? []),
+  )
   const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '' })
   const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [logoRefresh, setLogoRefresh] = useState(0)
   const [tierLogoStatus, setTierLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [tierLogoRefresh, setTierLogoRefresh] = useState(0)
+  const saveTimerRef = useRef<number | null>(null)
+  const pendingProfileRef = useRef<Profile | null>(null)
 
   const newReqIds = useMemo(() => new Set(diff?.diff?.new_requirement_ids ?? []), [diff])
   const changedReqIds = useMemo(() => new Set(diff?.diff?.changed_requirement_ids ?? []), [diff])
@@ -274,20 +382,6 @@ export default function App() {
     }
   }, [tierNames, tierLogoRefresh])
 
-  const slideItems = useMemo(() => {
-    const slides = result?.plan?.slides ?? []
-    const ptAt = new Map(computeInsertPoints(slides).map((p) => [p.index, p.position]))
-    const items: ({ kind: 'marker'; position: string } | { kind: 'slide'; slide: Slide; index: number })[] = []
-    slides.forEach((slide, i) => {
-      const pos = ptAt.get(i)
-      if (pos !== undefined) items.push({ kind: 'marker', position: pos })
-      items.push({ kind: 'slide', slide, index: i })
-    })
-    const endPos = ptAt.get(slides.length)
-    if (endPos !== undefined) items.push({ kind: 'marker', position: endPos })
-    return items
-  }, [result])
-
   function buildSettings(): Record<string, unknown> {
     const global: Record<string, unknown> = {}
     if (apptitleMode !== 'auto') global.apptitle_grouping = { enabled: apptitleMode === 'on' }
@@ -311,11 +405,11 @@ export default function App() {
     if (!jsonData || !profileLoaded) return
     let cancelled = false
     setLoading(true)
+    setError(null)
     fetchPlan(jsonData, language, buildSettings())
       .then((res) => {
         if (cancelled) return
         setResult(res)
-        setError(res.errors.length ? res.errors.join('; ') : null)
       })
       .catch((e) => {
         if (!cancelled) setError(String(e))
@@ -332,6 +426,45 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const session: WorkspaceSession = {
+      version: 1,
+      jsonData,
+      jsonText,
+      language,
+      apptitleMode,
+      leftCollapsed,
+      rightCollapsed,
+      rightWidth,
+      collapsedSlides: [...collapsedSlides],
+    }
+    try {
+      localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(session))
+    } catch {
+      setError('Не удалось сохранить рабочую сессию в браузере: возможно, JSON слишком большой.')
+    }
+  }, [jsonData, jsonText, language, apptitleMode, leftCollapsed, rightCollapsed, rightWidth, collapsedSlides])
+
+  useEffect(() => {
+    const compact = window.matchMedia('(max-width: 900px)')
+    const collapsePanels = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) {
+        setLeftCollapsed(true)
+        setRightCollapsed(true)
+      }
+    }
+    collapsePanels(compact)
+    compact.addEventListener('change', collapsePanels)
+    return () => compact.removeEventListener('change', collapsePanels)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    },
+    [],
+  )
 
   function loadData(data: unknown) {
     if (jsonData) {
@@ -377,7 +510,7 @@ export default function App() {
 
   function handleExport() {
     if (!jsonData || !profile) return
-    const project = { version: 1, json_data: jsonData, language, profile }
+    const project = { version: 2, json_data: jsonData, language, apptitle_mode: apptitleMode, profile }
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -396,12 +529,17 @@ export default function App() {
         const project = JSON.parse(String(reader.result))
         const data = project.json_data
         const lang = project.language === 'en' ? 'en' : 'ru'
+        const groupingMode: AppTitleMode =
+          project.apptitle_mode === 'on' || project.apptitle_mode === 'off' ? project.apptitle_mode : 'auto'
         setJsonText(JSON.stringify(data, null, 2))
         setLanguage(lang)
+        setApptitleMode(groupingMode)
         setDiff(null)
         if (project.profile) {
           await saveProfile(project.profile)
-          setProfile(project.profile)
+          // Backend нормализует старые профили (Tier-флаги → Product-флаги).
+          // Возвращаем нормализованное состояние в UI сразу, без перезагрузки.
+          setProfile(await getProfile())
         }
         setJsonData(data)
       } catch {
@@ -412,28 +550,78 @@ export default function App() {
     e.target.value = ''
   }
 
+  function handleClearSession() {
+    if (!window.confirm('Удалить загруженный JSON и очистить текущее превью? Глобальные настройки сохранятся.')) {
+      return
+    }
+    localStorage.removeItem(WORKSPACE_SESSION_KEY)
+    setJsonText('')
+    setJsonData(null)
+    setResult(null)
+    setDiff(null)
+    setError(null)
+    setNotice(null)
+    setCollapsedSlides(new Set())
+  }
+
   function toggleTheme() {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
   }
 
   async function handleGenerate() {
     if (!jsonData) return
+    setGenerating(true)
+    setNotice(null)
     try {
+      await flushPendingProfile()
       await downloadPptx(jsonData, language, buildSettings())
+      setNotice('Презентация готова и скачана.')
     } catch (e) {
       setError('Ошибка генерации: ' + e)
+    } finally {
+      setGenerating(false)
     }
   }
 
   const saveQueue = useRef<Promise<void>>(Promise.resolve())
 
-  async function persist(next: Profile) {
-    setProfile(next)
-    // сериализуем сохранения, чтобы backend не получил устаревший профиль при быстрых правках
-    const save = saveQueue.current.then(() => saveProfile(next))
+  async function commitProfile(next: Profile) {
+    const save = saveQueue.current.catch(() => undefined).then(() => saveProfile(next))
     saveQueue.current = save
-    await save
-    setRefreshKey((k) => k + 1)
+    try {
+      await save
+      if (pendingProfileRef.current === null) {
+        setSaveState('saved')
+        setRefreshKey((k) => k + 1)
+      } else {
+        setSaveState('saving')
+      }
+    } catch {
+      setSaveState('error')
+      setError('Не удалось сохранить настройки профиля.')
+      throw new Error('profile save failed')
+    }
+  }
+
+  function persist(next: Profile) {
+    setProfile(next)
+    pendingProfileRef.current = next
+    setSaveState('saving')
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      const pending = pendingProfileRef.current
+      pendingProfileRef.current = null
+      saveTimerRef.current = null
+      if (pending) void commitProfile(pending).catch(() => undefined)
+    }, 400)
+  }
+
+  async function flushPendingProfile() {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = null
+    const pending = pendingProfileRef.current
+    pendingProfileRef.current = null
+    if (pending) await commitProfile(pending)
   }
 
   function handleReorder(parentPath: string, names: string[]) {
@@ -444,13 +632,16 @@ export default function App() {
     })
   }
 
-  function handleToggleInheritance(tierPath: string, flag: boolean) {
+  function handleToggleInheritance(productName: string, flag: boolean) {
     if (!profile) return
     persist({
       ...profile,
       ordering: {
         ...profile.ordering,
-        tier_inheritance_flags: { ...profile.ordering.tier_inheritance_flags, [tierPath]: flag },
+        product_inheritance_flags: {
+          ...profile.ordering.product_inheritance_flags,
+          [productName]: flag,
+        },
       },
     })
   }
@@ -546,47 +737,78 @@ export default function App() {
   function handleUploadLogo(name: string, file: File) {
     uploadProductLogo(name, file)
       .then(() => setLogoRefresh((n) => n + 1))
-      .catch(() => window.alert('Не удалось загрузить лого'))
+      .catch(() => setError('Не удалось загрузить логотип продукта.'))
   }
 
   function handleDeleteLogo(name: string) {
     deleteProductLogo(name)
       .then(() => setLogoRefresh((n) => n + 1))
-      .catch(() => window.alert('Не удалось удалить лого'))
+      .catch(() => setError('Не удалось удалить логотип продукта.'))
   }
 
   function handleUploadTierLogo(name: string, file: File) {
     uploadTierLogo(name, file)
       .then(() => setTierLogoRefresh((n) => n + 1))
-      .catch(() => window.alert('Не удалось загрузить лого тира'))
+      .catch(() => setError('Не удалось загрузить логотип тира.'))
   }
 
   function handleDeleteTierLogo(name: string) {
     deleteTierLogo(name)
       .then(() => setTierLogoRefresh((n) => n + 1))
-      .catch(() => window.alert('Не удалось удалить лого тира'))
+      .catch(() => setError('Не удалось удалить логотип тира.'))
   }
 
   const dropHandlers: DropHandlerFactory = (parentPath, index, siblings) => ({
     draggable: true,
+    tabIndex: 0,
+    role: 'button',
+    'aria-label': `${siblings[index]}. Перетаскивание внутри текущей группы. Alt и стрелки меняют порядок.`,
     onDragStart: (e) => {
+      e.stopPropagation()
       dragRef.current = { parentPath, index }
       e.dataTransfer.effectAllowed = 'move'
       e.dataTransfer.setData('text/plain', String(index))
+      e.currentTarget.classList.add('dragging')
+    },
+    onDragEnd: (e) => {
+      e.stopPropagation()
+      e.currentTarget.classList.remove('dragging')
+      dragRef.current = null
     },
     onDragOver: (e) => {
       e.preventDefault()
       e.stopPropagation()
+      e.currentTarget.classList.add('drag-over')
+    },
+    onDragLeave: (e) => {
+      e.stopPropagation()
+      e.currentTarget.classList.remove('drag-over')
     },
     onDrop: (e) => {
       e.preventDefault()
       e.stopPropagation()
+      e.currentTarget.classList.remove('drag-over')
       const d = dragRef.current
       if (!d || d.parentPath !== parentPath || d.index === index) return
       handleReorder(parentPath, moveItem(siblings, d.index, index))
       dragRef.current = null
     },
+    onKeyDown: (e) => {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+      e.preventDefault()
+      e.stopPropagation()
+      const target = e.key === 'ArrowUp' ? index - 1 : index + 1
+      if (target >= 0 && target < siblings.length) handleReorder(parentPath, moveItem(siblings, index, target))
+    },
   })
+
+  const planErrors = result?.errors ?? []
+  const planWarnings = result?.warnings ?? []
+  const planConflicts = result?.plan?.conflicts ?? []
+  const lintIssues = result?.lint_issues ?? []
+  const qualityCount = planErrors.length + planWarnings.length + planConflicts.length + lintIssues.length
+  const slideCount = result?.plan?.slides.length ?? 0
+  const canGenerate = Boolean(jsonData && result?.plan && planErrors.length === 0 && !loading && !generating)
 
   return (
     <div
@@ -599,26 +821,63 @@ export default function App() {
     >
       <header className="header">
         <div className="header-left">
-          <button onClick={() => setLeftCollapsed((v) => !v)} title="Скрыть/показать меню данных">
-            {leftCollapsed ? '☰' : '✕'}
+          <button
+            className="icon-button"
+            onClick={() => {
+              if (leftCollapsed && window.innerWidth <= 900) setRightCollapsed(true)
+              setLeftCollapsed((v) => !v)
+            }}
+            title="Скрыть или показать панель данных"
+            aria-label="Скрыть или показать панель данных"
+            aria-expanded={!leftCollapsed}
+          >
+            {leftCollapsed ? '☰' : '‹'}
           </button>
-          <h1>Roadmap → PPTX</h1>
+          <div className="brand">
+            <h1>Roadmap → PPTX</h1>
+            <span>Конструктор презентаций</span>
+          </div>
           {appVersion && <span className="app-version" title="Версия приложения">v{appVersion}</span>}
         </div>
         <div className="header-actions">
-          <button onClick={toggleTheme} title="Переключить тему">
-            {theme === 'dark' ? '☀️ Светлая' : '🌙 Ночная'}
+          {Boolean(jsonData) && (
+            <span className={'status-pill ' + (planErrors.length ? 'error' : qualityCount ? 'warning' : 'success')}>
+              {loading ? 'Проверяем…' : planErrors.length ? 'Есть ошибки' : qualityCount ? `${qualityCount} замеч.` : 'Готово'}
+            </span>
+          )}
+          {saveState !== 'idle' && (
+            <span className={'save-state ' + saveState} role="status">
+              {saveState === 'saving' && 'Сохранение…'}
+              {saveState === 'saved' && 'Сохранено'}
+              {saveState === 'error' && 'Ошибка сохранения'}
+            </span>
+          )}
+          <div className="language-switch" aria-label="Язык презентации">
+            <button className={language === 'ru' ? 'active' : ''} onClick={() => setLanguage('ru')} aria-pressed={language === 'ru'}>RU</button>
+            <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')} aria-pressed={language === 'en'}>EN</button>
+          </div>
+          <button className="icon-button" onClick={toggleTheme} title="Переключить тему" aria-label="Переключить тему">
+            {theme === 'dark' ? '☀' : '☾'}
           </button>
-          <button onClick={() => setRightCollapsed((v) => !v)} title="Скрыть/показать настройки">
-            {rightCollapsed ? '⚙' : '✕'}
+          <button
+            className="icon-button"
+            onClick={() => {
+              if (rightCollapsed && window.innerWidth <= 900) setLeftCollapsed(true)
+              setRightCollapsed((v) => !v)
+            }}
+            title="Скрыть или показать инспектор"
+            aria-label="Скрыть или показать инспектор"
+            aria-expanded={!rightCollapsed}
+          >
+            {rightCollapsed ? '⚙' : '›'}
           </button>
-          <button onClick={handleGenerate} disabled={!jsonData}>
-            Сгенерировать PPTX
+          <button className="primary-button" onClick={handleGenerate} disabled={!canGenerate}>
+            {generating ? 'Генерация…' : 'Скачать PPTX'}
           </button>
         </div>
       </header>
 
-      <aside className="sidebar">
+      <aside className={'sidebar' + (leftCollapsed ? ' is-collapsed' : '')} aria-hidden={leftCollapsed}>
         <input
           ref={fileRef}
           type="file"
@@ -633,17 +892,37 @@ export default function App() {
           style={{ display: 'none' }}
           onChange={handleImportProject}
         />
-        <div className="controls">
-          <button onClick={handleSample}>Загрузить пример</button>
-          <button onClick={() => fileRef.current?.click()}>Загрузить JSON из файла</button>
-          <button onClick={handleExport} disabled={!jsonData}>
-            Сохранить проект
+        <div className="panel-heading">
+          <span className="eyebrow">Шаг 1</span>
+          <h2>Исходные данные</h2>
+          <p>Загрузите JSON-выгрузку или продолжите работу с сохранённым проектом.</p>
+        </div>
+
+        <div className={'source-status' + (jsonData ? ' loaded' : '')}>
+          <span className="source-status-icon">{jsonData ? '✓' : '↑'}</span>
+          <div>
+            <strong>{jsonData ? 'Данные загружены' : 'Roadmap JSON'}</strong>
+            <span>{jsonData ? `${productNames.length} продукт(а), ${slideCount} слайд(а)` : 'Формат .json'}</span>
+          </div>
+        </div>
+
+        <div className="controls project-actions">
+          <button className="primary-button" onClick={() => fileRef.current?.click()}>Загрузить JSON</button>
+          <button onClick={handleSample}>Использовать пример</button>
+        </div>
+
+        <div className="sidebar-divider" />
+        <div className="sidebar-label">Проект</div>
+        <div className="controls compact-actions">
+          <button onClick={() => projectFileRef.current?.click()}>Открыть проект</button>
+          <button onClick={handleExport} disabled={!jsonData}>Сохранить проект</button>
+          <button className="danger" onClick={handleClearSession} disabled={!jsonData && !jsonText}>
+            Очистить сессию
           </button>
-          <button onClick={() => projectFileRef.current?.click()}>Загрузить проект</button>
         </div>
 
         <details className="json-debug">
-          <summary>JSON (debug)</summary>
+          <summary>Редактировать исходный JSON</summary>
           <textarea
             className="json-input"
             placeholder="Вставьте JSON-выгрузку roadmap…"
@@ -655,61 +934,72 @@ export default function App() {
           </button>
         </details>
 
-        {error && <div className="error">{error}</div>}
       </aside>
 
       <main className="content">
-        {loading && <p>Загрузка…</p>}
-        {result && result.lint_issues.length > 0 && (
-          <div className="lint">
-            <h3>Ошибки линтера ({result.lint_issues.length})</h3>
-            {result.lint_issues.map((issue, i) => (
-              <LintRow key={i} issue={issue} />
-            ))}
+        {error && <div className="error">{error}</div>}
+        {!jsonData ? (
+          <div className="preview-placeholder">
+            <h2>Превью презентации</h2>
+            <p>Здесь появится структура будущей презентации</p>
           </div>
-        )}
-
-        <details className="section">
-          <summary>Библиотека шаблонов</summary>
-          <TemplatesPanel />
-        </details>
-
-        {diff && diff.diff && (
-          <div className="diff-summary">
-            <b>Изменения относительно прошлой загрузки:</b>{' '}
-            +{diff.diff.new_requirement_ids?.length ?? 0} новых,{' '}
-            ~{diff.diff.changed_requirement_ids?.length ?? 0} изменено,{' '}
-            −{diff.diff.removed_requirement_ids?.length ?? 0} удалено
-          </div>
-        )}
-
-        {result && result.plan && (
+        ) : (
           <>
-            <div className="slides-toolbar">
-              <button onClick={() => toggleAllSlides(result.plan!.slides.length)}>
-                {collapsedSlides.size > 0 ? 'Раскрыть все блоки' : 'Схлопнуть все блоки'}
-              </button>
-              <button onClick={() => openStaticSlideModal()}>＋ Статичный слайд</button>
-            </div>
-            <div className="slides">
-              <GroupedSlides
-                slides={result.plan.slides}
-                dropHandlers={dropHandlers}
-                newReqIds={newReqIds}
-                changedReqIds={changedReqIds}
-                collapsedSlides={collapsedSlides}
-                toggleSlide={toggleSlide}
-                tierInheritanceFlags={profile?.ordering.tier_inheritance_flags ?? {}}
-                onToggleInheritance={handleToggleInheritance}
-                newTierPaths={newTierPaths}
-                productLanguages={profile?.product_languages ?? {}}
-              />
-            </div>
+            {loading && <p>Загрузка…</p>}
+            {notice && <div className="message success-message" role="status"><strong>Готово</strong><span>{notice}</span></div>}
+            {result && result.lint_issues.length > 0 && (
+              <div className="lint">
+                <h3>Ошибки линтера ({result.lint_issues.length})</h3>
+                {result.lint_issues.map((issue, index) => (
+                  <LintRow key={index} issue={issue} />
+                ))}
+              </div>
+            )}
+
+            <details className="section">
+              <summary>Библиотека шаблонов</summary>
+              <TemplatesPanel />
+            </details>
+
+            {diff && diff.diff && (
+              <div className="diff-summary">
+                <b>Изменения относительно прошлой загрузки:</b>{' '}
+                +{diff.diff.new_requirement_ids?.length ?? 0} новых,{' '}
+                ~{diff.diff.changed_requirement_ids?.length ?? 0} изменено,{' '}
+                −{diff.diff.removed_requirement_ids?.length ?? 0} удалено
+              </div>
+            )}
+
+            {result && result.plan && (
+              <>
+                <div className="slides-toolbar">
+                  <button onClick={() => toggleAllSlides(result.plan!.slides.length)}>
+                    {collapsedSlides.size > 0 ? 'Раскрыть все блоки' : 'Схлопнуть все блоки'}
+                  </button>
+                  <button onClick={() => openStaticSlideModal()}>＋ Статичный слайд</button>
+                </div>
+                <div className="slides">
+                  <GroupedSlides
+                    slides={result.plan.slides}
+                    tree={result.tree}
+                    dropHandlers={dropHandlers}
+                    newReqIds={newReqIds}
+                    changedReqIds={changedReqIds}
+                    collapsedSlides={collapsedSlides}
+                    toggleSlide={toggleSlide}
+                    productInheritanceFlags={profile?.ordering.product_inheritance_flags ?? {}}
+                    onToggleInheritance={handleToggleInheritance}
+                    newTierPaths={newTierPaths}
+                    productLanguages={profile?.product_languages ?? {}}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
       </main>
 
-      <aside className="right-panel">
+      <aside className={'right-panel' + (rightCollapsed ? ' is-collapsed' : '')} aria-hidden={rightCollapsed}>
         <div
           className="resize-handle"
           onMouseDown={(e) => {
@@ -726,16 +1016,6 @@ export default function App() {
             window.addEventListener('mouseup', onUp)
           }}
         />
-        <div className="controls">
-          <label>
-            Язык:
-            <select value={language} onChange={(e) => setLanguage(e.target.value as 'ru' | 'en')}>
-              <option value="ru">RU</option>
-              <option value="en">EN</option>
-            </select>
-          </label>
-        </div>
-
         {profile && productNames.length > 0 && (
           <details className="section">
             <summary>Языки продуктов</summary>
@@ -868,69 +1148,6 @@ function LintRow({ issue }: { issue: LintIssue }) {
     <div className="lint-item">
       <b>{issue.message}</b>
       <div className="lint-text">«{issue.text}» — {issue.tier} (req {issue.requirement_id})</div>
-    </div>
-  )
-}
-
-function TreeView({
-  tree,
-  dropHandlers,
-  onToggleInheritance,
-  newTierPaths,
-}: {
-  tree: Tree
-  dropHandlers: DropHandlerFactory
-  onToggleInheritance: (tierPath: string, flag: boolean) => void
-  newTierPaths: Set<string>
-}) {
-  return (
-    <div className="tree">
-      {tree.products.map((p, i) => (
-        <div
-          key={p.name}
-          {...dropHandlers('', i, tree.products.map((x) => x.name))}
-          className="tree-node product"
-        >
-          <span className="tree-label">{p.name}</span>
-          <div className="tree-children">
-            {p.streams.map((s, si) => (
-              <div
-                key={s.name}
-                {...dropHandlers(p.name, si, p.streams.map((x) => x.name))}
-                className="tree-node stream"
-              >
-                <span className="tree-label">{s.name}</span>
-                <div className="tree-children">
-                  {s.tiers.map((t, ti) => (
-                    <div
-                      key={t.name}
-                      {...dropHandlers(`${p.name} > ${s.name}`, ti, s.tiers.map((x) => x.name))}
-                      className="tree-node tier"
-                    >
-                      <span className="tree-label">{t.name}</span>
-                      {newTierPaths.has(`${p.name} > ${s.name} > ${t.name}`) && (
-                        <span className="tree-badge">новое</span>
-                      )}
-                      {ti > 0 && (
-                        <label className="inheritance-check">
-                          <input
-                            type="checkbox"
-                            checked={t.inheritance_flag}
-                            onChange={(e) =>
-                              onToggleInheritance(`${p.name} > ${s.name} > ${t.name}`, e.target.checked)
-                            }
-                          />
-                          наследование
-                        </label>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
     </div>
   )
 }
@@ -1100,17 +1317,28 @@ function StaticSlideModal({
   onSubmit: () => void
 }) {
   const [dragOver, setDragOver] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const positions = ['end', ...productNames.flatMap((p) => [`before:${p}`, `after:${p}`])]
 
+  useEffect(() => {
+    if (!modal.open) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [modal.open, onClose])
+
   async function upload(file: File) {
+    setUploadError(null)
     try {
       const { filename, extracted_title } = await uploadStaticSlidePptx(file)
       const patch: { pptx: string; name?: string } = { pptx: filename }
       if (!modal.name.trim()) patch.name = extracted_title
       onChange(patch)
     } catch (err) {
-      alert('Ошибка загрузки: ' + err)
+      setUploadError('Не удалось загрузить слайд: ' + err)
     }
   }
 
@@ -1118,25 +1346,30 @@ function StaticSlideModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Новый статичный слайд</h3>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="static-slide-title" onClick={(e) => e.stopPropagation()}>
+        <h3 id="static-slide-title">Новый статичный слайд</h3>
         <label className="modal-field">
           Название:
-          <input type="text" value={modal.name} onChange={(e) => onChange({ name: e.target.value })} />
+          <input autoFocus type="text" value={modal.name} onChange={(e) => onChange({ name: e.target.value })} />
         </label>
         <label className="modal-field">
           Позиция:
           <select value={modal.position} onChange={(e) => onChange({ position: e.target.value })}>
             {positions.map((p) => (
               <option key={p} value={p}>
-                {p}
+                {positionLabel(p)}
               </option>
             ))}
           </select>
         </label>
         <div
           className={'dropzone' + (dragOver ? ' over' : '')}
+          role="button"
+          tabIndex={0}
           onClick={() => fileRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') fileRef.current?.click()
+          }}
           onDragOver={(e) => {
             e.preventDefault()
             setDragOver(true)
@@ -1162,9 +1395,10 @@ function StaticSlideModal({
             }}
           />
         </div>
+        {uploadError && <div className="error" role="alert">{uploadError}</div>}
         <div className="modal-actions">
           <button onClick={onClose}>Отмена</button>
-          <button onClick={onSubmit}>Добавить</button>
+          <button className="primary-button" onClick={onSubmit} disabled={!modal.pptx}>Добавить</button>
         </div>
       </div>
     </div>
@@ -1174,6 +1408,7 @@ function StaticSlideModal({
 function TemplatesPanel() {
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [uploading, setUploading] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function refresh() {
@@ -1195,8 +1430,9 @@ function TemplatesPanel() {
     try {
       await uploadTemplate(file)
       await refresh()
+      setMessage('Шаблон загружен.')
     } catch (err) {
-      alert('Ошибка загрузки шаблона: ' + err)
+      setMessage('Ошибка загрузки шаблона: ' + err)
     } finally {
       setUploading(false)
       e.target.value = ''
@@ -1206,6 +1442,7 @@ function TemplatesPanel() {
   async function activate(filename: string | null) {
     await setActiveTemplate(filename)
     await refresh()
+    setMessage('Активный шаблон изменён.')
   }
 
   async function remove(filename: string) {
@@ -1213,8 +1450,9 @@ function TemplatesPanel() {
     try {
       await deleteTemplate(filename)
       await refresh()
+      setMessage('Шаблон удалён.')
     } catch (err) {
-      alert('Ошибка удаления: ' + err)
+      setMessage('Ошибка удаления: ' + err)
     }
   }
 
@@ -1224,6 +1462,7 @@ function TemplatesPanel() {
       <button onClick={() => fileRef.current?.click()} disabled={uploading}>
         {uploading ? 'Загрузка…' : 'Загрузить шаблон (.pptx)'}
       </button>
+      {message && <div className="inline-message" role="status">{message}</div>}
       <div className="templates-list">
         {templates.map((t) => (
           <div key={t.filename} className="template-item">
@@ -1257,9 +1496,10 @@ function TemplatesPanel() {
 
 function InsertMarker({ position, onInsert }: { position: string; onInsert: (position: string) => void }) {
   return (
-    <div className="insert-marker" onClick={() => onInsert(position)} title={`Вставить сюда (${position})`}>
+    <button className="insert-marker" onClick={() => onInsert(position)} title={positionLabel(position)} aria-label={`Добавить статичный слайд: ${positionLabel(position)}`}>
       <span className="insert-plus">＋</span>
-    </div>
+      <span className="insert-label">Добавить слайд</span>
+    </button>
   )
 }
 
@@ -1288,109 +1528,118 @@ function StaticSlidesList({
 
 function GroupedSlides({
   slides,
+  tree,
   dropHandlers,
   newReqIds,
   changedReqIds,
   collapsedSlides,
   toggleSlide,
-  tierInheritanceFlags,
+  productInheritanceFlags,
   onToggleInheritance,
   newTierPaths,
   productLanguages,
 }: {
   slides: Slide[]
+  tree: Tree | null
   dropHandlers: DropHandlerFactory
   newReqIds: Set<number>
   changedReqIds: Set<number>
   collapsedSlides: Set<number>
-  toggleSlide: (i: number) => void
-  tierInheritanceFlags: Record<string, boolean>
-  onToggleInheritance: (tierPath: string, flag: boolean) => void
+  toggleSlide: (index: number) => void
+  productInheritanceFlags: Record<string, boolean>
+  onToggleInheritance: (productName: string, flag: boolean) => void
   newTierPaths: Set<string>
   productLanguages: Record<string, { ru: boolean; en: boolean }>
 }) {
-  const { top, products } = groupSlides(slides)
+  const { top, products } = groupSlides(slides, tree)
 
   const langLabel = (name: string): string | null => {
-    const l = productLanguages[name] ?? { ru: true, en: true }
-    if (!l.ru && !l.en) return 'скрыт'
-    if (!l.ru) return 'только EN'
-    if (!l.en) return 'только RU'
+    const productLanguage = productLanguages[name] ?? { ru: true, en: true }
+    if (!productLanguage.ru && !productLanguage.en) return 'скрыт'
+    if (!productLanguage.ru) return 'только EN'
+    if (!productLanguage.en) return 'только RU'
     return null
   }
 
-  const card = (s: Slide, idx: number, collapsible: boolean) => (
+  const card = (slide: Slide, index: number, collapsible: boolean) => (
     <SlideCard
-      key={idx}
-      slide={s}
+      key={index}
+      slide={slide}
+      slideNumber={index + 1}
       newReqIds={newReqIds}
       changedReqIds={changedReqIds}
-      expanded={collapsible ? !collapsedSlides.has(idx) : true}
-      onToggle={collapsible ? () => toggleSlide(idx) : () => {}}
+      expanded={collapsible ? !collapsedSlides.has(index) : true}
+      onToggle={collapsible ? () => toggleSlide(index) : () => {}}
     />
   )
 
   return (
     <div className="grouped">
-      {top.filter(isTitle).map((s) => card(s, slides.indexOf(s), false))}
-      {products.map((p) => (
-        <div key={p.product} className="group">
+      {top.filter(isTitle).map((slide) => card(slide, slides.indexOf(slide), false))}
+      {products.map((product) => (
+        <div key={product.product} className="group">
           <div
-            {...dropHandlers('', products.indexOf(p), products.map((x) => x.product))}
+            {...dropHandlers('', products.indexOf(product), products.map((item) => item.product))}
             className="group-header product-h"
           >
             <span className="badge">PRODUCT</span>
-            <span className="group-title">{p.product}</span>
-            {langLabel(p.product) && <span className="lang-badge">{langLabel(p.product)}</span>}
+            <span className="group-title">{product.product}</span>
+            {langLabel(product.product) && <span className="lang-badge">{langLabel(product.product)}</span>}
+            <label
+              className="inheritance-check"
+              title="Во всех Stream продукта убирает фичи, уже показанные в предыдущих Tier, и добавляет заметку о наследовании"
+            >
+              <input
+                type="checkbox"
+                checked={!!productInheritanceFlags[product.product]}
+                onChange={(event) => onToggleInheritance(product.product, event.target.checked)}
+              />
+              <span className="inheritance-check-text">
+                Наследование
+                <small>для всех Stream продукта</small>
+              </span>
+            </label>
           </div>
-          {p.streams.map((st) => (
-            <div key={st.stream} className="group">
-              {st.stream !== '-' && (
+          {product.streams.map((stream) => (
+            <div key={stream.stream} className="group">
+              {stream.stream !== '-' && (
                 <div
-                  {...dropHandlers(p.product, p.streams.indexOf(st), p.streams.map((x) => x.stream))}
+                  {...dropHandlers(
+                    product.product,
+                    product.streams.indexOf(stream),
+                    product.streams.map((item) => item.stream),
+                  )}
                   className="group-header stream-h"
                 >
                   <span className="badge">STREAM</span>
-                  <span className="group-title">{st.stream}</span>
+                  <span className="group-title">{stream.stream}</span>
                 </div>
               )}
-              {st.tiers.map((t, ti) => (
-                <div key={t.tier} className="group">
+              {stream.tiers.map((tier, tierIndex) => (
+                <div key={tier.tier} className="group">
                   <div
                     {...dropHandlers(
-                      `${p.product} > ${st.stream}`,
-                      ti,
-                      st.tiers.map((x) => x.tier),
+                      `${product.product} > ${stream.stream}`,
+                      tierIndex,
+                      stream.tiers.map((item) => item.tier),
                     )}
                     className="group-header tier-h"
                   >
                     <span className="badge">TIER</span>
-                    <span className="group-title">{t.tier}</span>
-                    {newTierPaths.has(`${p.product} > ${st.stream} > ${t.tier}`) && (
+                    <span className="group-title">{tier.tier}</span>
+                    {newTierPaths.has(`${product.product} > ${stream.stream} > ${tier.tier}`) && (
                       <span className="tree-badge">новое</span>
                     )}
-                    {ti > 0 && (
-                      <label className="inheritance-check">
-                        <input
-                          type="checkbox"
-                          checked={!!tierInheritanceFlags[`${p.product} > ${st.stream} > ${t.tier}`]}
-                          onChange={(e) =>
-                            onToggleInheritance(`${p.product} > ${st.stream} > ${t.tier}`, e.target.checked)
-                          }
-                        />
-                        наследование
-                      </label>
-                    )}
                   </div>
-                  {t.slides.map((r) => card(r, slides.indexOf(r), true))}
+                  {tier.slides.map((slide) => card(slide, slides.indexOf(slide), true))}
                 </div>
               ))}
             </div>
           ))}
         </div>
       ))}
-      {top.filter(isStatic).map((s) => card(s, slides.indexOf(s), false))}
-      {top.filter(isThankYou).map((s) => card(s, slides.indexOf(s), false))}
+      {top.filter(isStatic).map((slide) => card(slide, slides.indexOf(slide), false))}
+      {top.filter(isThankYou).map((slide) => card(slide, slides.indexOf(slide), false))}
     </div>
   )
 }
@@ -1474,12 +1723,14 @@ function ProductLogosPanel({
 
 function SlideCard({
   slide,
+  slideNumber,
   newReqIds,
   changedReqIds,
   expanded,
   onToggle,
 }: {
   slide: Slide
+  slideNumber?: number
   newReqIds: Set<number>
   changedReqIds: Set<number>
   expanded: boolean
@@ -1488,6 +1739,7 @@ function SlideCard({
   if (isTitle(slide)) {
     return (
       <div className="card divider divider-title">
+        {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">TITLE</span>
         <span className="divider-title">{slide.title || 'Roadmap'}</span>
         {(slide.year || slide.version) && (
@@ -1499,6 +1751,7 @@ function SlideCard({
   if (isThankYou(slide)) {
     return (
       <div className="card divider divider-thankyou">
+        {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="divider-title">{slide.text}</span>
       </div>
     )
@@ -1506,6 +1759,7 @@ function SlideCard({
   if (isStatic(slide)) {
     return (
       <div className="card divider divider-static">
+        {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">STATIC</span>
         <span className="divider-title">{slide.name || '(без названия)'}</span>
       </div>
@@ -1514,6 +1768,7 @@ function SlideCard({
   if (isDivider(slide)) {
     return (
       <div className={'card divider divider-' + slide.divider_type}>
+        {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">{slide.divider_type.toUpperCase()}</span>
         <span className="divider-title">{slide.title}</span>
       </div>
@@ -1522,6 +1777,7 @@ function SlideCard({
   return (
     <RoadmapCard
       slide={slide}
+      slideNumber={slideNumber}
       newReqIds={newReqIds}
       changedReqIds={changedReqIds}
       expanded={expanded}
@@ -1532,12 +1788,14 @@ function SlideCard({
 
 function RoadmapCard({
   slide,
+  slideNumber,
   newReqIds,
   changedReqIds,
   expanded,
   onToggle,
 }: {
   slide: RoadmapSlide
+  slideNumber?: number
   newReqIds: Set<number>
   changedReqIds: Set<number>
   expanded: boolean
@@ -1546,6 +1804,7 @@ function RoadmapCard({
   return (
     <div className="card roadmap" onClick={onToggle}>
       <div className="roadmap-head">
+        {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">{slide.continuation ? 'Roadmap (cont.)' : 'Roadmap'}</span>
         <span className="tier">{slide.tier}</span>
         <span className="collapse-hint">{expanded ? '▾' : '▸'}</span>

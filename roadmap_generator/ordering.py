@@ -12,7 +12,7 @@ SEPARATOR = " > "
 
 _order_store: Dict[str, List[str]] = {}
 _apptitle_priority: List[str] = []
-_tier_inheritance_flags: Dict[str, bool] = {}
+_product_inheritance_flags: Dict[str, bool] = {}
 
 
 def get_effective_order(parent_path: str, item_names: List[str]) -> List[str]:
@@ -57,20 +57,20 @@ def resolve_apptitle_order(app_titles_with_counts: List[Tuple[str, int]]) -> Lis
     return result + rest
 
 
-def get_tier_inheritance_flag(tier_path: str) -> bool:
-    """Флаг «Показывать наследование» для узла Tier в дереве порядка (ТЗ v4 §4.3)."""
-    return _tier_inheritance_flags.get(tier_path, False)
+def get_product_inheritance_flag(product_name: str) -> bool:
+    """Флаг наследования для всех Stream и Tier выбранного Product."""
+    return _product_inheritance_flags.get(product_name, False)
 
 
-def save_tier_inheritance_flag(tier_path: str, flag: bool) -> None:
-    _tier_inheritance_flags[tier_path] = bool(flag)
+def save_product_inheritance_flag(product_name: str, flag: bool) -> None:
+    _product_inheritance_flags[product_name] = bool(flag)
 
 
 def export_state() -> dict:
     return {
         "order": dict(_order_store),
         "apptitle_priority": list(_apptitle_priority),
-        "tier_inheritance_flags": dict(_tier_inheritance_flags),
+        "product_inheritance_flags": dict(_product_inheritance_flags),
     }
 
 
@@ -78,12 +78,22 @@ def import_state(state: dict) -> None:
     _order_store.clear()
     _order_store.update(state.get("order", {}))
     _apptitle_priority[:] = list(state.get("apptitle_priority", []))
-    _tier_inheritance_flags.clear()
-    _tier_inheritance_flags.update(state.get("tier_inheritance_flags", {}))
+    _product_inheritance_flags.clear()
+    product_flags = state.get("product_inheritance_flags")
+    if product_flags is not None:
+        _product_inheritance_flags.update(product_flags)
+        return
+
+    # Совместимость с профилями до v1.3.0: если наследование было включено хотя
+    # бы у одного Tier, включаем новое правило на уровне всего Product.
+    for tier_path, enabled in state.get("tier_inheritance_flags", {}).items():
+        if enabled:
+            product_name = tier_path.split(SEPARATOR, 1)[0]
+            _product_inheritance_flags[product_name] = True
 
 
 def _reset_state() -> None:
     """Сброс in-memory хранилища (для тестов)."""
     _order_store.clear()
     _apptitle_priority.clear()
-    _tier_inheritance_flags.clear()
+    _product_inheritance_flags.clear()
