@@ -24,7 +24,7 @@
     "apptitle_priority": [],
     "product_inheritance_flags": {
       "Kaspersky Next": false,
-      "Kaspersky Vulnerability Management": true
+      "Kaspersky Vulnerability Management": false
     }
   },
   "labels": {
