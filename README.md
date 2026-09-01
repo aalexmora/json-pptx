@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.4.2
+> **Версия:** 1.4.3
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию

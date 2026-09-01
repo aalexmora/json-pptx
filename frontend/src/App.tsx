@@ -228,20 +228,29 @@ function groupSlides(slides: Slide[], tree: Tree | null): { top: Slide[]; produc
     }
   }
 
-  // Дерево API — единственный источник порядка и состава узлов. Поэтому Tier
-  // остаётся доступен для настройки наследования, даже если после фильтрации или
-  // дедупликации для него не был создан roadmap-слайд.
+  // Дерево API — единственный источник порядка узлов. Пустые узлы (Tier/Stream/
+  // Product без единой фичи после фильтрации, дедупликации или скрытия языка)
+  // в среднее окно не выводятся — как и в build_slide_plan, где им не создаётся
+  // слайд. Фильтруем только рендер: полный `tree` остаётся источником списков
+  // продуктов/тиров для правой панели (логотипы, языки), иначе скрытый продукт
+  // нельзя было бы вернуть.
   if (tree) {
-    const products = tree.products.map((product) => ({
-      product: product.name,
-      streams: product.streams.map((stream) => ({
-        stream: stream.name,
-        tiers: stream.tiers.map((tier) => ({
-          tier: tier.name,
-          slides: slidesByTier.get(tierKey(product.name, stream.name, tier.name)) ?? [],
-        })),
-      })),
-    }))
+    const products = tree.products
+      .map((product) => ({
+        product: product.name,
+        streams: product.streams
+          .map((stream) => ({
+            stream: stream.name,
+            tiers: stream.tiers
+              .map((tier) => ({
+                tier: tier.name,
+                slides: slidesByTier.get(tierKey(product.name, stream.name, tier.name)) ?? [],
+              }))
+              .filter((tier) => tier.slides.length > 0),
+          }))
+          .filter((stream) => stream.tiers.length > 0),
+      }))
+      .filter((product) => product.streams.length > 0)
     return { top, products }
   }
 
@@ -1806,7 +1815,6 @@ function RoadmapCard({
       <div className="roadmap-head">
         {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">{slide.continuation ? 'Roadmap (cont.)' : 'Roadmap'}</span>
-        <span className="tier">{slide.tier}</span>
         <span className="collapse-hint">{expanded ? '▾' : '▸'}</span>
       </div>
       {expanded && slide.inheritance_note && <div className="inheritance">{slide.inheritance_note}</div>}

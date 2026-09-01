@@ -306,11 +306,6 @@ button.danger {
   margin-bottom: 8px;
 }
 
-.tier {
-  font-size: 16px;
-  font-weight: 600;
-}
-
 .inheritance {
   color: var(--accent);
   font-size: 13px;
