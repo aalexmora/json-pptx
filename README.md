@@ -1,5 +1,7 @@
 # Roadmap → PPTX
 
+> **Версия:** 1.4.2
+
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
 в корпоративном дизайне. Один пользователь, запуск локально, без облака.
@@ -14,7 +16,8 @@
 
 ```bash
 # 1. Python-окружение
-python -m venv .venv && source .venv/bin/activate
+cd Documents/
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # 2. Backend + собранный фронтенд (один процесс)
