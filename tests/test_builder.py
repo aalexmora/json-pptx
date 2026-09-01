@@ -5,12 +5,14 @@ import io
 
 import pytest
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches
 
+from roadmap_generator import ordering
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.plugins_engine import RoadmapSlide, build_slide_plan
 from roadmap_generator.schema import normalize_roadmap
@@ -412,6 +414,65 @@ def test_s2c_footnote_shown_once(load_fixture, tmp_path, monkeypatch):
     all_text = "\n".join(_all_texts(prs))
     assert all_text.count(footnote) == 1
     assert "PLACEHOLDER S2C" not in all_text
+
+
+def test_s2c_duplicate_alias_placeholders_are_cleared(load_fixture, tmp_path, monkeypatch):
+    """Даже при двух S2C-шейпах текст остаётся только в каноническом плейсхолдере."""
+    tpl_path = _template_with_named_shapes(
+        tmp_path,
+        "duplicate_s2c_template.pptx",
+        [
+            {"name": "subject_to_change_footnote", "kind": "text", "text": "CANONICAL"},
+            {"name": "_s2c", "kind": "text", "text": "LEGACY"},
+        ],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    prs = build_presentation(_plan(load_fixture, "subject_to_change_mixed.json"))
+
+    footnote = "* Могут быть внесены изменения"
+    slide = _roadmap_slide(prs)
+    assert slide is not None
+    texts = [shape.text for shape in slide.shapes if shape.has_text_frame]
+    assert sum(text.count(footnote) for text in texts) == 1
+    assert "CANONICAL" not in texts
+    assert "LEGACY" not in texts
+
+
+def test_inheritance_note_uses_named_placeholder_and_one_tier_per_line(load_fixture, tmp_path, monkeypatch):
+    tpl_path = _template_with_named_shapes(
+        tmp_path,
+        "inheritance_template.pptx",
+        [{"name": "tier_inheritance_note", "kind": "text", "text": "INHERITANCE PLACEHOLDER"}],
+    )
+    template = Presentation(tpl_path)
+    placeholder = next(shape for shape in template.slides[0].shapes if shape.name == "tier_inheritance_note")
+    placeholder.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor(0x00, 0x6D, 0xFF)
+    template.save(tpl_path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
+    prs = build_presentation(_plan(load_fixture, "tier_hierarchy_next.json"))
+
+    notes = [
+        _shape_text_by_name(slide, "tier_inheritance_note")
+        for slide in prs.slides
+        if _shape_text_by_name(slide, "tier_inheritance_note")
+    ]
+    assert notes
+    lines = notes[-1].splitlines()
+    assert lines[0] == "вкл. все фичи предыдущих тиров:"
+    assert all(line.startswith("• ") for line in lines[1:])
+    assert "INHERITANCE PLACEHOLDER" not in notes[-1]
+    rendered_shape = next(
+        shape
+        for slide in prs.slides
+        for shape in slide.shapes
+        if shape.name == "tier_inheritance_note" and shape.text
+    )
+    assert all(
+        run.font.color.rgb == RGBColor(0x00, 0x6D, 0xFF)
+        for paragraph in rendered_shape.text_frame.paragraphs
+        for run in paragraph.runs
+    )
 
 
 def test_number_placeholder_filled_with_ordinal(load_fixture, tmp_path, monkeypatch):

@@ -24,6 +24,17 @@ def test_layout_separator_names_come_from_contract():
     ]
 
 
+def test_semantic_role_names_and_legacy_aliases_come_from_contract():
+    assert tr.get_role_shape_names("subject_to_change_footnote") == [
+        "subject_to_change_footnote",
+        "s2c",
+    ]
+    assert tr.get_role_shape_names("tier_inheritance_note") == [
+        "tier_inheritance_note",
+        "inheritance_note",
+    ]
+
+
 def test_synthetic_template_satisfies_all_contracts(synthetic_template_path):
     required = tr.get_required_shapes("roadmap", 3, False)
     missing = tr.validate_template_shapes(str(synthetic_template_path), required)

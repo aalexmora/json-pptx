@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import copy
 import io
-from collections import Counter
+from collections import Counter, defaultdict
 
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -30,7 +30,12 @@ from roadmap_generator.plugins_engine import (
     ThankYouSlide,
     TitleSlide,
 )
-from roadmap_generator.template_registry import get_layout_shape_names, placeholder_names, select_template
+from roadmap_generator.template_registry import (
+    get_layout_shape_names,
+    get_role_shape_names,
+    placeholder_names,
+    select_template,
+)
 
 MARGIN = 0.5
 GAP = 0.25
@@ -209,6 +214,22 @@ def _normalize_name(name: str) -> str:
     return name
 
 
+def _first_shape_for_role(shapes_by_name: dict, role: str):
+    for name in get_role_shape_names(role):
+        shape = shapes_by_name.get(name)
+        if shape is not None:
+            return shape
+    return None
+
+
+def _text_shapes_for_role(text_shapes_by_name: dict, role: str) -> list:
+    return [
+        shape
+        for name in get_role_shape_names(role)
+        for shape in text_shapes_by_name.get(name, [])
+    ]
+
+
 def _replace_picture(new_slide, shape, path) -> bool:
     """Подменяет картинку-шейп картинкой из файла `path`.
 
@@ -277,8 +298,9 @@ def _set_text(shape, text: str) -> None:
     tf = shape.text_frame
     size, name, bold, color = _base_format(tf)
     tf.text = text
-    if tf.paragraphs and tf.paragraphs[0].runs:
-        _apply_format(tf.paragraphs[0].runs[0], size, name, bold, color)
+    for paragraph in tf.paragraphs:
+        for run in paragraph.runs:
+            _apply_format(run, size, name, bold, color)
 
 
 def _clear(shape) -> None:
@@ -330,11 +352,13 @@ def _render_roadmap_from_template(
     # setdefault — первый встреченный шейп (прототип), чтобы дубли не ломали вёрстку.
     all_by_name: dict = {}
     text_by_name: dict = {}
+    text_shapes_by_name: dict = defaultdict(list)
     for sh in new_slide.shapes:
         norm = _normalize_name(sh.name)
         all_by_name.setdefault(norm, sh)
         if sh.has_text_frame:
             text_by_name.setdefault(norm, sh)
+            text_shapes_by_name[norm].append(sh)
 
     # Слайд-продолжение = только таблица (без заголовка роадмапа/легенды, TOR v2 §1).
     # Ярлык «roadmap» в шаблоне статичный — текст не меняем.
@@ -347,17 +371,17 @@ def _render_roadmap_from_template(
         _set_text(text_by_name.get("slide_title"), slide.tier)
 
     # Порядковый номер слайда (слайд уже добавлен в prs — len включает его).
-    number = text_by_name.get("number")
+    number = _first_shape_for_role(text_by_name, "slide_number")
     if number is not None:
         _set_text(number, str(len(prs.slides)))
 
     # Логотип продукта из библиотеки (плейсхолдер logo/_logo в шаблоне).
-    logo_shape = all_by_name.get("logo")
+    logo_shape = _first_shape_for_role(all_by_name, "product_logo")
     if logo_shape is not None and logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
         _replace_picture(new_slide, logo_shape, product_logos.logo_path(slide.product))
 
     # Логотип тира из библиотеки (плейсхолдер logo_tier/_logo_tier в шаблоне).
-    tier_logo_shape = all_by_name.get("logo_tier")
+    tier_logo_shape = _first_shape_for_role(all_by_name, "tier_logo")
     if tier_logo_shape is not None and tier_logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
         _replace_picture(new_slide, tier_logo_shape, product_logos.tier_logo_path(slide.tier))
 
@@ -393,20 +417,37 @@ def _render_roadmap_from_template(
         prev_quarter = col.quarter
         _fill_bullets_shape(bullets, col)
 
+    inheritance_shapes = _text_shapes_for_role(text_shapes_by_name, "tier_inheritance_note")
     if slide.inheritance_note:
-        _set_paragraph(
-            new_slide.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.8), Inches(w - 2 * MARGIN), Inches(0.3)),
-            slide.inheritance_note, 12, bold=False,
-        )
+        if inheritance_shapes:
+            _set_text(inheritance_shapes[0], slide.inheritance_note)
+            for shape in inheritance_shapes[1:]:
+                _clear(shape)
+        else:
+            line_count = slide.inheritance_note.count("\n") + 1
+            note_height = min(1.8, max(0.45, line_count * 0.2))
+            _set_paragraph(
+                new_slide.shapes.add_textbox(
+                    Inches(MARGIN), Inches(h - 0.5 - note_height),
+                    Inches(w - 2 * MARGIN), Inches(note_height),
+                ),
+                slide.inheritance_note, 10, bold=False,
+            )
+    else:
+        for shape in inheritance_shapes:
+            _clear(shape)
 
     # Сноска Subject to Change — показывается ОДИН раз в шейпе s2c/_s2c.
     # Текстовый блок поверх — только если такого плейсхолдера в шаблоне нет.
-    s2c = text_by_name.get("s2c")
-    if s2c is not None:
+    s2c_shapes = _text_shapes_for_role(text_shapes_by_name, "subject_to_change_footnote")
+    if s2c_shapes:
         if slide.footnote:
-            _set_text(s2c, slide.footnote)
+            _set_text(s2c_shapes[0], slide.footnote)
+            for shape in s2c_shapes[1:]:
+                _clear(shape)
         else:
-            _clear(s2c)
+            for shape in s2c_shapes:
+                _clear(shape)
     elif slide.footnote:
         _set_paragraph(
             new_slide.shapes.add_textbox(Inches(MARGIN), Inches(h - 0.45), Inches(w - 2 * MARGIN), Inches(0.3)),

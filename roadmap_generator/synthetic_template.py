@@ -1,6 +1,6 @@
 """Генерация синтетического шаблона разработки (ТЗ v4 §12).
 
-Создаёт `.pptx`-шаблон с одной колонкой-прототипом и тремя именованными
+Создаёт `.pptx`-шаблон с колонкой-прототипом, аннотациями и именованными
 разделителями. Builder клонирует колонку под данные и переставляет разделители
 для адаптивной сетки 1/2/3/4 колонки.
 """
@@ -9,8 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_CONNECTOR
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 from roadmap_generator.template_registry import get_layout_shape_names
 
@@ -44,6 +45,22 @@ def make_synthetic_template(path) -> None:
     bullets.name = "col_bullets"
     bullets.text_frame.text = "• feature"
     bullets.text_frame.word_wrap = True
+
+    inheritance = slide.shapes.add_textbox(Inches(margin), Inches(5.4), Inches(12.333), Inches(1.3))
+    inheritance.name = "tier_inheritance_note"
+    inheritance.text_frame.text = "inc. all features of previous tier(s):\n• Stream / Tier"
+    inheritance.text_frame.paragraphs[0].runs[0].font.size = Pt(10)
+    inheritance.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor(0x1D, 0x4E, 0xD8)
+
+    footnote = slide.shapes.add_textbox(Inches(margin), Inches(7.0), Inches(8.5), Inches(0.25))
+    footnote.name = "subject_to_change_footnote"
+    footnote.text_frame.text = "* Subject to Change"
+    footnote.text_frame.paragraphs[0].runs[0].font.size = Pt(10)
+
+    number = slide.shapes.add_textbox(Inches(12.1), Inches(7.0), Inches(0.7), Inches(0.25))
+    number.name = "slide_number"
+    number.text_frame.text = "1"
+    number.text_frame.paragraphs[0].runs[0].font.size = Pt(10)
 
     for index, name in enumerate(get_layout_shape_names("separators"), start=1):
         x = margin + index * ((13.333 - 2 * margin) / 4)

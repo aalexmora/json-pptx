@@ -85,6 +85,11 @@ def test_tier_inheritance_note_lists_all_previous_tiers(load_fixture):
     xdr = next(s for s in slides if s.tier == "Kaspersky Next XDR Optimum")
     assert "Kaspersky Next EDR Foundations" in xdr.inheritance_note
     assert "Kaspersky Next EDR Optimum" in xdr.inheritance_note
+    assert xdr.inheritance_note.splitlines() == [
+        "inc. all features of previous tier(s):",
+        "• Kaspersky Next Optimum / Kaspersky Next EDR Foundations",
+        "• Kaspersky Next Optimum / Kaspersky Next EDR Optimum",
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -157,8 +157,8 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
                 inherit = bool(previous_tiers) and product_inheritance
                 inheritance_note = None
                 if inherit:
-                    previous = ", ".join(previous_tiers)
-                    inheritance_note = f"{get_service_string('inheritance_prefix', model.language)} {previous}"
+                    previous = "\n".join(f"• {tier_name}" for tier_name in previous_tiers)
+                    inheritance_note = f"{get_service_string('inheritance_prefix', model.language)}\n{previous}"
                 slides, shown_ids = _build_tier_slides(
                     model.language, pname, sname, tname, tier, filters, groupers, plugin_settings,
                     inheritance_note, exclude_req_ids=(seen_req_ids if inherit else None),

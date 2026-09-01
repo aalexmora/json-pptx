@@ -42,6 +42,12 @@ def get_layout_shape_names(role: str) -> List[str]:
     return list(layout.get(role, []))
 
 
+def get_role_shape_names(role: str) -> List[str]:
+    """Каноническое имя и совместимые алиасы семантической роли шейпа."""
+    roles = load_contracts()["roadmap"].get("roles", {})
+    return list(roles.get(role, []))
+
+
 def validate_template_shapes(template_path: str, required_shape_names: List[str]) -> List[str]:
     """Проверяет наличие обязательных именованных шейпов в `.pptx`.
 
@@ -61,12 +67,13 @@ _SHAPE_HINTS = {
     "slide_title": "заголовок слайда — название тира/продукта",
     "col_header": "заголовок квартала (Q1, Q2, …)",
     "col_bullets": "список фич колонки",
-    "roadmap": "статичный ярлык «Roadmap» — текст билдер не меняет",
-    "logo": "картинка-логотип — билдер подставит лого продукта из библиотеки",
-    "logo_tier": "картинка-логотип тира — билдер подставит лого тира из библиотеки",
-    "dot": "декоративная точка-отсечка квартала",
-    "s2c": "сноска Subject to Change — показывается один раз",
-    "number": "порядковый номер слайда",
+    "roadmap_label": "статичный ярлык «Roadmap» — текст билдер не меняет",
+    "product_logo": "картинка-логотип — билдер подставит лого продукта из библиотеки",
+    "tier_logo": "картинка-логотип тира — билдер подставит лого тира из библиотеки",
+    "quarter_marker": "декоративная точка-отсечка квартала",
+    "subject_to_change_footnote": "сноска Subject to Change — показывается один раз",
+    "tier_inheritance_note": "многострочная заметка со списком предыдущих Tier",
+    "slide_number": "порядковый номер слайда",
 }
 
 
@@ -74,7 +81,8 @@ def _consulted_shapes() -> List[str]:
     """Все имена шейпов, которые билдер ищет по имени (обязательные + опциональные)."""
     cfg = load_contracts()["roadmap"]
     layout_names = [name for names in cfg.get("layout", {}).values() for name in names]
-    return list(cfg.get("base", [])) + list(cfg.get("optional", [])) + layout_names
+    role_names = [name for names in cfg.get("roles", {}).values() for name in names]
+    return list(cfg.get("base", [])) + list(cfg.get("optional", [])) + role_names + layout_names
 
 
 def placeholder_names() -> List[str]:
