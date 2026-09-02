@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react'
 import type {
   Bullet,
   Column,
@@ -112,11 +122,13 @@ const SERVICE_STRING_LABELS: Record<string, string> = {
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type AppTitleMode = 'auto' | 'on' | 'off'
+type ExpansionLevel = 'products' | 'streams' | 'tiers' | 'features' | 'custom'
+type BulkExpansionLevel = Exclude<ExpansionLevel, 'custom'>
 
 const WORKSPACE_SESSION_KEY = 'roadmap-pptx.workspace.v1'
 
 interface WorkspaceSession {
-  version: 1
+  version: 2
   jsonData: unknown
   jsonText: string
   language: 'ru' | 'en'
@@ -124,7 +136,9 @@ interface WorkspaceSession {
   leftCollapsed: boolean
   rightCollapsed: boolean
   rightWidth: number
-  collapsedSlides: number[]
+  collapsedNodes: string[]
+  expansionLevel: ExpansionLevel
+  lastBulkExpansionLevel: BulkExpansionLevel
 }
 
 function readWorkspaceSession(): WorkspaceSession | null {
@@ -132,7 +146,7 @@ function readWorkspaceSession(): WorkspaceSession | null {
     const raw = localStorage.getItem(WORKSPACE_SESSION_KEY)
     if (!raw) return null
     const saved = JSON.parse(raw) as Record<string, unknown>
-    if (saved.version !== 1) return null
+    if (saved.version !== 1 && saved.version !== 2) return null
     const language = saved.language === 'en' ? 'en' : 'ru'
     const apptitleMode: AppTitleMode =
       saved.apptitleMode === 'on' || saved.apptitleMode === 'off' ? saved.apptitleMode : 'auto'
@@ -140,7 +154,7 @@ function readWorkspaceSession(): WorkspaceSession | null {
       ? Math.max(240, Math.min(600, saved.rightWidth))
       : 320
     return {
-      version: 1,
+      version: 2,
       jsonData: saved.jsonData ?? null,
       jsonText: typeof saved.jsonText === 'string' ? saved.jsonText : '',
       language,
@@ -148,9 +162,20 @@ function readWorkspaceSession(): WorkspaceSession | null {
       leftCollapsed: saved.leftCollapsed === true,
       rightCollapsed: saved.rightCollapsed === true,
       rightWidth,
-      collapsedSlides: Array.isArray(saved.collapsedSlides)
-        ? saved.collapsedSlides.filter((item): item is number => Number.isInteger(item) && item >= 0)
+      collapsedNodes: Array.isArray(saved.collapsedNodes)
+        ? saved.collapsedNodes.filter((item): item is string => typeof item === 'string')
         : [],
+      expansionLevel:
+        saved.expansionLevel === 'products' || saved.expansionLevel === 'streams' ||
+        saved.expansionLevel === 'tiers' || saved.expansionLevel === 'features' ||
+        saved.expansionLevel === 'custom'
+          ? saved.expansionLevel
+          : 'features',
+      lastBulkExpansionLevel:
+        saved.lastBulkExpansionLevel === 'products' || saved.lastBulkExpansionLevel === 'streams' ||
+        saved.lastBulkExpansionLevel === 'tiers' || saved.lastBulkExpansionLevel === 'features'
+          ? saved.lastBulkExpansionLevel
+          : 'features',
     }
   } catch {
     localStorage.removeItem(WORKSPACE_SESSION_KEY)
@@ -207,6 +232,74 @@ interface StreamNode {
 interface ProductNode {
   product: string
   streams: StreamNode[]
+}
+
+const isRealNodeName = (name: string) => name.trim() !== '' && name.trim() !== '-'
+const productNodeKey = (product: string) => JSON.stringify(['product', product])
+const streamNodeKey = (product: string, stream: string) => JSON.stringify(['stream', product, stream])
+const tierNodeKey = (product: string, stream: string, tier: string) =>
+  JSON.stringify(['tier', product, stream, tier])
+
+function slideBulletCount(slide: RoadmapSlide): number {
+  return slide.columns.reduce(
+    (total, column) => total + (column.grouped
+      ? column.groups.reduce((groupTotal, group) => groupTotal + group.bullets.length, 0)
+      : column.bullets.length),
+    0,
+  )
+}
+
+function tierBulletCount(tier: TierNode): number {
+  return tier.slides.reduce((total, slide) => total + slideBulletCount(slide), 0)
+}
+
+function collectNodeKeys(products: ProductNode[]): Set<string> {
+  const keys = new Set<string>()
+  for (const product of products) {
+    keys.add(productNodeKey(product.product))
+    for (const stream of product.streams) {
+      if (isRealNodeName(stream.stream)) keys.add(streamNodeKey(product.product, stream.stream))
+      for (const tier of stream.tiers) {
+        if (isRealNodeName(tier.tier)) keys.add(tierNodeKey(product.product, stream.stream, tier.tier))
+      }
+    }
+  }
+  return keys
+}
+
+function collapsedNodesForLevel(products: ProductNode[], level: BulkExpansionLevel): Set<string> {
+  const collapsed = new Set<string>()
+  if (level === 'features') return collapsed
+
+  for (const product of products) {
+    const productKey = productNodeKey(product.product)
+    const realStreams = product.streams.filter((stream) => isRealNodeName(stream.stream))
+    const realTiers = product.streams.flatMap((stream) =>
+      stream.tiers.filter((tier) => isRealNodeName(tier.tier)),
+    )
+
+    if (level === 'products') {
+      collapsed.add(productKey)
+    } else if (level === 'streams') {
+      // Если реальной иерархии нет, прямой Roadmap остаётся закрытым до уровня «Фичи».
+      if (realStreams.length === 0 && realTiers.length === 0) collapsed.add(productKey)
+    }
+
+    for (const stream of realStreams) {
+      const streamKey = streamNodeKey(product.product, stream.stream)
+      const streamHasRealTiers = stream.tiers.some((tier) => isRealNodeName(tier.tier))
+      if (level === 'streams' || (level === 'tiers' && !streamHasRealTiers)) collapsed.add(streamKey)
+    }
+
+    for (const stream of product.streams) {
+      for (const tier of stream.tiers) {
+        if (isRealNodeName(tier.tier)) {
+          collapsed.add(tierNodeKey(product.product, stream.stream, tier.tier))
+        }
+      }
+    }
+  }
+  return collapsed
 }
 
 function groupSlides(slides: Slide[], tree: Tree | null): { top: Slide[]; products: ProductNode[] } {
@@ -295,22 +388,29 @@ function moveItem<T>(arr: T[], from: number, to: number): T[] {
   return next
 }
 
+interface DragBinding {
+  handleProps: {
+    draggable: boolean
+    tabIndex: number
+    'aria-label': string
+    onClick: (e: ReactMouseEvent) => void
+    onDragStart: (e: DragEvent) => void
+    onDragEnd: (e: DragEvent) => void
+    onKeyDown: (e: ReactKeyboardEvent) => void
+  }
+  targetProps: {
+    onDragOver: (e: DragEvent) => void
+    onDragLeave: (e: DragEvent) => void
+    onDrop: (e: DragEvent) => void
+  }
+}
+
 type DropHandlerFactory = (
   parentPath: string,
   index: number,
   siblings: string[],
-) => {
-  draggable: boolean
-  tabIndex: number
-  role: 'button'
-  'aria-label': string
-  onDragStart: (e: DragEvent) => void
-  onDragEnd: (e: DragEvent) => void
-  onDragOver: (e: DragEvent) => void
-  onDragLeave: (e: DragEvent) => void
-  onDrop: (e: DragEvent) => void
-  onKeyDown: (e: ReactKeyboardEvent) => void
-}
+  siblingKeys: string[],
+) => DragBinding
 
 export default function App() {
   const [restoredSession] = useState<WorkspaceSession | null>(() => readWorkspaceSession())
@@ -338,9 +438,16 @@ export default function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(restoredSession?.leftCollapsed ?? false)
   const [rightCollapsed, setRightCollapsed] = useState(restoredSession?.rightCollapsed ?? false)
   const [rightWidth, setRightWidth] = useState(restoredSession?.rightWidth ?? 320)
-  const [collapsedSlides, setCollapsedSlides] = useState<Set<number>>(
-    () => new Set(restoredSession?.collapsedSlides ?? []),
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(
+    () => new Set(restoredSession?.collapsedNodes ?? []),
   )
+  const [expansionLevel, setExpansionLevel] = useState<ExpansionLevel>(
+    restoredSession?.expansionLevel ?? 'features',
+  )
+  const [lastBulkExpansionLevel, setLastBulkExpansionLevel] = useState<BulkExpansionLevel>(
+    restoredSession?.lastBulkExpansionLevel ?? 'features',
+  )
+  const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
   const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '' })
   const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [logoRefresh, setLogoRefresh] = useState(0)
@@ -348,6 +455,10 @@ export default function App() {
   const [tierLogoRefresh, setTierLogoRefresh] = useState(0)
   const saveTimerRef = useRef<number | null>(null)
   const pendingProfileRef = useRef<Profile | null>(null)
+  const knownNodeKeysRef = useRef<Set<string> | null>(null)
+  const pendingReorderFlashRef = useRef<string[] | null>(null)
+  const reorderFlashTimerRef = useRef<number | null>(null)
+  const reorderFlashFrameRef = useRef<number | null>(null)
 
   const newReqIds = useMemo(() => new Set(diff?.diff?.new_requirement_ids ?? []), [diff])
   const changedReqIds = useMemo(() => new Set(diff?.diff?.changed_requirement_ids ?? []), [diff])
@@ -432,13 +543,53 @@ export default function App() {
   }, [jsonData, language, apptitleMode, refreshKey, profileLoaded])
 
   useEffect(() => {
+    if (!result?.plan) return
+    const { products } = groupSlides(result.plan.slides, result.tree)
+    const validKeys = collectNodeKeys(products)
+    if (expansionLevel !== 'custom') {
+      setCollapsedNodes(collapsedNodesForLevel(products, expansionLevel))
+      knownNodeKeysRef.current = validKeys
+      return
+    }
+    setCollapsedNodes((previous) => {
+      const next = new Set([...previous].filter((key) => validKeys.has(key)))
+      const knownKeys = knownNodeKeysRef.current
+      if (knownKeys) {
+        const defaultCollapsed = collapsedNodesForLevel(products, lastBulkExpansionLevel)
+        for (const key of validKeys) {
+          if (!knownKeys.has(key) && defaultCollapsed.has(key)) next.add(key)
+        }
+      }
+      return next
+    })
+    knownNodeKeysRef.current = validKeys
+  }, [result, expansionLevel, lastBulkExpansionLevel])
+
+  useEffect(() => {
+    if (!result?.plan || !pendingReorderFlashRef.current) return
+    const keys = pendingReorderFlashRef.current
+    pendingReorderFlashRef.current = null
+    if (reorderFlashTimerRef.current !== null) window.clearTimeout(reorderFlashTimerRef.current)
+    if (reorderFlashFrameRef.current !== null) window.cancelAnimationFrame(reorderFlashFrameRef.current)
+    setRecentlyReorderedNodes(new Set())
+    reorderFlashFrameRef.current = window.requestAnimationFrame(() => {
+      setRecentlyReorderedNodes(new Set(keys))
+      reorderFlashTimerRef.current = window.setTimeout(() => {
+        setRecentlyReorderedNodes(new Set())
+        reorderFlashTimerRef.current = null
+      }, 1400)
+      reorderFlashFrameRef.current = null
+    })
+  }, [result])
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
 
   useEffect(() => {
     const session: WorkspaceSession = {
-      version: 1,
+      version: 2,
       jsonData,
       jsonText,
       language,
@@ -446,14 +597,16 @@ export default function App() {
       leftCollapsed,
       rightCollapsed,
       rightWidth,
-      collapsedSlides: [...collapsedSlides],
+      collapsedNodes: [...collapsedNodes],
+      expansionLevel,
+      lastBulkExpansionLevel,
     }
     try {
       localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(session))
     } catch {
       setError('Не удалось сохранить рабочую сессию в браузере: возможно, JSON слишком большой.')
     }
-  }, [jsonData, jsonText, language, apptitleMode, leftCollapsed, rightCollapsed, rightWidth, collapsedSlides])
+  }, [jsonData, jsonText, language, apptitleMode, leftCollapsed, rightCollapsed, rightWidth, collapsedNodes, expansionLevel, lastBulkExpansionLevel])
 
   useEffect(() => {
     const compact = window.matchMedia('(max-width: 900px)')
@@ -471,6 +624,8 @@ export default function App() {
   useEffect(
     () => () => {
       if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+      if (reorderFlashTimerRef.current !== null) window.clearTimeout(reorderFlashTimerRef.current)
+      if (reorderFlashFrameRef.current !== null) window.cancelAnimationFrame(reorderFlashFrameRef.current)
     },
     [],
   )
@@ -570,7 +725,10 @@ export default function App() {
     setDiff(null)
     setError(null)
     setNotice(null)
-    setCollapsedSlides(new Set())
+    setCollapsedNodes(new Set())
+    setExpansionLevel('features')
+    setLastBulkExpansionLevel('features')
+    knownNodeKeysRef.current = null
   }
 
   function toggleTheme() {
@@ -633,8 +791,9 @@ export default function App() {
     if (pending) await commitProfile(pending)
   }
 
-  function handleReorder(parentPath: string, names: string[]) {
+  function handleReorder(parentPath: string, names: string[], highlightKeys: string[]) {
     if (!profile) return
+    pendingReorderFlashRef.current = highlightKeys
     persist({
       ...profile,
       ordering: { ...profile.ordering, order: { ...profile.ordering.order, [parentPath]: names } },
@@ -663,19 +822,22 @@ export default function App() {
     persist({ ...profile, under_approval_ids: [...ids].sort((a, b) => a - b) })
   }
 
-  function toggleSlide(i: number) {
-    setCollapsedSlides((prev) => {
+  function toggleNode(key: string) {
+    setExpansionLevel('custom')
+    setCollapsedNodes((prev) => {
       const next = new Set(prev)
-      if (next.has(i)) next.delete(i)
-      else next.add(i)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
 
-  function toggleAllSlides(total: number) {
-    setCollapsedSlides((prev) =>
-      prev.size > 0 ? new Set() : new Set(Array.from({ length: total }, (_, i) => i)),
-    )
+  function applyExpansionLevel(level: BulkExpansionLevel) {
+    setExpansionLevel(level)
+    setLastBulkExpansionLevel(level)
+    if (!result?.plan) return
+    const { products } = groupSlides(result.plan.slides, result.tree)
+    setCollapsedNodes(collapsedNodesForLevel(products, level))
   }
 
   function openStaticSlideModal(position = 'end') {
@@ -767,47 +929,61 @@ export default function App() {
       .catch(() => setError('Не удалось удалить логотип тира.'))
   }
 
-  const dropHandlers: DropHandlerFactory = (parentPath, index, siblings) => ({
-    draggable: true,
-    tabIndex: 0,
-    role: 'button',
-    'aria-label': `${siblings[index]}. Перетаскивание внутри текущей группы. Alt и стрелки меняют порядок.`,
-    onDragStart: (e) => {
-      e.stopPropagation()
-      dragRef.current = { parentPath, index }
-      e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', String(index))
-      e.currentTarget.classList.add('dragging')
+  const dropHandlers: DropHandlerFactory = (parentPath, index, siblings, siblingKeys) => ({
+    handleProps: {
+      draggable: true,
+      tabIndex: 0,
+      'aria-label': `${siblings[index]}. Перетаскивание внутри текущей группы. Alt и стрелки меняют порядок.`,
+      onClick: (e) => e.stopPropagation(),
+      onDragStart: (e) => {
+        e.stopPropagation()
+        dragRef.current = { parentPath, index }
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', String(index))
+        e.currentTarget.closest('.group-header')?.classList.add('dragging')
+      },
+      onDragEnd: (e) => {
+        e.stopPropagation()
+        e.currentTarget.closest('.group-header')?.classList.remove('dragging')
+        dragRef.current = null
+      },
+      onKeyDown: (e) => {
+        if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+        e.preventDefault()
+        e.stopPropagation()
+        const target = e.key === 'ArrowUp' ? index - 1 : index + 1
+        if (target >= 0 && target < siblings.length) {
+          handleReorder(
+            parentPath,
+            moveItem(siblings, index, target),
+            [siblingKeys[index], siblingKeys[target]],
+          )
+        }
+      },
     },
-    onDragEnd: (e) => {
-      e.stopPropagation()
-      e.currentTarget.classList.remove('dragging')
-      dragRef.current = null
-    },
-    onDragOver: (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      e.currentTarget.classList.add('drag-over')
-    },
-    onDragLeave: (e) => {
-      e.stopPropagation()
-      e.currentTarget.classList.remove('drag-over')
-    },
-    onDrop: (e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      e.currentTarget.classList.remove('drag-over')
-      const d = dragRef.current
-      if (!d || d.parentPath !== parentPath || d.index === index) return
-      handleReorder(parentPath, moveItem(siblings, d.index, index))
-      dragRef.current = null
-    },
-    onKeyDown: (e) => {
-      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
-      e.preventDefault()
-      e.stopPropagation()
-      const target = e.key === 'ArrowUp' ? index - 1 : index + 1
-      if (target >= 0 && target < siblings.length) handleReorder(parentPath, moveItem(siblings, index, target))
+    targetProps: {
+      onDragOver: (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.currentTarget.classList.add('drag-over')
+      },
+      onDragLeave: (e) => {
+        e.stopPropagation()
+        e.currentTarget.classList.remove('drag-over')
+      },
+      onDrop: (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.currentTarget.classList.remove('drag-over')
+        const d = dragRef.current
+        if (!d || d.parentPath !== parentPath || d.index === index) return
+        handleReorder(
+          parentPath,
+          moveItem(siblings, d.index, index),
+          [siblingKeys[d.index], siblingKeys[index]],
+        )
+        dragRef.current = null
+      },
     },
   })
 
@@ -965,11 +1141,6 @@ export default function App() {
               </div>
             )}
 
-            <details className="section">
-              <summary>Библиотека шаблонов</summary>
-              <TemplatesPanel />
-            </details>
-
             {diff && diff.diff && (
               <div className="diff-summary">
                 <b>Изменения относительно прошлой загрузки:</b>{' '}
@@ -982,10 +1153,26 @@ export default function App() {
             {result && result.plan && (
               <>
                 <div className="slides-toolbar">
-                  <button onClick={() => toggleAllSlides(result.plan!.slides.length)}>
-                    {collapsedSlides.size > 0 ? 'Раскрыть все блоки' : 'Схлопнуть все блоки'}
-                  </button>
-                  <button onClick={() => openStaticSlideModal()}>＋ Статичный слайд</button>
+                  <div className="expansion-levels" role="group" aria-label="Уровень раскрытия структуры">
+                    <span>Показать:</span>
+                    {([
+                      ['products', 'Продукты', 'Оставить только плашки продуктов'],
+                      ['streams', 'Стримы', 'Раскрыть продукты до ближайшего уровня Stream'],
+                      ['tiers', 'Тиры', 'Раскрыть структуру до Tier, не показывая фичи'],
+                      ['features', 'Фичи', 'Полностью раскрыть все Roadmap'],
+                    ] as const).map(([level, label, title]) => (
+                      <button
+                        key={level}
+                        className={expansionLevel === level ? 'active' : ''}
+                        onClick={() => applyExpansionLevel(level)}
+                        aria-pressed={expansionLevel === level}
+                        title={title}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    {expansionLevel === 'custom' && <span className="custom-level">Выборочно</span>}
+                  </div>
                 </div>
                 <div className="slides">
                   <GroupedSlides
@@ -994,8 +1181,9 @@ export default function App() {
                     dropHandlers={dropHandlers}
                     newReqIds={newReqIds}
                     changedReqIds={changedReqIds}
-                    collapsedSlides={collapsedSlides}
-                    toggleSlide={toggleSlide}
+                    collapsedNodes={collapsedNodes}
+                    toggleNode={toggleNode}
+                    recentlyReorderedNodes={recentlyReorderedNodes}
                     productInheritanceFlags={profile?.ordering.product_inheritance_flags ?? {}}
                     onToggleInheritance={handleToggleInheritance}
                     newTierPaths={newTierPaths}
@@ -1025,6 +1213,21 @@ export default function App() {
             window.addEventListener('mouseup', onUp)
           }}
         />
+        <details className="section">
+          <summary>Библиотека шаблонов</summary>
+          <TemplatesPanel />
+        </details>
+
+        {profile && (
+          <details className="section">
+            <summary>Статичные слайды</summary>
+            <button className="section-primary-action" onClick={() => openStaticSlideModal()}>
+              ＋ Добавить статичный слайд
+            </button>
+            <StaticSlidesList slides={profile.static_slides ?? []} onDelete={handleDeleteStaticSlide} />
+          </details>
+        )}
+
         {profile && productNames.length > 0 && (
           <details className="section">
             <summary>Языки продуктов</summary>
@@ -1057,13 +1260,6 @@ export default function App() {
               onUpload={handleUploadTierLogo}
               onDelete={handleDeleteTierLogo}
             />
-          </details>
-        )}
-
-        {profile && (
-          <details className="section">
-            <summary>Статичные слайды</summary>
-            <StaticSlidesList slides={profile.static_slides ?? []} onDelete={handleDeleteStaticSlide} />
           </details>
         )}
 
@@ -1541,8 +1737,9 @@ function GroupedSlides({
   dropHandlers,
   newReqIds,
   changedReqIds,
-  collapsedSlides,
-  toggleSlide,
+  collapsedNodes,
+  toggleNode,
+  recentlyReorderedNodes,
   productInheritanceFlags,
   onToggleInheritance,
   newTierPaths,
@@ -1553,8 +1750,9 @@ function GroupedSlides({
   dropHandlers: DropHandlerFactory
   newReqIds: Set<number>
   changedReqIds: Set<number>
-  collapsedSlides: Set<number>
-  toggleSlide: (index: number) => void
+  collapsedNodes: Set<string>
+  toggleNode: (key: string) => void
+  recentlyReorderedNodes: Set<string>
   productInheritanceFlags: Record<string, boolean>
   onToggleInheritance: (productName: string, flag: boolean) => void
   newTierPaths: Set<string>
@@ -1570,85 +1768,203 @@ function GroupedSlides({
     return null
   }
 
-  const card = (slide: Slide, index: number, collapsible: boolean) => (
+  const card = (slide: Slide, index: number) => (
     <SlideCard
       key={index}
       slide={slide}
       slideNumber={index + 1}
       newReqIds={newReqIds}
       changedReqIds={changedReqIds}
-      expanded={collapsible ? !collapsedSlides.has(index) : true}
-      onToggle={collapsible ? () => toggleSlide(index) : () => {}}
     />
   )
 
+  const countLabel = (count: number, one: string, few: string, many: string) => {
+    const mod100 = count % 100
+    const mod10 = count % 10
+    const word = mod100 >= 11 && mod100 <= 14 ? many : mod10 === 1 ? one : mod10 >= 2 && mod10 <= 4 ? few : many
+    return `${count} ${word}`
+  }
+
+  const slidesCount = (tiers: TierNode[]) => tiers.reduce((total, tier) => total + tier.slides.length, 0)
+  const featuresCount = (tiers: TierNode[]) => tiers.reduce((total, tier) => total + tierBulletCount(tier), 0)
+
+  const renderTier = (productName: string, streamName: string, tier: TierNode, tierIndex: number, tierNames: string[]) => {
+    if (!isRealNodeName(tier.tier)) {
+      return (
+        <div className="direct-roadmaps" key={`direct:${streamName}:${tierIndex}`}>
+          {tier.slides.map((slide) => card(slide, slides.indexOf(slide)))}
+        </div>
+      )
+    }
+    const key = tierNodeKey(productName, streamName, tier.tier)
+    const expanded = !collapsedNodes.has(key)
+    const drag = dropHandlers(
+      `${productName} > ${streamName}`,
+      tierIndex,
+      tierNames,
+      tierNames.map((name) => tierNodeKey(productName, streamName, name)),
+    )
+    const summaryParts = [countLabel(tierBulletCount(tier), 'фича', 'фичи', 'фич')]
+    if (tier.slides.length > 1) summaryParts.unshift(countLabel(tier.slides.length, 'слайд', 'слайда', 'слайдов'))
+    return (
+      <div key={tier.tier} className="group">
+        <HierarchyHeader
+          className="tier-h"
+          badge="TIER"
+          title={tier.tier}
+          summary={summaryParts.join(' · ')}
+          expanded={expanded}
+          onToggle={() => toggleNode(key)}
+          drag={drag}
+          highlighted={recentlyReorderedNodes.has(key)}
+        >
+          {newTierPaths.has(`${productName} > ${streamName} > ${tier.tier}`) && (
+            <span className="tree-badge">новое</span>
+          )}
+        </HierarchyHeader>
+        {expanded && tier.slides.map((slide) => card(slide, slides.indexOf(slide)))}
+      </div>
+    )
+  }
+
+  const renderStream = (productName: string, stream: StreamNode, streamIndex: number, streamNames: string[]) => {
+    const realTiers = stream.tiers.filter((tier) => isRealNodeName(tier.tier))
+    const tierNames = realTiers.map((tier) => tier.tier)
+    const children = () => stream.tiers.map((tier) =>
+      renderTier(productName, stream.stream, tier, Math.max(0, tierNames.indexOf(tier.tier)), tierNames),
+    )
+
+    if (!isRealNodeName(stream.stream)) return <div className="implicit-group" key={`implicit:${streamIndex}`}>{children()}</div>
+
+    const key = streamNodeKey(productName, stream.stream)
+    const expanded = !collapsedNodes.has(key)
+    const drag = dropHandlers(
+      productName,
+      streamIndex,
+      streamNames,
+      streamNames.map((name) => streamNodeKey(productName, name)),
+    )
+    const streamSlides = slidesCount(stream.tiers)
+    const summary = realTiers.length
+      ? `${countLabel(realTiers.length, 'тир', 'тира', 'тиров')} · ${countLabel(streamSlides, 'слайд', 'слайда', 'слайдов')}`
+      : `${countLabel(streamSlides, 'слайд', 'слайда', 'слайдов')} · ${countLabel(featuresCount(stream.tiers), 'фича', 'фичи', 'фич')}`
+    return (
+      <div key={stream.stream} className="group">
+        <HierarchyHeader
+          className="stream-h"
+          badge="STREAM"
+          title={stream.stream}
+          summary={summary}
+          expanded={expanded}
+          onToggle={() => toggleNode(key)}
+          drag={drag}
+          highlighted={recentlyReorderedNodes.has(key)}
+        />
+        {expanded && children()}
+      </div>
+    )
+  }
+
   return (
     <div className="grouped">
-      {top.filter(isTitle).map((slide) => card(slide, slides.indexOf(slide), false))}
-      {products.map((product) => (
-        <div key={product.product} className="group">
-          <div
-            {...dropHandlers('', products.indexOf(product), products.map((item) => item.product))}
-            className="group-header product-h"
-          >
-            <span className="badge">PRODUCT</span>
-            <span className="group-title">{product.product}</span>
-            {langLabel(product.product) && <span className="lang-badge">{langLabel(product.product)}</span>}
-            <label
-              className="inheritance-check"
-              title="Во всех Stream продукта убирает фичи, уже показанные в предыдущих Tier, и добавляет заметку о наследовании"
+      {top.filter(isTitle).map((slide) => card(slide, slides.indexOf(slide)))}
+      {products.map((product, productIndex) => {
+        const key = productNodeKey(product.product)
+        const expanded = !collapsedNodes.has(key)
+        const realStreams = product.streams.filter((stream) => isRealNodeName(stream.stream))
+        const realTiers = product.streams.flatMap((stream) => stream.tiers.filter((tier) => isRealNodeName(tier.tier)))
+        const hasRealHierarchy = realStreams.length > 0 || realTiers.length > 0
+        const streamNames = realStreams.map((stream) => stream.stream)
+        const productSlides = product.streams.reduce((total, stream) => total + slidesCount(stream.tiers), 0)
+        const summaryParts = []
+        if (realStreams.length) summaryParts.push(countLabel(realStreams.length, 'стрим', 'стрима', 'стримов'))
+        if (realTiers.length) summaryParts.push(countLabel(realTiers.length, 'тир', 'тира', 'тиров'))
+        summaryParts.push(countLabel(productSlides, 'слайд', 'слайда', 'слайдов'))
+        const productNamesInOrder = products.map((item) => item.product)
+        const drag = dropHandlers(
+          '',
+          productIndex,
+          productNamesInOrder,
+          productNamesInOrder.map(productNodeKey),
+        )
+        return (
+          <div key={product.product} className="group">
+            <HierarchyHeader
+              className="product-h"
+              badge="PRODUCT"
+              title={product.product}
+              summary={summaryParts.join(' · ')}
+              expanded={expanded}
+              onToggle={() => toggleNode(key)}
+              drag={drag}
+              highlighted={recentlyReorderedNodes.has(key)}
             >
-              <input
-                type="checkbox"
-                checked={!!productInheritanceFlags[product.product]}
-                onChange={(event) => onToggleInheritance(product.product, event.target.checked)}
-              />
-              <span className="inheritance-check-text">
-                Наследование
-                <small>для всех Stream продукта</small>
-              </span>
-            </label>
-          </div>
-          {product.streams.map((stream) => (
-            <div key={stream.stream} className="group">
-              {stream.stream !== '-' && (
-                <div
-                  {...dropHandlers(
-                    product.product,
-                    product.streams.indexOf(stream),
-                    product.streams.map((item) => item.stream),
-                  )}
-                  className="group-header stream-h"
+              {langLabel(product.product) && <span className="lang-badge">{langLabel(product.product)}</span>}
+              {hasRealHierarchy && (
+                <label
+                  className="inheritance-check"
+                  title="Во всех Stream продукта убирает фичи, уже показанные в предыдущих Tier, и добавляет заметку о наследовании"
                 >
-                  <span className="badge">STREAM</span>
-                  <span className="group-title">{stream.stream}</span>
-                </div>
+                  <input
+                    type="checkbox"
+                    checked={!!productInheritanceFlags[product.product]}
+                    onChange={(event) => onToggleInheritance(product.product, event.target.checked)}
+                  />
+                  <span className="inheritance-check-text">
+                    Наследование
+                    <small>для всех Stream продукта</small>
+                  </span>
+                </label>
               )}
-              {stream.tiers.map((tier, tierIndex) => (
-                <div key={tier.tier} className="group">
-                  <div
-                    {...dropHandlers(
-                      `${product.product} > ${stream.stream}`,
-                      tierIndex,
-                      stream.tiers.map((item) => item.tier),
-                    )}
-                    className="group-header tier-h"
-                  >
-                    <span className="badge">TIER</span>
-                    <span className="group-title">{tier.tier}</span>
-                    {newTierPaths.has(`${product.product} > ${stream.stream} > ${tier.tier}`) && (
-                      <span className="tree-badge">новое</span>
-                    )}
-                  </div>
-                  {tier.slides.map((slide) => card(slide, slides.indexOf(slide), true))}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      ))}
-      {top.filter(isStatic).map((slide) => card(slide, slides.indexOf(slide), false))}
-      {top.filter(isThankYou).map((slide) => card(slide, slides.indexOf(slide), false))}
+            </HierarchyHeader>
+            {expanded && product.streams.map((stream) =>
+              renderStream(
+                product.product,
+                stream,
+                Math.max(0, streamNames.indexOf(stream.stream)),
+                streamNames,
+              ),
+            )}
+          </div>
+        )
+      })}
+      {top.filter(isStatic).map((slide) => card(slide, slides.indexOf(slide)))}
+      {top.filter(isThankYou).map((slide) => card(slide, slides.indexOf(slide)))}
+    </div>
+  )
+}
+
+function HierarchyHeader({
+  className,
+  badge,
+  title,
+  summary,
+  expanded,
+  onToggle,
+  drag,
+  highlighted,
+  children,
+}: {
+  className: string
+  badge: string
+  title: string
+  summary: string
+  expanded: boolean
+  onToggle: () => void
+  drag: DragBinding
+  highlighted: boolean
+  children?: ReactNode
+}) {
+  return (
+    <div {...drag.targetProps} className={`group-header ${className}${highlighted ? ' reorder-flash' : ''}`}>
+      <button type="button" className="drag-handle" title="Перетащить или Alt + ↑/↓" {...drag.handleProps}>⠿</button>
+      <button type="button" className="group-toggle" onClick={onToggle} aria-expanded={expanded}>
+        <span className="node-chevron" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+        <span className="badge">{badge}</span>
+        <span className="group-title">{title}</span>
+        <span className="group-summary">{summary}</span>
+      </button>
+      {children}
     </div>
   )
 }
@@ -1735,15 +2051,11 @@ function SlideCard({
   slideNumber,
   newReqIds,
   changedReqIds,
-  expanded,
-  onToggle,
 }: {
   slide: Slide
   slideNumber?: number
   newReqIds: Set<number>
   changedReqIds: Set<number>
-  expanded: boolean
-  onToggle: () => void
 }) {
   if (isTitle(slide)) {
     return (
@@ -1789,8 +2101,6 @@ function SlideCard({
       slideNumber={slideNumber}
       newReqIds={newReqIds}
       changedReqIds={changedReqIds}
-      expanded={expanded}
-      onToggle={onToggle}
     />
   )
 }
@@ -1800,32 +2110,25 @@ function RoadmapCard({
   slideNumber,
   newReqIds,
   changedReqIds,
-  expanded,
-  onToggle,
 }: {
   slide: RoadmapSlide
   slideNumber?: number
   newReqIds: Set<number>
   changedReqIds: Set<number>
-  expanded: boolean
-  onToggle: () => void
 }) {
   return (
-    <div className="card roadmap" onClick={onToggle}>
+    <div className="card roadmap">
       <div className="roadmap-head">
         {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">{slide.continuation ? 'Roadmap (cont.)' : 'Roadmap'}</span>
-        <span className="collapse-hint">{expanded ? '▾' : '▸'}</span>
       </div>
-      {expanded && slide.inheritance_note && <div className="inheritance">{slide.inheritance_note}</div>}
-      {expanded && (
-        <div className="columns">
-          {slide.columns.map((col, i) => (
-            <ColumnView key={i} col={col} newReqIds={newReqIds} changedReqIds={changedReqIds} />
-          ))}
-        </div>
-      )}
-      {expanded && slide.footnote && <div className="footnote">{slide.footnote}</div>}
+      {slide.inheritance_note && <div className="inheritance">{slide.inheritance_note}</div>}
+      <div className="columns">
+        {slide.columns.map((col, i) => (
+          <ColumnView key={i} col={col} newReqIds={newReqIds} changedReqIds={changedReqIds} />
+        ))}
+      </div>
+      {slide.footnote && <div className="footnote">{slide.footnote}</div>}
     </div>
   )
 }
