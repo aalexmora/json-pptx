@@ -200,8 +200,8 @@ def test_inherits_slide_size(load_fixture, synthetic_template_path):
     assert prs.slide_height == template.slide_height
 
 
-def test_header_shown_only_on_first_subslot(load_fixture, tmp_path, monkeypatch):
-    """Заголовок квартала — только в первом под-слоте (у остальных шапка пустая)."""
+def test_header_shown_on_every_subslot(load_fixture, tmp_path, monkeypatch):
+    """Каждая подколонка переполненного квартала получает свой col_header."""
     tpl_path = _template_with_named_shapes(tmp_path, "hdr_template.pptx", [])
     monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
     data = [{
@@ -218,9 +218,8 @@ def test_header_shown_only_on_first_subslot(load_fixture, tmp_path, monkeypatch)
         for s in prs.slides for sh in s.shapes
         if sh.name == "col_header"
     ]
-    # 2 слота одного квартала → заголовок ровно один раз, второй слот пустой
-    assert headers.count("Q1 2025") == 1
-    assert all(h == "" for h in headers if h != "Q1 2025")
+    # 2 слота одного квартала → квартал указан в обеих шапках.
+    assert headers == ["Q1 2025", "Q1 2025"]
 
 
 def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_template_path):

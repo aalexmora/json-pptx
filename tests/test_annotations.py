@@ -220,6 +220,36 @@ def test_product_inheritance_deduplicates_across_all_product_streams():
     assert "S2 / Base" in senior_by_stream["S2"].inheritance_note
 
 
+def test_product_inheritance_never_deduplicates_next_product():
+    """История Requirement.Id и список предыдущих тиров сбрасываются на границе Product."""
+    def make_product(product_name, requirement_text):
+        return {
+            "Product": product_name,
+            "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+                "Id": 1,
+                "AppTitle": "A",
+                "TrDate": "15.01.2025 21:00:00",
+                "Requirements": [{
+                    "Id": 1001,
+                    "Kbr": "Yes",
+                    "MarketingTitle": requirement_text,
+                }],
+            }]}]}],
+        }
+
+    data = [
+        make_product("Kaspersky Next", "Next feature"),
+        make_product("Another Product", "Another product feature"),
+    ]
+    ordering.save_product_inheritance_flag("Kaspersky Next", True)
+
+    slides = _roadmap_slides(build_slide_plan(normalize_roadmap(data, language="ru"), {}))
+    another = next(slide for slide in slides if slide.product == "Another Product")
+
+    assert _all_bullet_texts(another) == ["Another product feature"]
+    assert another.inheritance_note == ""
+
+
 def test_product_inheritance_flag_is_exposed_on_product_tree_node(load_fixture):
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
     model = normalize_roadmap(load_fixture("tier_hierarchy_next.json"), language="en")

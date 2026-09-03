@@ -16,15 +16,36 @@ from __future__ import annotations
 import re
 import unicodedata
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
+
+from cairosvg import svg2png
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 IMG_DIR = PROJECT_ROOT / "data" / "img"
 LOGO_DIR = IMG_DIR / "product" / "logo"          # продукт (обратная совместимость)
 TIER_LOGO_DIR = IMG_DIR / "tier" / "logo"        # тир
 
-# Расширения, которые считаем изображением лого (допустимы для вставки в pptx).
+# Форматы, которые python-pptx может вставить напрямую. Загруженный SVG сначала
+# безопасно растрируется в PNG, поэтому на диске хранятся только эти форматы.
 LOGO_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+UPLOAD_EXTS = LOGO_EXTS + (".svg",)
+
+
+def prepare_logo_upload(data: bytes, ext: str) -> Tuple[bytes, str]:
+    """Проверяет формат и преобразует SVG в PNG для вставки через python-pptx."""
+    normalized_ext = "." + ext.lstrip(".").lower()
+    if normalized_ext not in UPLOAD_EXTS:
+        allowed = ", ".join(UPLOAD_EXTS)
+        raise ValueError(f"Неподдерживаемый формат логотипа. Допустимы: {allowed}")
+    if not data:
+        raise ValueError("Файл логотипа пуст")
+    if normalized_ext != ".svg":
+        return data, normalized_ext.lstrip(".")
+    try:
+        png = svg2png(bytestring=data, output_width=1600, unsafe=False)
+    except Exception as exc:
+        raise ValueError("Не удалось прочитать SVG-файл") from exc
+    return png, "png"
 
 
 def slugify(name: str) -> str:

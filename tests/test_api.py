@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app import app
+from roadmap_generator import product_logos
 
 
 def _plan(client, data, language="ru", plugin_settings=None):
@@ -104,3 +105,36 @@ def test_diff_endpoint():
         assert r.status_code == 200
         body = r.json()
         assert body["diff"]["changed_requirement_ids"] == [10]
+
+
+def test_svg_product_logo_upload_is_converted_to_png(tmp_path, monkeypatch):
+    monkeypatch.setattr(product_logos, "LOGO_DIR", tmp_path / "product-logos")
+    svg = b'''<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">
+      <rect width="80" height="40" fill="#006dff"/>
+    </svg>'''
+
+    with TestClient(app) as c:
+        response = c.post(
+            "/api/product-logos/upload",
+            data={"product_name": "Kaspersky Next"},
+            files={"file": ("next.svg", svg, "image/svg+xml")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["filename"] == "kaspersky-next.png"
+    saved = tmp_path / "product-logos" / "kaspersky-next.png"
+    assert saved.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_logo_upload_rejects_unsupported_format(tmp_path, monkeypatch):
+    monkeypatch.setattr(product_logos, "LOGO_DIR", tmp_path / "product-logos")
+
+    with TestClient(app) as c:
+        response = c.post(
+            "/api/product-logos/upload",
+            data={"product_name": "Kaspersky Next"},
+            files={"file": ("next.gif", b"GIF89a", "image/gif")},
+        )
+
+    assert response.status_code == 422
+    assert "Неподдерживаемый формат" in response.json()["detail"]

@@ -2030,7 +2030,7 @@ function ProductLogosPanel({
                 Загрузить
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
                   onChange={(e) => {
                     const f = e.target.files?.[0]
                     if (f) onUpload(name, f)

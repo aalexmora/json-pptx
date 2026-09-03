@@ -144,8 +144,11 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
         product = products_by_name[pname]
         product_inheritance = get_product_inheritance_flag(pname)
         deck_items: List[Union[DividerSlide, RoadmapSlide]] = []
-        seen_req_ids: set = set()
-        previous_tiers: List[str] = []
+        # Эти две истории намеренно создаются заново внутри цикла Product:
+        # наследование действует между Stream/Tier одного продукта и никогда
+        # не пересекает границу следующего продукта в колоде.
+        product_seen_req_ids: set[int] = set()
+        product_previous_tiers: List[str] = []
 
         for sname in get_effective_order(pname, [s.name for s in product.streams]):
             stream = next(s for s in product.streams if s.name == sname)
@@ -154,17 +157,17 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
             ordered_tiers = get_effective_order(f"{pname}{SEPARATOR}{sname}", tier_names)
             for tname in ordered_tiers:
                 tier = next(t for t in stream.tiers if t.name == tname)
-                inherit = bool(previous_tiers) and product_inheritance
+                inherit = bool(product_previous_tiers) and product_inheritance
                 inheritance_note = None
                 if inherit:
-                    previous = "\n".join(f"• {tier_name}" for tier_name in previous_tiers)
+                    previous = "\n".join(f"• {tier_name}" for tier_name in product_previous_tiers)
                     inheritance_note = f"{get_service_string('inheritance_prefix', model.language)}\n{previous}"
                 slides, shown_ids = _build_tier_slides(
                     model.language, pname, sname, tname, tier, filters, groupers, plugin_settings,
-                    inheritance_note, exclude_req_ids=(seen_req_ids if inherit else None),
+                    inheritance_note, exclude_req_ids=(product_seen_req_ids if inherit else None),
                 )
-                seen_req_ids.update(shown_ids)
-                previous_tiers.append(f"{sname} / {tname}")
+                product_seen_req_ids.update(shown_ids)
+                product_previous_tiers.append(f"{sname} / {tname}")
                 stream_slides.extend(slides)
             if stream_slides:
                 if sname != "-":

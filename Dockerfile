@@ -26,7 +26,10 @@ WORKDIR /app
 
 # Рантайм-зависимости (без dev: pytest/httpx/sqlmodel не попадают в образ)
 COPY requirements.txt ./
-RUN pip install -r requirements.txt
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes libcairo2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install -r requirements.txt
 
 # Код приложения
 COPY app.py ./

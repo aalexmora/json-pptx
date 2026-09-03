@@ -194,7 +194,11 @@ async def upload_static_slide_pptx(file: UploadFile = File(...)):
 async def upload_product_logo(product_name: str = Form(...), file: UploadFile = File(...)):
     data = await file.read()
     ext = Path(file.filename or "logo.png").suffix.lstrip(".").lower() or "png"
-    filename = product_logos.save_logo(product_name, data, ext)
+    try:
+        prepared, stored_ext = product_logos.prepare_logo_upload(data, ext)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    filename = product_logos.save_logo(product_name, prepared, stored_ext)
     return {"filename": filename, "url": product_logos.logo_url(product_name)}
 
 
@@ -221,7 +225,11 @@ def delete_product_logo(product_name: str):
 async def upload_tier_logo(tier_name: str = Form(...), file: UploadFile = File(...)):
     data = await file.read()
     ext = Path(file.filename or "logo.png").suffix.lstrip(".").lower() or "png"
-    filename = product_logos.save_tier_logo(tier_name, data, ext)
+    try:
+        prepared, stored_ext = product_logos.prepare_logo_upload(data, ext)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    filename = product_logos.save_tier_logo(tier_name, prepared, stored_ext)
     return {"filename": filename, "url": product_logos.tier_logo_url(tier_name)}
 
 

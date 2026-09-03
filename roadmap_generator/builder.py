@@ -396,7 +396,6 @@ def _render_roadmap_from_template(
     slot_width = Inches(slot_width_in)
     _position_column_separators(all_by_name, column_count, w)
 
-    prev_quarter = None
     for i, col in enumerate(slide.columns):
         if i == 0:
             header, bullets = header_proto, bullets_proto
@@ -408,13 +407,10 @@ def _render_roadmap_from_template(
         header.width = slot_width
         bullets.left = x
         bullets.width = slot_width
-        # Заголовок квартала — только в первом под-слоте (у остальных шапка пустая).
-        if i == 0 or col.quarter != prev_quarter:
-            header_text = col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
-            _set_text(header, header_text)
-        else:
-            _clear(header)
-        prev_quarter = col.quarter
+        # Каждая колонка, включая подколонки переполненного квартала, должна
+        # оставаться самодостаточной: квартал заполняется в каждом col_header.
+        header_text = col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
+        _set_text(header, header_text)
         _fill_bullets_shape(bullets, col)
 
     inheritance_shapes = _text_shapes_for_role(text_shapes_by_name, "tier_inheritance_note")
