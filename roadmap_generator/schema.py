@@ -21,6 +21,14 @@ DATE_FORMATS = (
 )
 Language = Literal["ru", "en"]
 
+_VISIBILITY_LANGUAGES = {
+    "only ru": frozenset({"ru"}),
+    "ru": frozenset({"ru"}),
+    "only eng": frozenset({"en"}),
+    "eng": frozenset({"en"}),
+    "ru and eng": frozenset({"ru", "en"}),
+}
+
 
 def _parse_date(value) -> datetime:
     """Парсит `TrDate`, перебирая известные форматы; ValueError — если ни один не подошёл."""
@@ -102,11 +110,24 @@ def _normalize_name(value) -> str:
     return s
 
 
+def _visibility_languages(value) -> Optional[frozenset[str]]:
+    """Возвращает языки Visibility; None означает неизвестное значение.
+
+    Отсутствующее/null поле по согласованному fallback разрешает обе версии.
+    """
+    if value is None:
+        return frozenset({"ru", "en"})
+    if not isinstance(value, str):
+        return None
+    normalized = re.sub(r"\s+", " ", value).strip().casefold()
+    return _VISIBILITY_LANGUAGES.get(normalized)
+
+
 def validate_roadmap(data) -> List[str]:
     """Собирает все ошибки валидации за один проход.
 
     Возвращает список строк-описаний ошибок; пустой список = данные валидны.
-    Отсутствие опциональных полей (`Kbr`, `MarketingTitleEn`) ошибкой НЕ является —
+    Отсутствие опциональных полей (`Kbr`, `MarketingTitleEn`, `Visibility`) ошибкой НЕ является —
     это мягкий fallback + warning в `normalize_roadmap`.
     """
     errors: List[str] = []
@@ -207,7 +228,8 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     """Разворачивает сырой JSON в типизированную `RoadmapModel`.
 
     - вычисляет календарный квартал для каждого Release из `TrDate`;
-    - при `language == "en"` отбрасывает Requirements с `MarketingTitleEn == null`;
+    - фильтрует Requirements по `Visibility` для выбранного языка;
+    - при `language == "en"` дополнительно отбрасывает Requirements без `MarketingTitleEn`;
     - `Kbr == "Yes"` — признак «Subject to Change» (S2C): помечает фичу как под вопросом.
 
     Плагины здесь НЕ применяются.
@@ -218,6 +240,7 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     seen_req_ids: set[int] = set()
     dup_releases = 0
     dup_reqs = 0
+    unknown_visibility: dict[str, int] = {}
 
     for raw_product in data:
         streams: List[Stream] = []
@@ -244,8 +267,19 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                         # KBR == "Yes" → фича под вопросом (Subject to Change, S2C)
                         is_subject_to_change = (kbr == "Yes")
 
+                        visibility = raw_req.get("Visibility")
+                        visible_in = _visibility_languages(visibility)
+                        if visible_in is None:
+                            label = repr(visibility)
+                            unknown_visibility[label] = unknown_visibility.get(label, 0) + 1
+                            continue
+                        if language not in visible_in:
+                            continue
+
                         marketing_title_en = raw_req.get("MarketingTitleEn")
-                        if language == "en" and (marketing_title_en is None or marketing_title_en == ""):
+                        if language == "en" and (
+                            not isinstance(marketing_title_en, str) or not marketing_title_en.strip()
+                        ):
                             continue
 
                         requirements.append(Requirement(
@@ -278,6 +312,13 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
         warnings.append(
             f"{dup_releases} релизов и {dup_reqs} требований с неуникальными Id — "
             f"общие сущности повторяются в разных Streams/Tiers, принято как есть"
+        )
+    if unknown_visibility:
+        values = ", ".join(
+            f"{value}: {count}" for value, count in sorted(unknown_visibility.items())
+        )
+        warnings.append(
+            f"Неизвестные значения Visibility ({values}) — требования скрыты"
         )
 
     return RoadmapModel(language=language, products=products, warnings=warnings)

@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.4.3
+> **Версия:** 1.8.0
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
@@ -79,7 +79,7 @@ docker compose up -d --build
 ## Тесты
 
 ```bash
-pytest -q          # backend (122 теста)
+pytest -q          # backend (130 тестов)
 cd frontend && npm run typecheck && npm run build
 ```
 

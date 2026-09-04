@@ -287,6 +287,56 @@ def test_normalize_ru_keeps_null_marketing_title_en(load_fixture):
     assert any(r.marketing_title_en is None for r in reqs)
 
 
+def _visibility_data() -> list:
+    requirements = [
+        {"Id": 1, "Kbr": "Yes", "MarketingTitle": "RU only", "MarketingTitleEn": "RU only EN", "Visibility": "Only RU"},
+        {"Id": 2, "Kbr": "Yes", "MarketingTitle": "RU alias", "MarketingTitleEn": "RU alias EN", "Visibility": "RU"},
+        {"Id": 3, "Kbr": "Yes", "MarketingTitle": "EN only RU", "MarketingTitleEn": "EN only", "Visibility": "Only ENG"},
+        {"Id": 4, "Kbr": "Yes", "MarketingTitle": "ENG alias RU", "MarketingTitleEn": "ENG alias", "Visibility": "ENG"},
+        {"Id": 5, "Kbr": "Yes", "MarketingTitle": "Both RU", "MarketingTitleEn": "Both EN", "Visibility": "RU and ENG"},
+        {"Id": 6, "Kbr": "Yes", "MarketingTitle": "Null RU", "MarketingTitleEn": "Null EN", "Visibility": None},
+        {"Id": 7, "Kbr": "Yes", "MarketingTitle": "Missing visibility RU", "MarketingTitleEn": "Missing visibility EN"},
+        {"Id": 8, "Kbr": "Yes", "MarketingTitle": "No EN title", "MarketingTitleEn": None, "Visibility": "RU and ENG"},
+    ]
+    return [{
+        "Product": "P",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1,
+            "AppTitle": "A",
+            "TrDate": "15.01.2025 21:00:00",
+            "Requirements": requirements,
+        }]}]}],
+    }]
+
+
+def test_visibility_filters_requirements_for_ru_and_en():
+    ru = normalize_roadmap(_visibility_data(), language="ru")
+    en = normalize_roadmap(_visibility_data(), language="en")
+
+    ru_ids = {req.id for req in ru.products[0].streams[0].tiers[0].releases[0].requirements}
+    en_ids = {req.id for req in en.products[0].streams[0].tiers[0].releases[0].requirements}
+
+    assert ru_ids == {1, 2, 5, 6, 7, 8}
+    assert en_ids == {3, 4, 5, 6, 7}
+
+
+def test_unknown_visibility_is_hidden_with_warning():
+    data = _visibility_data()
+    data[0]["Streams"][0]["Tiers"][0]["Releases"][0]["Requirements"].append({
+        "Id": 9,
+        "Kbr": "Yes",
+        "MarketingTitle": "Unknown RU",
+        "MarketingTitleEn": "Unknown EN",
+        "Visibility": "Internal only",
+    })
+
+    model = normalize_roadmap(data, language="ru")
+    reqs = model.products[0].streams[0].tiers[0].releases[0].requirements
+
+    assert 9 not in {req.id for req in reqs}
+    assert any("'Internal only': 1" in warning for warning in model.warnings)
+
+
 # ---------------------------------------------------------------------------
 # Нормализация: мягкие fallback'и опциональных полей
 # ---------------------------------------------------------------------------
