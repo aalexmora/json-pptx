@@ -6,11 +6,11 @@ import io
 import pytest
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.package import Part
 from pptx.oxml.ns import qn
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 from roadmap_generator import ordering
 from roadmap_generator.builder import build_presentation
@@ -111,9 +111,8 @@ def test_continuation_keeps_fixed_four_slot_geometry(load_fixture, synthetic_tem
     continuation_bodies = [
         shape for shape in roadmap_slides[1].shapes if shape.name == "col_bullets"
     ]
-    fixed_width = (prs.slide_width.inches - 1.0) / 4
     assert len(continuation_bodies) == 1
-    assert continuation_bodies[0].width.inches == pytest.approx(fixed_width)
+    assert continuation_bodies[0].width.inches == pytest.approx(2.9)
 
 
 def test_dividers_render_titles(load_fixture, synthetic_template_path):
@@ -146,25 +145,25 @@ def test_group_headers_rendered(load_fixture, synthetic_template_path):
 
 
 @pytest.mark.parametrize("quarter_count", [1, 2, 3, 4])
-def test_sparse_single_slide_columns_fill_available_width(quarter_count, synthetic_template_path):
-    """1/2/3/4 простые колонки занимают 100%/50%/⅓/25% ширины таблицы."""
+def test_sparse_single_slide_columns_keep_template_geometry(quarter_count, synthetic_template_path):
+    """Размер шейпа берётся из шаблона, а его слот зависит от числа колонок."""
     plan = build_slide_plan(normalize_roadmap(_sparse_quarters_data(quarter_count), language="ru"), {})
     prs = build_presentation(plan)
     slide = _roadmap_slide(prs)
     assert slide is not None
 
     bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
-    expected_width = (prs.slide_width.inches - 1.0) / quarter_count
+    slot_width = (prs.slide_width.inches - 1.0) / quarter_count
     assert len(bodies) == quarter_count
-    assert [shape.width.inches for shape in bodies] == pytest.approx([expected_width] * quarter_count)
+    assert [shape.width.inches for shape in bodies] == pytest.approx([2.9] * quarter_count)
     assert [shape.left.inches for shape in bodies] == pytest.approx([
-        0.5 + index * expected_width for index in range(quarter_count)
+        0.5 + index * slot_width for index in range(quarter_count)
     ])
 
     separator_names = get_layout_shape_names("separators")
     separators = {shape.name: shape for shape in slide.shapes if shape.name in separator_names}
     assert [separators[name].left.inches for name in separator_names[:quarter_count - 1]] == pytest.approx([
-        0.5 + index * expected_width for index in range(1, quarter_count)
+        0.5 + index * slot_width for index in range(1, quarter_count)
     ])
     assert all(
         separators[name].left.inches > prs.slide_width.inches
@@ -186,8 +185,7 @@ def test_single_quarter_60_features(load_fixture, synthetic_template_path):
     prs = build_presentation(plan)
     slide = _roadmap_slide(prs)
     bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
-    fixed_width = (prs.slide_width.inches - 1.0) / 4
-    assert [shape.width.inches for shape in bodies] == pytest.approx([fixed_width] * 3)
+    assert [shape.width.inches for shape in bodies] == pytest.approx([2.9] * 3)
     texts = "\n".join(_all_texts(build_presentation(plan)))
     for i in range(1, 61):
         assert f"Feature {i}" in texts
@@ -220,6 +218,113 @@ def test_header_shown_on_every_subslot(load_fixture, tmp_path, monkeypatch):
     ]
     # 2 слота одного квартала → квартал указан в обеих шапках.
     assert headers == ["Q1 2025", "Q1 2025"]
+
+
+def test_template_geometry_markers_and_product_name(tmp_path, monkeypatch):
+    tpl = Presentation()
+    tpl.slide_width = Inches(13.333)
+    tpl.slide_height = Inches(7.5)
+    source = tpl.slides.add_slide(tpl.slide_layouts[6])
+
+    header = source.shapes.add_textbox(Inches(1.0), Inches(1.8), Inches(1.2), Inches(0.3))
+    header.name = "col_header"
+    header.text_frame.text = "Q1 2026"
+    bullets = source.shapes.add_textbox(Inches(0.9), Inches(2.5), Inches(2.7), Inches(3.1))
+    bullets.name = "col_bullets"
+    bullets.text_frame.text = "• feature"
+    marker = source.shapes.add_shape(
+        MSO_SHAPE.OVAL, Inches(0.96), Inches(1.3), Inches(0.2), Inches(0.2),
+    )
+    marker.name = "quarter_marker"
+    product_name = source.shapes.add_textbox(Inches(9.5), Inches(0.3), Inches(3), Inches(0.4))
+    product_name.name = "Product_Name"
+    product_name.text_frame.text = "PRODUCT PLACEHOLDER"
+
+    path = tmp_path / "geometry.pptx"
+    tpl.save(path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: str(path))
+
+    prs = build_presentation(build_slide_plan(
+        normalize_roadmap(_sparse_quarters_data(3), language="ru"),
+        {},
+    ))
+    slide = _roadmap_slide(prs)
+    headers = [shape for shape in slide.shapes if shape.name == "col_header"]
+    bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
+    markers = [shape for shape in slide.shapes if shape.name == "quarter_marker"]
+    slot_width = (prs.slide_width.inches - 1.0) / 3
+
+    assert len(headers) == len(bodies) == len(markers) == 3
+    assert [shape.width.inches for shape in headers] == pytest.approx([1.2] * 3)
+    assert [shape.width.inches for shape in bodies] == pytest.approx([2.7] * 3)
+    assert [shape.height.inches for shape in bodies] == pytest.approx([3.1] * 3)
+    assert [shape.left.inches for shape in headers] == pytest.approx([
+        1.0 + index * slot_width for index in range(3)
+    ])
+    assert [shape.left.inches for shape in markers] == pytest.approx([
+        shape.left.inches - 0.04 for shape in headers
+    ])
+    assert all(
+        marker_shape.top.inches < header_shape.top.inches
+        for marker_shape, header_shape in zip(markers, headers)
+    )
+    assert _shape_text_by_name(slide, "Product_Name") == "Product"
+
+
+def test_group_and_feature_fonts_are_inherited_separately(tmp_path, monkeypatch):
+    tpl = Presentation()
+    tpl.slide_width = Inches(13.333)
+    tpl.slide_height = Inches(7.5)
+    source = tpl.slides.add_slide(tpl.slide_layouts[6])
+    header = source.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(1.2), Inches(0.3))
+    header.name = "col_header"
+    header.text_frame.text = "Q1 2026"
+    bullets = source.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(2.6), Inches(4.0))
+    bullets.name = "col_bullets"
+    group_paragraph = bullets.text_frame.paragraphs[0]
+    group_paragraph.text = "Group heading"
+    group_paragraph.runs[0].font.size = Pt(18)
+    group_paragraph.runs[0].font.name = "Header Font"
+    group_paragraph.runs[0].font.bold = True
+    feature_paragraph = bullets.text_frame.add_paragraph()
+    feature_paragraph.text = "• Feature"
+    feature_paragraph.runs[0].font.size = Pt(10)
+    feature_paragraph.runs[0].font.name = "Feature Font"
+    feature_paragraph.runs[0].font.bold = False
+    path = tmp_path / "paragraph-styles.pptx"
+    tpl.save(path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: str(path))
+
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [
+            {
+                "Id": 1,
+                "AppTitle": "Application A",
+                "TrDate": "15.01.2026 21:00:00",
+                "Requirements": [{"Id": 1, "Kbr": "Yes", "MarketingTitle": "Feature A"}],
+            },
+            {
+                "Id": 2,
+                "AppTitle": "Application B",
+                "TrDate": "15.01.2026 21:00:00",
+                "Requirements": [{"Id": 2, "Kbr": "Yes", "MarketingTitle": "Feature B"}],
+            },
+        ]}]}],
+    }]
+    prs = build_presentation(build_slide_plan(normalize_roadmap(data, language="ru"), {}))
+    slide = _roadmap_slide(prs)
+    rendered = next(shape for shape in slide.shapes if shape.name == "col_bullets")
+    paragraphs = [paragraph for paragraph in rendered.text_frame.paragraphs if paragraph.text]
+
+    assert [paragraph.text for paragraph in paragraphs] == [
+        "Application A", "• Feature A *", "Application B", "• Feature B *",
+    ]
+    assert [paragraph.runs[0].font.size.pt for paragraph in paragraphs] == [18, 10, 18, 10]
+    assert [paragraph.runs[0].font.name for paragraph in paragraphs] == [
+        "Header Font", "Feature Font", "Header Font", "Feature Font",
+    ]
+    assert [paragraph.runs[0].font.bold for paragraph in paragraphs] == [True, False, True, False]
 
 
 def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_template_path):

@@ -56,10 +56,10 @@ def _roadmap_key(slide: RoadmapSlide) -> tuple[str, str, str]:
 
 
 def _rendered_column_count(slide: RoadmapSlide, tier_slide_count: int) -> int:
-    """Число равных колонок сетки: адаптивно для простого однослайдового roadmap.
+    """Число равных логических слотов: адаптивно для простого roadmap.
 
-    Один показанный квартал должен занимать ровно одну подколонку. Если квартал уже
-    расщеплён либо у тира есть продолжение, сохраняется базовая сетка 4×25%.
+    Слоты задают только точки привязки: размеры шейпов остаются шаблонными.
+    Если квартал расщеплён либо у тира есть продолжение, используется сетка 4×25%.
     """
     used_columns = len(slide.columns)
     has_subcolumns = len({column.quarter for column in slide.columns}) != used_columns
@@ -281,6 +281,36 @@ def _base_format(tf):
     return None, None, None, None
 
 
+def _paragraph_format(paragraph):
+    """Формат первого run конкретного абзаца шаблона."""
+    if not paragraph.runs:
+        return None, None, None, None
+    run = paragraph.runs[0]
+    color = None
+    try:
+        if run.font.color and run.font.color.rgb:
+            color = run.font.color.rgb
+    except Exception:
+        color = None
+    return (
+        run.font.size.pt if run.font.size else None,
+        run.font.name,
+        run.font.bold,
+        color,
+    )
+
+
+def _paragraph_has_native_bullet(paragraph) -> bool:
+    """Есть ли у абзаца шаблона нативный маркер PowerPoint."""
+    properties = paragraph._p.pPr
+    if properties is None:
+        return False
+    return any(
+        properties.find(qn(tag)) is not None
+        for tag in ("a:buChar", "a:buAutoNum", "a:buBlip")
+    )
+
+
 def _apply_format(run, size, name, bold, color):
     if size:
         run.font.size = Pt(size)
@@ -313,25 +343,60 @@ def _fill_bullets_shape(shape, col) -> None:
         return
     tf = shape.text_frame
     tf.word_wrap = True
-    base_size, base_name, _, base_color = _base_format(tf)
-    size = base_size if base_size else BASE_FONT_PT
-    tf.text = ""
+    source_paragraphs = list(tf.paragraphs)
+    header_source = source_paragraphs[0]
+    feature_source = source_paragraphs[1] if len(source_paragraphs) > 1 else header_source
+    prototypes = {
+        "header": (
+            copy.deepcopy(header_source._p),
+            _paragraph_format(header_source),
+            _paragraph_has_native_bullet(header_source),
+        ),
+        "feature": (
+            copy.deepcopy(feature_source._p),
+            _paragraph_format(feature_source),
+            _paragraph_has_native_bullet(feature_source),
+        ),
+    }
 
-    paragraphs: list = []
+    paragraphs: list[tuple[str, str]] = []
     if col.grouped:
         for group in col.groups:
-            paragraphs.append((group.app_title, True))
+            paragraphs.append((group.app_title, "header"))
             for b in group.bullets:
-                paragraphs.append((_bullet_text(b), False))
+                paragraphs.append((_template_feature_text(b, prototypes["feature"]), "feature"))
     else:
         for b in col.bullets:
-            paragraphs.append((_bullet_text(b), False))
+            paragraphs.append((_template_feature_text(b, prototypes["feature"]), "feature"))
 
-    for i, (text, bold) in enumerate(paragraphs):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.text = text
-        for run in p.runs:
-            _apply_format(run, size, base_name, bold, base_color)
+    if not paragraphs:
+        tf.text = ""
+        return
+
+    # Разрешённое исключение ТЗ v4 §10: клонируем XML абзацев-прототипов,
+    # чтобы сохранить раздельные paragraph styles заголовка группы и фичи.
+    tf.clear()
+    empty_paragraph = tf.paragraphs[0]._p
+    cursor = empty_paragraph
+    for _, kind in paragraphs:
+        paragraph_xml = copy.deepcopy(prototypes[kind][0])
+        cursor.addnext(paragraph_xml)
+        cursor = paragraph_xml
+    empty_paragraph.getparent().remove(empty_paragraph)
+
+    for paragraph, (text, kind) in zip(tf.paragraphs, paragraphs):
+        paragraph.text = text
+        size, name, bold, color = prototypes[kind][1]
+        for run in paragraph.runs:
+            _apply_format(run, size, name, bold, color)
+
+
+def _template_feature_text(bullet, feature_prototype) -> str:
+    """Текст фичи без двойного маркера, если bullet уже задан в шаблоне."""
+    _, _, native_bullet = feature_prototype
+    prefix = "" if native_bullet else "• "
+    suffix = " *" if bullet.is_subject_to_change else ""
+    return f"{prefix}{bullet.text}{suffix}"
 
 
 def _render_roadmap_from_template(
@@ -359,6 +424,10 @@ def _render_roadmap_from_template(
         if sh.has_text_frame:
             text_by_name.setdefault(norm, sh)
             text_shapes_by_name[norm].append(sh)
+
+    product_name = _first_shape_for_role(text_by_name, "product_name")
+    if product_name is not None:
+        _set_text(product_name, slide.product)
 
     # Слайд-продолжение = только таблица (без заголовка роадмапа/легенды, TOR v2 §1).
     # Ярлык «roadmap» в шаблоне статичный — текст не меняем.
@@ -390,10 +459,13 @@ def _render_roadmap_from_template(
     if header_proto is None or bullets_proto is None:
         return
 
-    # Простой однослайдовый roadmap заполняет всю ширину 1/2/3/4 равными колонками.
-    # Переполнение и подколонки сохраняют базовую геометрию 4×25%.
+    # Логические слоты распределяются по ширине слайда, но размеры и взаимные
+    # смещения header/bullets/marker полностью наследуются из шаблона.
     slot_width_in = (w - 2 * MARGIN) / column_count
-    slot_width = Inches(slot_width_in)
+    header_left = header_proto.left
+    bullets_left = bullets_proto.left
+    marker_proto = _first_shape_for_role(all_by_name, "quarter_marker")
+    marker_header_offset = marker_proto.left - header_left if marker_proto is not None else 0
     _position_column_separators(all_by_name, column_count, w)
 
     for i, col in enumerate(slide.columns):
@@ -402,11 +474,13 @@ def _render_roadmap_from_template(
         else:
             header = _clone_shape(new_slide, header_proto)
             bullets = _clone_shape(new_slide, bullets_proto)
-        x = Inches(MARGIN + i * slot_width_in)
-        header.left = x
-        header.width = slot_width
-        bullets.left = x
-        bullets.width = slot_width
+        offset = Inches(i * slot_width_in)
+        header.left = header_left + offset
+        bullets.left = bullets_left + offset
+
+        if marker_proto is not None:
+            marker = marker_proto if i == 0 else _clone_shape(new_slide, marker_proto)
+            marker.left = header.left + marker_header_offset
         # Каждая колонка, включая подколонки переполненного квартала, должна
         # оставаться самодостаточной: квартал заполняется в каждом col_header.
         header_text = col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")

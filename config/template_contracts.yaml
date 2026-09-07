@@ -9,6 +9,7 @@
 # Необязательные:
 #   eyebrow      — «Roadmap» / «Roadmap (cont.)» (легаси, заменён на roadmap)
 #   slide_title  — название тира
+#   Product_Name — название продукта
 #   roadmap_label                  — статичный ярлык «Roadmap»
 #   product_logo / tier_logo       — логотипы продукта и тира
 #   quarter_marker                 — декоративная точка квартала
@@ -27,6 +28,7 @@ roadmap:
   optional: [eyebrow, slide_title, col_group_header]
   roles:
     roadmap_label: [roadmap_label, roadmap]
+    product_name: [Product_Name, product_name]
     quarter_marker: [quarter_marker, dot]
     product_logo: [product_logo, logo]
     tier_logo: [tier_logo, logo_tier]

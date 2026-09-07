@@ -25,6 +25,7 @@ def test_layout_separator_names_come_from_contract():
 
 
 def test_semantic_role_names_and_legacy_aliases_come_from_contract():
+    assert tr.get_role_shape_names("product_name") == ["Product_Name", "product_name"]
     assert tr.get_role_shape_names("subject_to_change_footnote") == [
         "subject_to_change_footnote",
         "s2c",
