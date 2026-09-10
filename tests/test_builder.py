@@ -348,6 +348,40 @@ def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_temp
     # титульный + product + stream + 3 roadmap + спасибо = 7 слайдов
     assert len(prs.slides) == 7
 
+    titles = [
+        shape.text
+        for rendered_slide in prs.slides
+        for shape in rendered_slide.shapes
+        if shape.name == "slide_title"
+    ]
+    assert titles == ["T"] * 3
+
+
+def test_slide_title_uses_russian_tier_brand(load_fixture):
+    plan = build_slide_plan(normalize_roadmap(load_fixture("en_with_content.json"), language="ru"), {})
+    prs = build_presentation(plan)
+    titles = [
+        shape.text
+        for rendered_slide in prs.slides
+        for shape in rendered_slide.shapes
+        if shape.name == "slide_title"
+    ]
+    assert titles
+    assert set(titles) == {"Kaspersky Symphony EDR Foundations"}
+
+
+def test_slide_title_uses_english_tier_brand(load_fixture):
+    plan = build_slide_plan(normalize_roadmap(load_fixture("en_with_content.json"), language="en"), {})
+    prs = build_presentation(plan)
+    titles = [
+        shape.text
+        for rendered_slide in prs.slides
+        for shape in rendered_slide.shapes
+        if shape.name == "slide_title"
+    ]
+    assert titles
+    assert set(titles) == {"Kaspersky Next EDR Foundations"}
+
 
 def test_title_and_thank_you_slides(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))

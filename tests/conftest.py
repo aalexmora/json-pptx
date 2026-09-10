@@ -27,8 +27,10 @@ def _isolate_profile(tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def _reset_state():
-    """Сбрасывает in-memory хранилища между тестами."""
+def _reset_state(tmp_path, monkeypatch):
+    """Сбрасывает состояние тестов, не затрагивая пользовательские логотипы."""
+    monkeypatch.setattr(product_logos, "LOGO_DIR", tmp_path / "product-logos")
+    monkeypatch.setattr(product_logos, "TIER_LOGO_DIR", tmp_path / "tier-logos")
     ordering._reset_state()
     labels._reset_state()
     linter._reset_state()

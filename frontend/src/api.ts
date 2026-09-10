@@ -34,7 +34,7 @@ export async function downloadPptx(
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'roadmap.pptx'
+  a.download = `roadmap_${language === 'ru' ? 'RU' : 'ENG'}.pptx`
   a.click()
   URL.revokeObjectURL(url)
 }

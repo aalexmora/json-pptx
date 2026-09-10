@@ -132,7 +132,11 @@ def api_pptx(req: PlanRequest):
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        headers={"Content-Disposition": "attachment; filename=roadmap.pptx"},
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="roadmap_{"RU" if req.language == "ru" else "ENG"}.pptx"'
+            )
+        },
     )
 
 

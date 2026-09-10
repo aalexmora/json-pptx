@@ -67,7 +67,16 @@ def test_pptx_endpoint(load_fixture):
         r = c.post("/api/pptx", json={"json_data": data, "language": "ru", "plugin_settings": {}})
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/vnd.openxmlformats")
+        assert r.headers["content-disposition"] == 'attachment; filename="roadmap_RU.pptx"'
         assert r.content[:2] == b"PK"  # zip-magic .pptx
+
+
+def test_pptx_endpoint_english_filename(load_fixture):
+    data = load_fixture("en_with_content.json")
+    with TestClient(app) as c:
+        r = c.post("/api/pptx", json={"json_data": data, "language": "en", "plugin_settings": {}})
+        assert r.status_code == 200
+        assert r.headers["content-disposition"] == 'attachment; filename="roadmap_ENG.pptx"'
 
 
 def test_lint_issues_in_plan_response():

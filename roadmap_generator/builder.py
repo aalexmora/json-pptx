@@ -399,6 +399,13 @@ def _template_feature_text(bullet, feature_prototype) -> str:
     return f"{prefix}{bullet.text}{suffix}"
 
 
+def _tier_display_name(tier: str, language: str) -> str:
+    """Возвращает брендовое имя тира для выбранной языковой версии колоды."""
+    if language == "ru" and (tier == "Kaspersky Next" or tier.startswith("Kaspersky Next ")):
+        return tier.replace("Kaspersky Next", "Kaspersky Symphony", 1)
+    return tier
+
+
 def _render_roadmap_from_template(
     prs,
     master_slide,
@@ -429,15 +436,17 @@ def _render_roadmap_from_template(
     if product_name is not None:
         _set_text(product_name, slide.product)
 
-    # Слайд-продолжение = только таблица (без заголовка роадмапа/легенды, TOR v2 §1).
-    # Ярлык «roadmap» в шаблоне статичный — текст не меняем.
+    # На continuation-слайде скрываем только eyebrow. Название тира обязательно
+    # повторяется: ни один roadmap-слайд не должен оставаться без slide_title.
     if slide.continuation:
         _clear(text_by_name.get("eyebrow"))
-        _clear(text_by_name.get("slide_title"))
     else:
         eyebrow = get_service_string("roadmap_title", slide.language)
         _set_text(text_by_name.get("eyebrow"), eyebrow)
-        _set_text(text_by_name.get("slide_title"), slide.tier)
+    _set_text(
+        text_by_name.get("slide_title"),
+        _tier_display_name(slide.tier, slide.language),
+    )
 
     # Порядковый номер слайда (слайд уже добавлен в prs — len включает его).
     number = _first_shape_for_role(text_by_name, "slide_number")
@@ -622,7 +631,7 @@ def _render_roadmap(
     )
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.42), Inches(w - 2 * MARGIN), Inches(0.45)),
-        slide.tier, TITLE_FONT_PT, bold=True,
+        _tier_display_name(slide.tier, slide.language), TITLE_FONT_PT, bold=True,
     )
 
     top = 1.0
@@ -709,7 +718,7 @@ def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float,
     )
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.42), Inches(w - 2 * MARGIN), Inches(0.45)),
-        slide.tier, TITLE_FONT_PT, bold=True,
+        _tier_display_name(slide.tier, slide.language), TITLE_FONT_PT, bold=True,
     )
     box = s.shapes.add_textbox(Inches(MARGIN), Inches(1.0), Inches(w - 2 * MARGIN), Inches(h - 1.5))
     tf = box.text_frame
