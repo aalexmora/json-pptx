@@ -110,6 +110,7 @@ export interface Profile {
   service_strings: Record<string, { ru: string; en: string }>
   static_slides: { name: string; position: string; pptx: string }[]
   product_languages: Record<string, { ru: boolean; en: boolean }>
+  tier_names: Record<string, { ru: string; en: string }>
 }
 
 export interface PlanResponse {

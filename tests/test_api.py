@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app import app
-from roadmap_generator import product_logos
+from roadmap_generator import product_logos, tier_names
 
 
 def _plan(client, data, language="ru", plugin_settings=None):
@@ -21,6 +21,18 @@ def test_health():
         body = r.json()
         assert body["status"] == "ok"
         assert isinstance(body["version"], str) and body["version"]
+
+
+def test_profile_persists_language_specific_tier_names():
+    original = "Kaspersky Next EDR Foundations"
+    with TestClient(app) as c:
+        profile = c.get("/api/profile").json()
+        profile["tier_names"] = {original: {"ru": "Kaspersky Symphony EDR Foundations", "en": "English Tier"}}
+        assert c.post("/api/profile", json=profile).status_code == 200
+        saved = c.get("/api/profile").json()["tier_names"]
+
+    assert saved[original] == {"ru": "Kaspersky Symphony EDR Foundations", "en": "English Tier"}
+    assert tier_names.get_tier_name(original, "ru") == "Kaspersky Symphony EDR Foundations"
 
 
 def test_plan_endpoint(load_fixture):

@@ -1006,6 +1006,34 @@ button.danger {
   white-space: nowrap;
 }
 
+.tier-name-heading {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tier-name-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr);
+  gap: 5px;
+  padding: 4px 0;
+}
+
+.tier-name-row input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+
 .lang-chip {
   padding: 2px 8px;
   border: 1px solid var(--border-strong);

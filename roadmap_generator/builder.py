@@ -19,7 +19,7 @@ from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-from roadmap_generator import product_logos, static_slides
+from roadmap_generator import product_logos, static_slides, tier_names
 from roadmap_generator.layout import fit_bullets_dynamic
 from roadmap_generator.strings import get_service_string
 from roadmap_generator.plugins_engine import (
@@ -400,10 +400,8 @@ def _template_feature_text(bullet, feature_prototype) -> str:
 
 
 def _tier_display_name(tier: str, language: str) -> str:
-    """Возвращает брендовое имя тира для выбранной языковой версии колоды."""
-    if language == "ru" and (tier == "Kaspersky Next" or tier.startswith("Kaspersky Next ")):
-        return tier.replace("Kaspersky Next", "Kaspersky Symphony", 1)
-    return tier
+    """Возвращает настроенное в интерфейсе имя или исходное имя тира."""
+    return tier_names.get_tier_name(tier, language)
 
 
 def _render_roadmap_from_template(

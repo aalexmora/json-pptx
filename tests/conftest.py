@@ -12,7 +12,7 @@ from typing import Callable
 
 import pytest
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry, tier_names
 from roadmap_generator.synthetic_template import make_synthetic_template
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +39,7 @@ def _reset_state(tmp_path, monkeypatch):
     strings._reset_state()
     static_slides._reset_state()
     product_languages._reset_state()
+    tier_names._reset_state()
     template_registry._reset_template_state()
     product_logos.reset_logo_state()
     yield
@@ -50,6 +51,7 @@ def _reset_state(tmp_path, monkeypatch):
     strings._reset_state()
     static_slides._reset_state()
     product_languages._reset_state()
+    tier_names._reset_state()
     template_registry._reset_template_state()
     product_logos.reset_logo_state()
 

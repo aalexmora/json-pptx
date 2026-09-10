@@ -12,7 +12,7 @@ from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-from roadmap_generator import ordering
+from roadmap_generator import ordering, tier_names
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.plugins_engine import RoadmapSlide, build_slide_plan
 from roadmap_generator.schema import normalize_roadmap
@@ -357,7 +357,7 @@ def test_many_bullets_paginate_via_flexible_columns(load_fixture, synthetic_temp
     assert titles == ["T"] * 3
 
 
-def test_slide_title_uses_russian_tier_brand(load_fixture):
+def test_slide_title_uses_original_tier_name_without_override(load_fixture):
     plan = build_slide_plan(normalize_roadmap(load_fixture("en_with_content.json"), language="ru"), {})
     prs = build_presentation(plan)
     titles = [
@@ -367,7 +367,7 @@ def test_slide_title_uses_russian_tier_brand(load_fixture):
         if shape.name == "slide_title"
     ]
     assert titles
-    assert set(titles) == {"Kaspersky Symphony EDR Foundations"}
+    assert set(titles) == {"Kaspersky Next EDR Foundations"}
 
 
 def test_slide_title_uses_english_tier_brand(load_fixture):
@@ -381,6 +381,25 @@ def test_slide_title_uses_english_tier_brand(load_fixture):
     ]
     assert titles
     assert set(titles) == {"Kaspersky Next EDR Foundations"}
+
+
+@pytest.mark.parametrize(
+    ("language", "custom"),
+    [("ru", "Kaspersky Symphony EDR Foundations"), ("en", "Custom English Tier")],
+)
+def test_slide_title_uses_language_specific_override(load_fixture, language, custom):
+    original = "Kaspersky Next EDR Foundations"
+    tier_names.import_state({original: {language: custom}})
+    plan = build_slide_plan(normalize_roadmap(load_fixture("en_with_content.json"), language=language), {})
+    prs = build_presentation(plan)
+    titles = [
+        shape.text
+        for rendered_slide in prs.slides
+        for shape in rendered_slide.shapes
+        if shape.name == "slide_title"
+    ]
+    assert titles
+    assert set(titles) == {custom}
 
 
 def test_title_and_thank_you_slides(load_fixture, synthetic_template_path):

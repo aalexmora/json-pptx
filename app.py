@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry, tier_names
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.diffing import compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
@@ -51,6 +51,7 @@ def _load_profile() -> None:
         strings.import_state(data.get("service_strings", {}))
         static_slides.import_state(data.get("static_slides", []))
         product_languages.import_state(data.get("product_languages", {}))
+        tier_names.import_state(data.get("tier_names", {}))
     except (json.JSONDecodeError, OSError):
         pass
 
@@ -67,6 +68,7 @@ def _save_profile() -> None:
         "service_strings": strings.export_state(),
         "static_slides": static_slides.export_state(),
         "product_languages": product_languages.export_state(),
+        "tier_names": tier_names.export_state(),
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -272,6 +274,7 @@ def get_profile():
         "service_strings": strings.get_service_strings(),
         "static_slides": static_slides.export_state(),
         "product_languages": product_languages.export_state(),
+        "tier_names": tier_names.export_state(),
     }
 
 
@@ -285,6 +288,7 @@ def save_profile(profile: dict):
     strings.save_service_strings(profile.get("service_strings", {}))
     static_slides.import_state(profile.get("static_slides", []))
     product_languages.import_state(profile.get("product_languages", {}))
+    tier_names.import_state(profile.get("tier_names", {}))
     _save_profile()
     return {"status": "ok"}
 

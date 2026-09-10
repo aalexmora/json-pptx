@@ -905,6 +905,15 @@ export default function App() {
     })
   }
 
+  function handleTierName(name: string, lang: 'ru' | 'en', value: string) {
+    if (!profile) return
+    const current = profile.tier_names?.[name] ?? { ru: '', en: '' }
+    persist({
+      ...profile,
+      tier_names: { ...profile.tier_names, [name]: { ...current, [lang]: value } },
+    })
+  }
+
   function handleUploadLogo(name: string, file: File) {
     uploadProductLogo(name, file)
       .then(() => setLogoRefresh((n) => n + 1))
@@ -1233,8 +1242,11 @@ export default function App() {
             <summary>Языки продуктов</summary>
             <ProductLanguagesPanel
               productNames={productNames}
+              tierNames={tierNames}
               languages={profile.product_languages ?? {}}
+              localizedTierNames={profile.tier_names ?? {}}
               onChange={handleProductLanguage}
+              onTierNameChange={handleTierName}
             />
           </details>
         )}
@@ -1971,12 +1983,18 @@ function HierarchyHeader({
 
 function ProductLanguagesPanel({
   productNames,
+  tierNames,
   languages,
+  localizedTierNames,
   onChange,
+  onTierNameChange,
 }: {
   productNames: string[]
+  tierNames: string[]
   languages: Record<string, { ru: boolean; en: boolean }>
+  localizedTierNames: Record<string, { ru: string; en: string }>
   onChange: (name: string, lang: 'ru' | 'en', visible: boolean) => void
+  onTierNameChange: (name: string, lang: 'ru' | 'en', value: string) => void
 }) {
   return (
     <div className="product-langs">
@@ -1991,6 +2009,29 @@ function ProductLanguagesPanel({
             <button className={'lang-chip' + (l.en ? ' on' : '')} onClick={() => onChange(name, 'en', !l.en)}>
               EN
             </button>
+          </div>
+        )
+      })}
+      {tierNames.length > 0 && <div className="tier-name-heading">Названия тиров для слайдов</div>}
+      {tierNames.map((name) => {
+        const localized = localizedTierNames[name] ?? { ru: '', en: '' }
+        return (
+          <div key={name} className="tier-name-row">
+            <span className="product-lang-name" title={name}>{name}</span>
+            <input
+              type="text"
+              aria-label={`Название ${name}, RU`}
+              placeholder="RU: исходное"
+              value={localized.ru}
+              onChange={(e) => onTierNameChange(name, 'ru', e.target.value)}
+            />
+            <input
+              type="text"
+              aria-label={`Название ${name}, ENG`}
+              placeholder="ENG: исходное"
+              value={localized.en}
+              onChange={(e) => onTierNameChange(name, 'en', e.target.value)}
+            />
           </div>
         )
       })}
