@@ -100,7 +100,7 @@ def test_pagination_slide_count(load_fixture, synthetic_template_path):
     assert len(prs.slides) == 6
 
 
-def test_continuation_keeps_fixed_four_slot_geometry(load_fixture, synthetic_template_path):
+def test_single_column_continuation_spans_full_slide(load_fixture, synthetic_template_path):
     plan = _plan(load_fixture, "pagination_5_quarters.json")
     prs = build_presentation(plan)
     roadmap_slides = [
@@ -112,7 +112,9 @@ def test_continuation_keeps_fixed_four_slot_geometry(load_fixture, synthetic_tem
         shape for shape in roadmap_slides[1].shapes if shape.name == "col_bullets"
     ]
     assert len(continuation_bodies) == 1
-    assert continuation_bodies[0].width.inches == pytest.approx(2.9)
+    assert continuation_bodies[0].width.inches == pytest.approx(
+        prs.slide_width.inches - continuation_bodies[0].left.inches - 0.5
+    )
 
 
 def test_dividers_render_titles(load_fixture, synthetic_template_path):
@@ -155,7 +157,11 @@ def test_sparse_single_slide_columns_keep_template_geometry(quarter_count, synth
     bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
     slot_width = (prs.slide_width.inches - 1.0) / quarter_count
     assert len(bodies) == quarter_count
-    assert [shape.width.inches for shape in bodies] == pytest.approx([2.9] * quarter_count)
+    expected_widths = (
+        [prs.slide_width.inches - bodies[0].left.inches - 0.5]
+        if quarter_count == 1 else [2.9] * quarter_count
+    )
+    assert [shape.width.inches for shape in bodies] == pytest.approx(expected_widths)
     assert [shape.left.inches for shape in bodies] == pytest.approx([
         0.5 + index * slot_width for index in range(quarter_count)
     ])

@@ -58,10 +58,12 @@ def _roadmap_key(slide: RoadmapSlide) -> tuple[str, str, str]:
 def _rendered_column_count(slide: RoadmapSlide, tier_slide_count: int) -> int:
     """Число равных логических слотов: адаптивно для простого roadmap.
 
-    Слоты задают только точки привязки: размеры шейпов остаются шаблонными.
-    Если квартал расщеплён либо у тира есть продолжение, используется сетка 4×25%.
+    Одиночная колонка всегда занимает всю ширину. Если квартал расщеплён либо у
+    тира есть продолжение с несколькими колонками, используется сетка 4×25%.
     """
     used_columns = len(slide.columns)
+    if used_columns == 1:
+        return 1
     has_subcolumns = len({column.quarter for column in slide.columns}) != used_columns
     if tier_slide_count == 1 and 1 <= used_columns <= 4 and not has_subcolumns:
         return used_columns
@@ -466,8 +468,9 @@ def _render_roadmap_from_template(
     if header_proto is None or bullets_proto is None:
         return
 
-    # Логические слоты распределяются по ширине слайда, но размеры и взаимные
-    # смещения header/bullets/marker полностью наследуются из шаблона.
+    # Логические слоты распределяются по ширине слайда. Одиночная колонка
+    # получает colspan на всю доступную ширину; остальные сохраняют размеры
+    # прототипов шаблона и меняют только точки привязки.
     slot_width_in = (w - 2 * MARGIN) / column_count
     header_left = header_proto.left
     bullets_left = bullets_proto.left
@@ -484,6 +487,9 @@ def _render_roadmap_from_template(
         offset = Inches(i * slot_width_in)
         header.left = header_left + offset
         bullets.left = bullets_left + offset
+        if column_count == 1:
+            header.width = Inches(w - MARGIN) - header.left
+            bullets.width = Inches(w - MARGIN) - bullets.left
 
         if marker_proto is not None:
             marker = marker_proto if i == 0 else _clone_shape(new_slide, marker_proto)
