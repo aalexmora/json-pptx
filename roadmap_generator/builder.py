@@ -33,6 +33,7 @@ from roadmap_generator.plugins_engine import (
 from roadmap_generator.template_registry import (
     get_layout_shape_names,
     get_role_shape_names,
+    get_slide_type_markers,
     placeholder_names,
     select_template,
 )
@@ -73,7 +74,7 @@ def _rendered_column_count(slide: RoadmapSlide, tier_slide_count: int) -> int:
 def build_presentation(plan: SlidePlan) -> Presentation:
     """Рендерит план слайдов в объект `Presentation` (ещё не сохранённый)."""
     template = Presentation(select_template("roadmap", 4, False))
-    master_slide = _find_master_slide(template)
+    template_slides = _find_template_slides(template)
     prs = Presentation()
     # размер слайда наследуется из шаблона (ТЗ v4 §10)
     prs.slide_width = template.slide_width
@@ -86,27 +87,50 @@ def build_presentation(plan: SlidePlan) -> Presentation:
         _roadmap_key(item) for item in plan.slides if isinstance(item, RoadmapSlide)
     )
 
+    current_product = ""
     for item in plan.slides:
         if isinstance(item, TitleSlide):
             _render_title(prs, blank, item, w, h)
         elif isinstance(item, ThankYouSlide):
             _render_thank_you(prs, blank, item, w, h)
         elif isinstance(item, DividerSlide):
-            _render_divider(prs, blank, item, w, h)
+            if item.divider_type == "product":
+                current_product = item.title
+            source = template_slides.get(item.divider_type)
+            if source is None:
+                _render_divider(prs, blank, item, w, h)
+            else:
+                _render_divider_from_template(prs, source, item, current_product)
         elif isinstance(item, StaticSlide):
             _render_static(prs, blank, item, w, h)
         elif isinstance(item, RoadmapSlide):
             column_count = _rendered_column_count(item, roadmap_counts[_roadmap_key(item)])
-            _render_roadmap_from_template(prs, master_slide, blank, item, w, h, column_count)
+            _render_roadmap_from_template(
+                prs, template_slides.get("roadmap"), blank, item, w, h, column_count,
+            )
     return prs
 
 
-def _find_master_slide(template_prs):
-    """Первый слайд шаблона с шейпом `col_header` (иначе первый слайд)."""
+def _find_template_slides(template_prs) -> dict:
+    """Находит Product/Stream/Roadmap-слайды по маркерам из YAML.
+
+    Без маркеров Roadmap берётся с первого слайда с `col_header`,
+    а Product/Stream по-прежнему рисуются кодом.
+    """
+    found = {}
     for slide in template_prs.slides:
-        if any(sh.name == "col_header" for sh in slide.shapes):
-            return slide
-    return template_prs.slides[0] if len(template_prs.slides) else None
+        names = {shape.name for shape in slide.shapes}
+        for slide_type in ("product", "stream", "roadmap"):
+            if names.intersection(get_slide_type_markers(slide_type)):
+                found.setdefault(slide_type, slide)
+    if "roadmap" not in found:
+        for slide in template_prs.slides:
+            if any(sh.name == "col_header" for sh in slide.shapes):
+                found["roadmap"] = slide
+                break
+    if "roadmap" not in found and len(template_prs.slides):
+        found["roadmap"] = template_prs.slides[0]
+    return found
 
 
 def _first_blip_r_id(shape):
@@ -616,6 +640,24 @@ def _render_divider(prs, layout, slide: DividerSlide, w: float, h: float) -> Non
 
     sub = s.shapes.add_textbox(Inches(MARGIN), Inches(h / 2 + 0.6), Inches(w - 2 * MARGIN), Inches(0.4))
     _set_paragraph(sub, label, 14, bold=False, align=PP_ALIGN.CENTER)
+
+
+def _render_divider_from_template(prs, source_slide, slide: DividerSlide, product: str) -> None:
+    """Клонирует Product/Stream-слайд и заполняет его заголовки."""
+    new_slide = _clone_slide(prs, source_slide)
+    text_by_name = {
+        _normalize_name(shape.name): shape
+        for shape in new_slide.shapes
+        if shape.has_text_frame
+    }
+    if slide.divider_type == "product":
+        _set_text(_first_shape_for_role(text_by_name, "product_name"), slide.title)
+    else:
+        _set_text(_first_shape_for_role(text_by_name, "stream_name"), slide.title)
+        _set_text(_first_shape_for_role(text_by_name, "product_name"), product)
+    number = _first_shape_for_role(text_by_name, "slide_number")
+    if number is not None:
+        _set_text(number, str(len(prs.slides)))
 
 
 def _render_roadmap(

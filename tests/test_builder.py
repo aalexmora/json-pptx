@@ -124,6 +124,53 @@ def test_dividers_render_titles(load_fixture, synthetic_template_path):
     assert any("STREAM" in t and "Kaspersky Next Optimum" in t for t in texts)
 
 
+def test_three_slide_template_clones_product_stream_artwork_and_fills_names(
+    load_fixture, tmp_path, monkeypatch,
+):
+    tpl = Presentation()
+    tpl.slide_width = Inches(13.333)
+    tpl.slide_height = Inches(7.5)
+    blank = tpl.slide_layouts[6]
+
+    product_slide = tpl.slides.add_slide(blank)
+    product_marker = product_slide.shapes.add_textbox(Inches(0), Inches(0), Inches(0.1), Inches(0.1))
+    product_marker.name = "_slide_type_product"
+    product_name = product_slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(1))
+    product_name.name = "product_name"
+    product_name.text_frame.text = "PRODUCT PLACEHOLDER"
+    product_art = product_slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(10), Inches(1), Inches(2), Inches(2))
+    product_art.name = "product_artwork"
+
+    stream_slide = tpl.slides.add_slide(blank)
+    stream_marker = stream_slide.shapes.add_textbox(Inches(0), Inches(0), Inches(0.1), Inches(0.1))
+    stream_marker.name = "_slide_type_stream"
+    stream_name = stream_slide.shapes.add_textbox(Inches(1), Inches(1), Inches(8), Inches(1))
+    stream_name.name = "stream_name"
+    stream_name.text_frame.text = "STREAM PLACEHOLDER"
+    stream_art = stream_slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(10), Inches(1), Inches(2), Inches(2))
+    stream_art.name = "stream_artwork"
+
+    roadmap_slide = tpl.slides.add_slide(blank)
+    roadmap_marker = roadmap_slide.shapes.add_textbox(Inches(0), Inches(0), Inches(0.1), Inches(0.1))
+    roadmap_marker.name = "_slide_type_roadmap"
+    header = roadmap_slide.shapes.add_textbox(Inches(0.5), Inches(1), Inches(2.9), Inches(0.4))
+    header.name = "col_header"
+    bullets = roadmap_slide.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(2.9), Inches(5))
+    bullets.name = "col_bullets"
+    bullets.text_frame.text = "feature"
+
+    path = tmp_path / "typed-template.pptx"
+    tpl.save(path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: str(path))
+
+    prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
+    product_result = next(slide for slide in prs.slides if any(s.name == "product_artwork" for s in slide.shapes))
+    stream_result = next(slide for slide in prs.slides if any(s.name == "stream_artwork" for s in slide.shapes))
+    assert "Kaspersky Next" in _slide_text(product_result)
+    assert "Kaspersky Next Optimum" in _slide_text(stream_result)
+    assert not any(s.name.startswith("_slide_type_") for slide in prs.slides for s in slide.shapes)
+
+
 def test_continuation_is_pure_table(load_fixture, synthetic_template_path):
     """Слайд-продолжение = только таблица (без заголовка роадмапа/легенды, TOR v2)."""
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))

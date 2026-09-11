@@ -623,6 +623,16 @@ button.danger {
   margin-top: 8px;
 }
 
+.template-help {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.template-help code {
+  color: var(--text);
+}
+
 .templates-list {
   display: flex;
   flex-direction: column;

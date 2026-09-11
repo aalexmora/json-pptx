@@ -34,6 +34,8 @@ def test_semantic_role_names_and_legacy_aliases_come_from_contract():
         "tier_inheritance_note",
         "inheritance_note",
     ]
+    assert tr.get_role_shape_names("stream_name") == ["Stream_Name", "stream_name"]
+    assert tr.get_slide_type_markers("product") == ["_slide_type_product"]
 
 
 def test_synthetic_template_satisfies_all_contracts(synthetic_template_path):
@@ -102,6 +104,41 @@ def test_validate_full_clean_template_has_no_issues(synthetic_template_path):
     assert check["missing_shapes"] == []
     assert check["duplicate_shapes"] == []
     assert check["issues"] == []
+
+
+def test_validate_full_accepts_three_typed_slides(tmp_path):
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+    definitions = [
+        ("_slide_type_product", "product_name"),
+        ("_slide_type_stream", "stream_name"),
+        ("_slide_type_roadmap", "col_header"),
+    ]
+    for marker_name, placeholder_name in definitions:
+        slide = prs.slides.add_slide(blank)
+        marker = slide.shapes.add_textbox(Inches(0), Inches(0), Inches(0.1), Inches(0.1))
+        marker.name = marker_name
+        placeholder = slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(3), Inches(0.5))
+        placeholder.name = placeholder_name
+        if marker_name == "_slide_type_roadmap":
+            bullets = slide.shapes.add_textbox(Inches(0.5), Inches(1), Inches(3), Inches(3))
+            bullets.name = "col_bullets"
+    path = tmp_path / "three-slides.pptx"
+    prs.save(path)
+
+    check = tr.validate_template_full(str(path))
+    assert check == {"missing_shapes": [], "duplicate_shapes": [], "issues": []}
+
+
+def test_validate_full_typed_template_reports_missing_slide(tmp_path):
+    path = _template_with(
+        tmp_path,
+        "typed-missing.pptx",
+        ["_slide_type_roadmap", "col_header", "col_bullets"],
+    )
+    check = tr.validate_template_full(path)
+    assert "slide_type:product" in check["missing_shapes"]
+    assert "slide_type:stream" in check["missing_shapes"]
 
 
 def test_list_templates_skips_lock_files(tmp_path, monkeypatch):

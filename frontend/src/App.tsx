@@ -1679,6 +1679,12 @@ function TemplatesPanel() {
       <button onClick={() => fileRef.current?.click()} disabled={uploading}>
         {uploading ? 'Загрузка…' : 'Загрузить шаблон (.pptx)'}
       </button>
+      <div className="template-help">
+        Для шаблона из трёх слайдов добавьте маркеры <code>_slide_type_product</code>,{' '}
+        <code>_slide_type_stream</code> и <code>_slide_type_roadmap</code>. Заголовки:{' '}
+        <code>product_name</code> и <code>stream_name</code>; на Roadmap-слайде обязательны{' '}
+        <code>col_header</code> и <code>col_bullets</code>.
+      </div>
       {message && <div className="inline-message" role="status">{message}</div>}
       <div className="templates-list">
         {templates.map((t) => (

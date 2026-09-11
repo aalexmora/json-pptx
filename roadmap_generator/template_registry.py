@@ -48,6 +48,12 @@ def get_role_shape_names(role: str) -> List[str]:
     return list(roles.get(role, []))
 
 
+def get_slide_type_markers(slide_type: str) -> List[str]:
+    """Имена служебных шейпов, по которым определяется тип слайда."""
+    slide_types = load_contracts()["roadmap"].get("slide_types", {})
+    return list(slide_types.get(slide_type, {}).get("markers", []))
+
+
 def validate_template_shapes(template_path: str, required_shape_names: List[str]) -> List[str]:
     """Проверяет наличие обязательных именованных шейпов в `.pptx`.
 
@@ -84,7 +90,12 @@ def _consulted_shapes() -> List[str]:
     cfg = load_contracts()["roadmap"]
     layout_names = [name for names in cfg.get("layout", {}).values() for name in names]
     role_names = [name for names in cfg.get("roles", {}).values() for name in names]
-    return list(cfg.get("base", [])) + list(cfg.get("optional", [])) + role_names + layout_names
+    marker_names = [
+        name
+        for definition in cfg.get("slide_types", {}).values()
+        for name in definition.get("markers", [])
+    ]
+    return list(cfg.get("base", [])) + list(cfg.get("optional", [])) + role_names + layout_names + marker_names
 
 
 def placeholder_names() -> List[str]:
@@ -94,7 +105,13 @@ def placeholder_names() -> List[str]:
     в слайд — КРОМЕ случаев, когда имя после «_» совпадает с плейсхолдером:
     такие шейпы копируются и заполняются билдером.
     """
-    return list(_consulted_shapes()) + ["_" + n for n in _consulted_shapes()]
+    marker_names = {
+        name
+        for definition in load_contracts()["roadmap"].get("slide_types", {}).values()
+        for name in definition.get("markers", [])
+    }
+    placeholders = [name for name in _consulted_shapes() if name not in marker_names]
+    return placeholders + ["_" + name for name in placeholders]
 
 
 def _normalize_placeholder(name: str) -> str:
@@ -114,17 +131,57 @@ def validate_template_full(template_path: str) -> dict:
     """
     prs = pptx.Presentation(template_path)
     names: List[str] = []
+    names_by_slide: List[List[str]] = []
     for slide in prs.slides:
-        for shape in slide.shapes:
-            names.append(_normalize_placeholder(shape.name))
+        slide_names = [_normalize_placeholder(shape.name) for shape in slide.shapes]
+        names.extend(slide_names)
+        names_by_slide.append(slide_names)
 
     from collections import Counter
     counts = Counter(names)
-    required = list(load_contracts()["roadmap"]["base"])
+    cfg = load_contracts()["roadmap"]
+    required = list(cfg["base"])
     consulted = _consulted_shapes()
-
-    missing = [name for name in required if counts.get(name, 0) == 0]
-    duplicates = sorted(name for name in consulted if counts.get(name, 0) > 1)
+    marker_sets = {
+        slide_type: set(definition.get("markers", []))
+        for slide_type, definition in cfg.get("slide_types", {}).items()
+    }
+    explicit = any(
+        marker_sets[slide_type] & set(slide_names)
+        for slide_names in names_by_slide
+        for slide_type in marker_sets
+    )
+    missing: List[str] = []
+    duplicates: List[str] = []
+    if explicit:
+        for slide_type, definition in cfg.get("slide_types", {}).items():
+            matching = [
+                slide_names
+                for slide_names in names_by_slide
+                if marker_sets[slide_type] & set(slide_names)
+            ]
+            if not matching:
+                missing.append(f"slide_type:{slide_type}")
+                continue
+            if len(matching) > 1:
+                duplicates.append(f"slide_type:{slide_type}")
+                continue
+            slide_counts = Counter(matching[0])
+            for name in definition.get("required_shapes", []):
+                if slide_counts.get(name, 0) == 0:
+                    missing.append(f"{slide_type}:{name}")
+                elif slide_counts[name] > 1:
+                    duplicates.append(f"{slide_type}:{name}")
+            for role in definition.get("required_roles", []):
+                aliases = get_role_shape_names(role)
+                present_aliases = [name for name in aliases if slide_counts.get(name, 0)]
+                if not present_aliases:
+                    missing.append(f"{slide_type}:{role}")
+                elif sum(slide_counts[name] for name in present_aliases) > 1:
+                    duplicates.append(f"{slide_type}:{role}")
+    else:
+        missing = [name for name in required if counts.get(name, 0) == 0]
+        duplicates = sorted(name for name in consulted if counts.get(name, 0) > 1)
 
     issues: List[str] = []
     if not missing and not duplicates:
@@ -137,12 +194,30 @@ def validate_template_full(template_path: str) -> dict:
         "стоит имя плейсхолдера (например «_roadmap») — шейп обрабатывается билдером."
     )
     for name in missing:
+        if name.startswith("slide_type:"):
+            slide_type = name.split(":", 1)[1]
+            marker = get_slide_type_markers(slide_type)[0]
+            issues.append(
+                f"Нет слайда типа {slide_type}. "
+                f"Добавьте на него служебный шейп «{marker}»."
+            )
+            continue
+        if ":" in name:
+            slide_type, shape_or_role = name.split(":", 1)
+            issues.append(
+                f"На слайде {slide_type} нет обязательного "
+                f"плейсхолдера «{shape_or_role}»."
+            )
+            continue
         hint = _SHAPE_HINTS.get(name, "")
         issues.append(
             f"Нет шейпа «{name}»{(' — ' + hint) if hint else ''}. "
             f"Добавьте его и назовите ровно {name}."
         )
     for name in duplicates:
+        if ":" in name:
+            issues.append(f"Шаблон содержит дублирующееся определение «{name}».")
+            continue
         hint = _SHAPE_HINTS.get(name, "")
         issues.append(_duplicate_message(name, counts[name], hint))
     return {"missing_shapes": missing, "duplicate_shapes": duplicates, "issues": issues}

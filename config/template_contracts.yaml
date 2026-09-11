@@ -1,4 +1,6 @@
-# Шаблон-«конструктор»: ОДИН слайд с ОДНОЙ колонкой-прототипом.
+# Шаблон-«конструктор» может содержать три типа слайдов:
+# Product, Stream и Roadmap/Tier. Тип задаётся служебным шейпом-маркером.
+# Без маркеров сохраняется legacy-режим: один Roadmap-слайд.
 # Builder клонирует колонку под каждый квартал (1–N), поэтому поддерживает всю
 # вариативность (1/2/3/4+ колонок, переполнение, пагинацию) без доп. шаблонов.
 #
@@ -26,9 +28,20 @@
 roadmap:
   base: [col_header, col_bullets]
   optional: [eyebrow, slide_title, col_group_header]
+  slide_types:
+    product:
+      markers: [_slide_type_product]
+      required_roles: [product_name]
+    stream:
+      markers: [_slide_type_stream]
+      required_roles: [stream_name]
+    roadmap:
+      markers: [_slide_type_roadmap]
+      required_shapes: [col_header, col_bullets]
   roles:
     roadmap_label: [roadmap_label, roadmap]
     product_name: [Product_Name, product_name]
+    stream_name: [Stream_Name, stream_name]
     quarter_marker: [quarter_marker, dot]
     product_logo: [product_logo, logo]
     tier_logo: [tier_logo, logo_tier]
