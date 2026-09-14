@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from roadmap_generator import ordering
 from roadmap_generator.plugins_engine import (
     DividerSlide,
     RoadmapSlide,
@@ -220,6 +221,20 @@ def test_product_divider_precedes_slides(load_fixture):
     first_divider = next(s for s in plan.slides if isinstance(s, DividerSlide))
     assert first_divider.divider_type == "product"
     assert first_divider.title == "Kaspersky Next"
+
+
+def test_product_divider_can_be_hidden_without_hiding_roadmap(load_fixture):
+    model = _model(load_fixture, "pagination_5_quarters.json")
+    ordering.save_product_slide_hidden_flag("Kaspersky Next", True)
+
+    plan = build_slide_plan(model, {})
+
+    product_dividers = [
+        slide for slide in plan.slides
+        if isinstance(slide, DividerSlide) and slide.divider_type == "product"
+    ]
+    assert product_dividers == []
+    assert _roadmap_slides(plan)
 
 
 def test_stream_dash_has_no_stream_divider():

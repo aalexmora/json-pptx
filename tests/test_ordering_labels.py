@@ -37,6 +37,17 @@ def test_product_inheritance_flag_roundtrip():
     assert ordering.get_product_inheritance_flag("Product B") is False
 
 
+def test_product_slide_hidden_flag_roundtrip():
+    ordering.save_product_slide_hidden_flag("Product A", True)
+
+    state = ordering.export_state()
+    ordering._reset_state()
+    ordering.import_state(state)
+
+    assert ordering.get_product_slide_hidden_flag("Product A") is True
+    assert ordering.get_product_slide_hidden_flag("Product B") is False
+
+
 def test_legacy_tier_inheritance_flags_migrate_to_product():
     ordering.import_state({
         "tier_inheritance_flags": {

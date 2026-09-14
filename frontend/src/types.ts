@@ -102,6 +102,7 @@ export interface Profile {
     order: Record<string, string[]>
     apptitle_priority: string[]
     product_inheritance_flags: Record<string, boolean>
+    product_slide_hidden_flags: Record<string, boolean>
   }
   labels: Record<string, string>
   linter_rules: { pattern: string; description: string }[]

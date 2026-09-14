@@ -19,6 +19,7 @@ from roadmap_generator.ordering import (
     SEPARATOR,
     get_effective_order,
     get_product_inheritance_flag,
+    get_product_slide_hidden_flag,
     resolve_apptitle_order,
 )
 from roadmap_generator.schema import RoadmapModel
@@ -175,7 +176,8 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
                 deck_items.extend(stream_slides)
 
         if deck_items:
-            product_decks.append((pname, [DividerSlide("product", pname)] + deck_items))
+            product_intro = [] if get_product_slide_hidden_flag(pname) else [DividerSlide("product", pname)]
+            product_decks.append((pname, product_intro + deck_items))
 
     slides = _assemble_with_static(product_decks, get_static_slides())
 

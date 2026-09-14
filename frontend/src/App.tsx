@@ -814,6 +814,20 @@ export default function App() {
     })
   }
 
+  function handleToggleProductSlide(productName: string, generate: boolean) {
+    if (!profile) return
+    persist({
+      ...profile,
+      ordering: {
+        ...profile.ordering,
+        product_slide_hidden_flags: {
+          ...(profile.ordering.product_slide_hidden_flags ?? {}),
+          [productName]: !generate,
+        },
+      },
+    })
+  }
+
   function handleToggleApproval(releaseId: number, approved: boolean) {
     if (!profile) return
     const ids = new Set(profile.under_approval_ids)
@@ -1234,6 +1248,17 @@ export default function App() {
               ＋ Добавить статичный слайд
             </button>
             <StaticSlidesList slides={profile.static_slides ?? []} onDelete={handleDeleteStaticSlide} />
+          </details>
+        )}
+
+        {profile && productNames.length > 0 && (
+          <details className="section">
+            <summary>Слайды продуктов</summary>
+            <ProductSlideVisibilityPanel
+              productNames={productNames}
+              hiddenFlags={profile.ordering.product_slide_hidden_flags ?? {}}
+              onChange={handleToggleProductSlide}
+            />
           </details>
         )}
 
@@ -1986,6 +2011,35 @@ function HierarchyHeader({
     </div>
   )
 }
+
+function ProductSlideVisibilityPanel({
+  productNames,
+  hiddenFlags,
+  onChange,
+}: {
+  productNames: string[]
+  hiddenFlags: Record<string, boolean>
+  onChange: (name: string, generate: boolean) => void
+}) {
+  return (
+    <div className="product-slide-options">
+      <div className="product-slide-help">
+        Отключите автоматический слайд продукта, если вместо него используется статичный.
+      </div>
+      {productNames.map((name) => (
+        <label key={name} className="product-slide-row">
+          <input
+            type="checkbox"
+            checked={!hiddenFlags[name]}
+            onChange={(event) => onChange(name, event.target.checked)}
+          />
+          <span title={name}>{name}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
 
 function ProductLanguagesPanel({
   productNames,

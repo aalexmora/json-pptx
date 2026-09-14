@@ -13,6 +13,7 @@ SEPARATOR = " > "
 _order_store: Dict[str, List[str]] = {}
 _apptitle_priority: List[str] = []
 _product_inheritance_flags: Dict[str, bool] = {}
+_product_slide_hidden_flags: Dict[str, bool] = {}
 
 
 def get_effective_order(parent_path: str, item_names: List[str]) -> List[str]:
@@ -66,11 +67,22 @@ def save_product_inheritance_flag(product_name: str, flag: bool) -> None:
     _product_inheritance_flags[product_name] = bool(flag)
 
 
+def get_product_slide_hidden_flag(product_name: str) -> bool:
+    """Нужно ли пропустить автоматический Product-разделитель."""
+    return _product_slide_hidden_flags.get(product_name, False)
+
+
+def save_product_slide_hidden_flag(product_name: str, flag: bool) -> None:
+    """Сохраняет флаг скрытия Product-разделителя."""
+    _product_slide_hidden_flags[product_name] = bool(flag)
+
+
 def export_state() -> dict:
     return {
         "order": dict(_order_store),
         "apptitle_priority": list(_apptitle_priority),
         "product_inheritance_flags": dict(_product_inheritance_flags),
+        "product_slide_hidden_flags": dict(_product_slide_hidden_flags),
     }
 
 
@@ -79,6 +91,8 @@ def import_state(state: dict) -> None:
     _order_store.update(state.get("order", {}))
     _apptitle_priority[:] = list(state.get("apptitle_priority", []))
     _product_inheritance_flags.clear()
+    _product_slide_hidden_flags.clear()
+    _product_slide_hidden_flags.update(state.get("product_slide_hidden_flags", {}))
     product_flags = state.get("product_inheritance_flags")
     if product_flags is not None:
         _product_inheritance_flags.update(product_flags)
@@ -97,3 +111,4 @@ def _reset_state() -> None:
     _order_store.clear()
     _apptitle_priority.clear()
     _product_inheritance_flags.clear()
+    _product_slide_hidden_flags.clear()

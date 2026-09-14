@@ -124,6 +124,27 @@ def test_dividers_render_titles(load_fixture, synthetic_template_path):
     assert any("STREAM" in t and "Kaspersky Next Optimum" in t for t in texts)
 
 
+def test_roadmap_title_falls_back_to_product_when_stream_and_tier_are_dash(
+    synthetic_template_path,
+):
+    data = [{
+        "Product": "Standalone Product",
+        "Streams": [{"Stream": "-", "Tiers": [{"Tier": "-", "Releases": [{
+            "Id": 1,
+            "AppTitle": "Standalone Product",
+            "TrDate": "15.01.2026 21:00:00",
+            "Requirements": [{"Id": 11, "Kbr": "Yes", "MarketingTitle": "Feature A"}],
+        }]}]}],
+    }]
+
+    prs = build_presentation(build_slide_plan(normalize_roadmap(data, language="ru"), {}))
+    slide = _roadmap_slide(prs)
+
+    assert slide is not None
+    assert "Standalone Product" in _slide_text(slide)
+    assert "Feature A" in _slide_text(slide)
+
+
 def test_three_slide_template_clones_product_stream_artwork_and_fills_names(
     load_fixture, tmp_path, monkeypatch,
 ):

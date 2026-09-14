@@ -88,7 +88,7 @@ def build_presentation(plan: SlidePlan) -> Presentation:
     )
 
     current_product = ""
-    for item in plan.slides:
+    for item_index, item in enumerate(plan.slides):
         if isinstance(item, TitleSlide):
             _render_title(prs, blank, item, w, h)
         elif isinstance(item, ThankYouSlide):
@@ -96,6 +96,8 @@ def build_presentation(plan: SlidePlan) -> Presentation:
         elif isinstance(item, DividerSlide):
             if item.divider_type == "product":
                 current_product = item.title
+            else:
+                current_product = _next_roadmap_product(plan.slides, item_index) or current_product
             source = template_slides.get(item.divider_type)
             if source is None:
                 _render_divider(prs, blank, item, w, h)
@@ -109,6 +111,16 @@ def build_presentation(plan: SlidePlan) -> Presentation:
                 prs, template_slides.get("roadmap"), blank, item, w, h, column_count,
             )
     return prs
+
+
+def _next_roadmap_product(items: list, current_index: int) -> str:
+    """Имя Product для Stream-разделителя, даже если Product-слайд скрыт."""
+    for candidate in items[current_index + 1:]:
+        if isinstance(candidate, RoadmapSlide):
+            return candidate.product
+        if isinstance(candidate, DividerSlide) and candidate.divider_type == "product":
+            break
+    return ""
 
 
 def _find_template_slides(template_prs) -> dict:
@@ -430,6 +442,15 @@ def _tier_display_name(tier: str, language: str) -> str:
     return tier_names.get_tier_name(tier, language)
 
 
+def _roadmap_display_name(slide: RoadmapSlide) -> str:
+    """Заголовок Roadmap: Tier, затем Stream, затем Product."""
+    if slide.tier and slide.tier != "-":
+        return _tier_display_name(slide.tier, slide.language)
+    if slide.stream and slide.stream != "-":
+        return slide.stream
+    return slide.product
+
+
 def _render_roadmap_from_template(
     prs,
     master_slide,
@@ -469,7 +490,7 @@ def _render_roadmap_from_template(
         _set_text(text_by_name.get("eyebrow"), eyebrow)
     _set_text(
         text_by_name.get("slide_title"),
-        _tier_display_name(slide.tier, slide.language),
+        _roadmap_display_name(slide),
     )
 
     # Порядковый номер слайда (слайд уже добавлен в prs — len включает его).
@@ -677,7 +698,7 @@ def _render_roadmap(
     )
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.42), Inches(w - 2 * MARGIN), Inches(0.45)),
-        _tier_display_name(slide.tier, slide.language), TITLE_FONT_PT, bold=True,
+        _roadmap_display_name(slide), TITLE_FONT_PT, bold=True,
     )
 
     top = 1.0
@@ -764,7 +785,7 @@ def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float,
     )
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.42), Inches(w - 2 * MARGIN), Inches(0.45)),
-        _tier_display_name(slide.tier, slide.language), TITLE_FONT_PT, bold=True,
+        _roadmap_display_name(slide), TITLE_FONT_PT, bold=True,
     )
     box = s.shapes.add_textbox(Inches(MARGIN), Inches(1.0), Inches(w - 2 * MARGIN), Inches(h - 1.5))
     tf = box.text_frame
