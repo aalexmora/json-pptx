@@ -797,13 +797,25 @@ button.danger {
 }
 
 .modal-field input[type='text'],
-.modal-field select {
+.modal-field select,
+.modal-field textarea {
   padding: 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: var(--input-bg);
   color: var(--text);
   font-size: 13px;
+}
+
+.modal-field textarea {
+  min-height: 96px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.modal-field small {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .dropzone {
@@ -870,6 +882,17 @@ button.danger {
 .static-list-name {
   flex: 1;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.static-list-name small {
+  display: block;
+  max-width: 210px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

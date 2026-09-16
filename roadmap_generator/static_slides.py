@@ -1,7 +1,8 @@
 """Статичные слайды пользователя (ТЗ v4 §7.3).
 
-Слайд = загруженная `.pptx`-заготовка (копируется 1:1) с названием для карточек
-и точкой вставки `end` / `before:<Product>` / `after:<Product>`. Хранятся в профиле.
+Слайд = загруженная `.pptx`-заготовка (копируется 1:1) с названием для карточек,
+точкой вставки `end` / `before:<Product>` / `after:<Product>` и необязательным
+prompt для будущей AI-генерации/актуализации. Хранятся в профиле.
 """
 from __future__ import annotations
 
@@ -16,8 +17,11 @@ STATIC_SLIDES_DIR = PROJECT_ROOT / "templates_library" / "static_slides"
 _static_slides: List[Dict[str, str]] = []
 
 
-def get_static_slides() -> List[Dict[str, str]]:
-    return [dict(s) for s in _static_slides]
+def get_static_slides(language: str | None = None) -> List[Dict[str, str]]:
+    slides = [dict(s) for s in _static_slides]
+    if language is None:
+        return slides
+    return [slide for slide in slides if slide["language"] == language]
 
 
 def save_static_slides(slides) -> None:
@@ -27,6 +31,10 @@ def save_static_slides(slides) -> None:
             "name": s.get("name", "") or s.get("title", ""),
             "position": s.get("position", "end"),
             "pptx": s.get("pptx", ""),
+            "prompt": s.get("prompt", ""),
+            # Legacy-профили создавались до языкового разделения и фактически
+            # использовались прежде всего для RU-колоды.
+            "language": s.get("language") if s.get("language") in {"ru", "en"} else "ru",
         })
 
 

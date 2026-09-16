@@ -75,6 +75,8 @@ class ThankYouSlide:
 class StaticSlide:
     name: str
     pptx: str = ""
+    prompt: str = ""
+    language: str = "ru"
 
 
 @dataclass
@@ -179,7 +181,7 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
             product_intro = [] if get_product_slide_hidden_flag(pname) else [DividerSlide("product", pname)]
             product_decks.append((pname, product_intro + deck_items))
 
-    slides = _assemble_with_static(product_decks, get_static_slides())
+    slides = _assemble_with_static(product_decks, get_static_slides(model.language))
 
     meta = get_deck_meta()
     deck: List[Union[TitleSlide, ThankYouSlide, DividerSlide, RoadmapSlide, StaticSlide]] = [
@@ -196,14 +198,14 @@ def _assemble_with_static(product_decks, static_slides) -> List[Union[DividerSli
     for pname, deck_items in product_decks:
         for ss in static_slides:
             if ss["position"] == f"before:{pname}":
-                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", "")))
+                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", ""), prompt=ss.get("prompt", ""), language=ss["language"]))
         result.extend(deck_items)
         for ss in static_slides:
             if ss["position"] == f"after:{pname}":
-                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", "")))
+                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", ""), prompt=ss.get("prompt", ""), language=ss["language"]))
     for ss in static_slides:
         if ss["position"] == "end":
-            result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", "")))
+            result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", ""), prompt=ss.get("prompt", ""), language=ss["language"]))
     return result
 
 

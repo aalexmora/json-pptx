@@ -50,6 +50,8 @@ export interface ThankYouSlide {
 export interface StaticSlide {
   name: string
   pptx: string
+  prompt: string
+  language: 'ru' | 'en'
 }
 
 export type Slide = RoadmapSlide | DividerSlide | TitleSlide | ThankYouSlide | StaticSlide
@@ -122,7 +124,7 @@ export interface Profile {
   under_approval_ids: number[]
   deck_meta: { title: string; year: string; version: string }
   service_strings: Record<string, { ru: string; en: string }>
-  static_slides: { name: string; position: string; pptx: string }[]
+  static_slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]
   product_languages: Record<string, { ru: boolean; en: boolean }>
   tier_names: Record<string, { ru: string; en: string }>
 }

@@ -278,13 +278,21 @@ def test_service_strings_default_when_no_override(load_fixture):
 
 def test_static_slides_insertion(load_fixture):
     static_slides.save_static_slides([
-        {"name": "Intro", "position": "end"},
+        {"name": "Intro", "position": "end", "prompt": "Summarize the roadmap"},
         {"name": "Pre", "position": "before:Kaspersky Next"},
+        {"name": "English end", "position": "end", "language": "en"},
     ])
     model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="ru")
     plan = build_slide_plan(model, {})
     static_names = [s.name for s in plan.slides if isinstance(s, StaticSlide)]
     assert static_names == ["Pre", "Intro"]
+    intro = next(s for s in plan.slides if isinstance(s, StaticSlide) and s.name == "Intro")
+    assert intro.prompt == "Summarize the roadmap"
+    assert static_slides.export_state()[1]["prompt"] == ""
+    assert intro.language == "ru"
+    en_model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="en")
+    en_plan = build_slide_plan(en_model, {})
+    assert [s.name for s in en_plan.slides if isinstance(s, StaticSlide)] == ["English end"]
     idx_pre = next(i for i, s in enumerate(plan.slides) if isinstance(s, StaticSlide) and s.name == "Pre")
     idx_prod = next(i for i, s in enumerate(plan.slides) if isinstance(s, DividerSlide) and s.divider_type == "product")
     assert idx_pre < idx_prod

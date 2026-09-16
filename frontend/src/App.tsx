@@ -452,7 +452,7 @@ export default function App() {
   )
   const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
   const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality'>('preview')
-  const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '' })
+  const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '', prompt: '' })
   const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [logoRefresh, setLogoRefresh] = useState(0)
   const [tierLogoStatus, setTierLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
@@ -859,7 +859,7 @@ export default function App() {
   }
 
   function openStaticSlideModal(position = 'end') {
-    setStaticModal({ open: true, name: '', position, pptx: '' })
+    setStaticModal({ open: true, name: '', position, pptx: '', prompt: '' })
   }
 
   function handleDeleteStaticSlide(index: number) {
@@ -875,7 +875,13 @@ export default function App() {
     if (!profile) return
     handleStaticSlides([
       ...(profile.static_slides ?? []),
-      { name: staticModal.name, position: staticModal.position, pptx: staticModal.pptx },
+      {
+        name: staticModal.name,
+        position: staticModal.position,
+        pptx: staticModal.pptx,
+        prompt: staticModal.prompt,
+        language,
+      },
     ])
     closeStaticSlideModal()
   }
@@ -909,7 +915,13 @@ export default function App() {
     persist({ ...profile, ordering: { ...profile.ordering, apptitle_priority: names } })
   }
 
-  function handleStaticSlides(slides: { name: string; position: string; pptx: string }[]) {
+  function handleStaticSlides(slides: {
+    name: string
+    position: string
+    pptx: string
+    prompt: string
+    language: 'ru' | 'en'
+  }[]) {
     if (!profile) return
     persist({ ...profile, static_slides: slides })
   }
@@ -1262,11 +1274,15 @@ export default function App() {
 
         {profile && (
           <details className="section">
-            <summary>Статичные слайды</summary>
+            <summary>Статичные слайды · {language.toUpperCase()}</summary>
             <button className="section-primary-action" onClick={() => openStaticSlideModal()}>
               ＋ Добавить статичный слайд
             </button>
-            <StaticSlidesList slides={profile.static_slides ?? []} onDelete={handleDeleteStaticSlide} />
+            <StaticSlidesList
+              slides={profile.static_slides ?? []}
+              language={language}
+              onDelete={handleDeleteStaticSlide}
+            />
           </details>
         )}
 
@@ -1652,9 +1668,9 @@ function StaticSlideModal({
   onClose,
   onSubmit,
 }: {
-  modal: { open: boolean; name: string; position: string; pptx: string }
+  modal: { open: boolean; name: string; position: string; pptx: string; prompt: string }
   productNames: string[]
-  onChange: (patch: Partial<{ name: string; position: string; pptx: string }>) => void
+  onChange: (patch: Partial<{ name: string; position: string; pptx: string; prompt: string }>) => void
   onClose: () => void
   onSubmit: () => void
 }) {
@@ -1703,6 +1719,16 @@ function StaticSlideModal({
               </option>
             ))}
           </select>
+        </label>
+        <label className="modal-field">
+          Prompt для будущего AI-обновления:
+          <textarea
+            rows={5}
+            value={modal.prompt}
+            onChange={(e) => onChange({ prompt: e.target.value })}
+            placeholder="Опишите назначение, содержание и требования к оформлению слайда"
+          />
+          <small>Сейчас prompt только сохраняется. Автоматическая генерация будет добавлена позже.</small>
         </label>
         <div
           className={'dropzone' + (dragOver ? ' over' : '')}
@@ -1853,19 +1879,29 @@ function InsertMarker({ position, onInsert }: { position: string; onInsert: (pos
 
 function StaticSlidesList({
   slides,
+  language,
   onDelete,
 }: {
-  slides: { name: string; position: string; pptx: string }[]
+  slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]
+  language: 'ru' | 'en'
   onDelete: (index: number) => void
 }) {
-  if (slides.length === 0) return <div className="priority-empty">Нет статичных слайдов.</div>
+  const visibleSlides = slides
+    .map((slide, sourceIndex) => ({ slide, sourceIndex }))
+    .filter(({ slide }) => (slide.language ?? 'ru') === language)
+  if (visibleSlides.length === 0) {
+    return <div className="priority-empty">Нет статичных слайдов для {language.toUpperCase()}.</div>
+  }
   return (
     <div className="static-list">
-      {slides.map((s, i) => (
-        <div key={i} className="static-list-row">
-          <span className="static-list-name">{s.name || '(без названия)'}</span>
+      {visibleSlides.map(({ slide: s, sourceIndex }) => (
+        <div key={sourceIndex} className="static-list-row">
+          <span className="static-list-name">
+            {s.name || '(без названия)'}
+            {s.prompt && <small title={s.prompt}>Prompt: {s.prompt}</small>}
+          </span>
           <span className="static-list-pos">{s.position}</span>
-          <button title="Удалить" onClick={() => onDelete(i)}>
+          <button title="Удалить" onClick={() => onDelete(sourceIndex)}>
             ✕
           </button>
         </div>
