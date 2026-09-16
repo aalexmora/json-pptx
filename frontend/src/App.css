@@ -897,6 +897,28 @@ button.danger {
   white-space: nowrap;
 }
 
+.static-prompt-editor {
+  display: grid;
+  gap: 4px;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.static-prompt-editor textarea {
+  width: 100%;
+  min-height: 58px;
+  padding: 6px 7px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+}
+
 .static-list-pos {
   font-size: 11px;
   color: var(--text-muted);

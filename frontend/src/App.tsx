@@ -867,6 +867,13 @@ export default function App() {
     handleStaticSlides((profile.static_slides ?? []).filter((_, k) => k !== index))
   }
 
+  function handleStaticSlidePrompt(index: number, prompt: string) {
+    if (!profile) return
+    handleStaticSlides((profile.static_slides ?? []).map((slide, slideIndex) =>
+      slideIndex === index ? { ...slide, prompt } : slide,
+    ))
+  }
+
   function closeStaticSlideModal() {
     setStaticModal((m) => ({ ...m, open: false }))
   }
@@ -1281,6 +1288,7 @@ export default function App() {
             <StaticSlidesList
               slides={profile.static_slides ?? []}
               language={language}
+              onPromptChange={handleStaticSlidePrompt}
               onDelete={handleDeleteStaticSlide}
             />
           </details>
@@ -1880,10 +1888,12 @@ function InsertMarker({ position, onInsert }: { position: string; onInsert: (pos
 function StaticSlidesList({
   slides,
   language,
+  onPromptChange,
   onDelete,
 }: {
   slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]
   language: 'ru' | 'en'
+  onPromptChange: (index: number, prompt: string) => void
   onDelete: (index: number) => void
 }) {
   const visibleSlides = slides
@@ -1898,7 +1908,15 @@ function StaticSlidesList({
         <div key={sourceIndex} className="static-list-row">
           <span className="static-list-name">
             {s.name || '(без названия)'}
-            {s.prompt && <small title={s.prompt}>Prompt: {s.prompt}</small>}
+            <label className="static-prompt-editor">
+              Prompt
+              <textarea
+                rows={3}
+                value={s.prompt ?? ''}
+                onChange={(event) => onPromptChange(sourceIndex, event.target.value)}
+                placeholder="Опишите будущую AI-генерацию или обновление слайда"
+              />
+            </label>
           </span>
           <span className="static-list-pos">{s.position}</span>
           <button title="Удалить" onClick={() => onDelete(sourceIndex)}>
