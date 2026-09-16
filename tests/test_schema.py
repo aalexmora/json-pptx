@@ -145,6 +145,59 @@ def test_validate_parses_us_12h_date():
     assert model.products[0].streams[0].tiers[0].releases[0].quarter == "Q2 2026"
 
 
+def test_crdate_defines_display_quarter_instead_of_trdate():
+    data = [{
+        "Product": "P",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1,
+            "Title": "RPP release",
+            "AppTitle": "A",
+            "TrDate": "29.06.2026 21:00:00",
+            "CrDate": "01.07.2026 21:00:00",
+            "Requirements": [{"Id": 10, "MarketingTitle": "ok"}],
+        }]}]}],
+    }]
+
+    assert validate_roadmap(data) == []
+    model = normalize_roadmap(data, language="ru")
+    release = model.products[0].streams[0].tiers[0].releases[0]
+    assert release.quarter == "Q3 2026"
+    assert release.cr_date is not None
+    assert model.quality_issues == []
+
+
+def test_null_crdate_falls_back_to_trdate_and_creates_quality_issue():
+    data = [{
+        "Product": "P",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1,
+            "Title": "RPP release",
+            "AppTitle": "A",
+            "TrDate": "29.06.2026 21:00:00",
+            "CrDate": None,
+            "Requirements": [{"Id": 10, "MarketingTitle": "ok"}],
+        }]}]}],
+    }]
+
+    assert validate_roadmap(data) == []
+    model = normalize_roadmap(data, language="ru")
+    release = model.products[0].streams[0].tiers[0].releases[0]
+    assert release.quarter == "Q2 2026"
+    assert release.cr_date is None
+    assert model.quality_issues == [{
+        "code": "missing_crdate",
+        "severity": "warning",
+        "message": "CrDate не заполнена — квартал рассчитан по TrDate",
+        "release_id": 1,
+        "rpp_title": "RPP release",
+        "trdate": "29.06.2026 21:00:00",
+        "quarter": "Q2 2026",
+        "product": "P",
+        "stream": "S",
+        "tier": "T",
+    }]
+
+
 def test_validate_missing_marketing_title():
     data = [
         {

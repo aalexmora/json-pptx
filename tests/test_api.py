@@ -108,6 +108,32 @@ def test_lint_issues_in_plan_response():
         assert body["lint_issues"][0]["message"]
 
 
+def test_plan_returns_structured_quality_issue_for_missing_crdate():
+    data = [{
+        "Product": "P", "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "Title": "RPP title", "AppTitle": "A",
+            "TrDate": "15.04.2025 21:00:00", "CrDate": None,
+            "Requirements": [{"Id": 10, "MarketingTitle": "ok"}],
+        }]}]}],
+    }]
+    with TestClient(app) as c:
+        body = _plan(c, data).json()
+
+    assert body["errors"] == []
+    assert body["quality_issues"][0] == {
+        "code": "missing_crdate",
+        "severity": "warning",
+        "message": "CrDate не заполнена — квартал рассчитан по TrDate",
+        "release_id": 1,
+        "rpp_title": "RPP title",
+        "trdate": "15.04.2025 21:00:00",
+        "quarter": "Q2 2025",
+        "product": "P",
+        "stream": "S",
+        "tier": "T",
+    }
+
+
 def test_diff_endpoint():
     old = [{
         "Product": "P", "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{

@@ -59,6 +59,7 @@ class Release:
     app_id: Optional[int]
     app_title: str
     tr_date: datetime
+    cr_date: Optional[datetime]
     quarter: str                    # "Qx YYYY" (календарный квартал)
     requirements: List[Requirement]
 
@@ -86,6 +87,7 @@ class RoadmapModel:
     language: Language
     products: List[Product]
     warnings: List[str] = field(default_factory=list)
+    quality_issues: List[dict] = field(default_factory=list)
 
 
 def _quarter(dt: datetime) -> str:
@@ -202,6 +204,18 @@ def validate_roadmap(data) -> List[str]:
                                 f"{rprefix}: 'TrDate'='{trdate}' не парсится (форматы: {DATE_FORMATS})"
                             )
 
+                    crdate = release.get("CrDate")
+                    if crdate is not None:
+                        if not isinstance(crdate, str):
+                            errors.append(f"{rprefix}: поле 'CrDate' должно быть строкой или null")
+                        else:
+                            try:
+                                _parse_date(crdate)
+                            except ValueError:
+                                errors.append(
+                                    f"{rprefix}: 'CrDate'='{crdate}' не парсится (форматы: {DATE_FORMATS})"
+                                )
+
                     reqs = release.get("Requirements")
                     if not isinstance(reqs, list):
                         errors.append(f"{rprefix}: отсутствует поле 'Requirements' (список)")
@@ -227,7 +241,8 @@ def validate_roadmap(data) -> List[str]:
 def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     """Разворачивает сырой JSON в типизированную `RoadmapModel`.
 
-    - вычисляет календарный квартал для каждого Release из `TrDate`;
+    - вычисляет календарный квартал для каждого Release из `CrDate`;
+      если `CrDate` отсутствует/null, использует `TrDate` и создаёт замечание качества;
     - фильтрует Requirements по `Visibility` для выбранного языка;
     - при `language == "en"` дополнительно отбрасывает Requirements без `MarketingTitleEn`;
     - `Kbr == "Yes"` — признак «Subject to Change» (S2C): помечает фичу как под вопросом.
@@ -241,6 +256,7 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     dup_releases = 0
     dup_reqs = 0
     unknown_visibility: dict[str, int] = {}
+    quality_issues: List[dict] = []
 
     for raw_product in data:
         streams: List[Stream] = []
@@ -250,6 +266,28 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                 releases: List[Release] = []
                 for raw_release in raw_tier.get("Releases", []):
                     tr_date = _parse_date(raw_release["TrDate"])
+                    raw_cr_date = raw_release.get("CrDate")
+                    cr_date = _parse_date(raw_cr_date) if raw_cr_date is not None else None
+                    display_date = cr_date or tr_date
+                    quarter = _quarter(display_date)
+                    if cr_date is None:
+                        quality_issues.append({
+                            "code": "missing_crdate",
+                            "severity": "warning",
+                            "message": "CrDate не заполнена — квартал рассчитан по TrDate",
+                            "release_id": raw_release["Id"],
+                            "rpp_title": (
+                                raw_release.get("RppTitle")
+                                or raw_release.get("RPPTitle")
+                                or raw_release.get("Title")
+                                or ""
+                            ),
+                            "trdate": raw_release["TrDate"],
+                            "quarter": quarter,
+                            "product": _normalize_name(raw_product.get("Product")),
+                            "stream": _normalize_name(raw_stream.get("Stream")),
+                            "tier": _normalize_name(raw_tier.get("Tier")),
+                        })
                     rid = raw_release["Id"]
                     if rid in seen_release_ids:
                         dup_releases += 1
@@ -297,7 +335,8 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                         app_id=raw_release.get("AppId"),
                         app_title=_normalize_name(raw_release.get("AppTitle")),
                         tr_date=tr_date,
-                        quarter=_quarter(tr_date),
+                        cr_date=cr_date,
+                        quarter=quarter,
                         requirements=requirements,
                     ))
 
@@ -321,4 +360,9 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
             f"Неизвестные значения Visibility ({values}) — требования скрыты"
         )
 
-    return RoadmapModel(language=language, products=products, warnings=warnings)
+    return RoadmapModel(
+        language=language,
+        products=products,
+        warnings=warnings,
+        quality_issues=quality_issues,
+    )

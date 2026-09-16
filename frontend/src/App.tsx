@@ -17,6 +17,7 @@ import type {
   LintIssue,
   PlanResponse,
   Profile,
+  QualityIssue,
   ReleaseInfo,
   RoadmapSlide,
   Slide,
@@ -64,6 +65,7 @@ const SAMPLE = JSON.stringify(
                   AppId: 1,
                   AppTitle: 'Managed Detection and Response',
                   TrDate: '15.01.2025 21:00:00',
+                  CrDate: '15.01.2025 21:00:00',
                   Requirements: [
                     {
                       Id: 11,
@@ -89,6 +91,7 @@ const SAMPLE = JSON.stringify(
                   AppId: 1,
                   AppTitle: 'Managed Detection and Response',
                   TrDate: '15.04.2025 21:00:00',
+                  CrDate: '15.04.2025 21:00:00',
                   Requirements: [
                     {
                       Id: 21,
@@ -448,6 +451,7 @@ export default function App() {
     restoredSession?.lastBulkExpansionLevel ?? 'features',
   )
   const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
+  const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality'>('preview')
   const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '' })
   const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [logoRefresh, setLogoRefresh] = useState(0)
@@ -1014,7 +1018,8 @@ export default function App() {
   const planWarnings = result?.warnings ?? []
   const planConflicts = result?.plan?.conflicts ?? []
   const lintIssues = result?.lint_issues ?? []
-  const qualityCount = planErrors.length + planWarnings.length + planConflicts.length + lintIssues.length
+  const dataQualityIssues = result?.quality_issues ?? []
+  const qualityCount = planErrors.length + planWarnings.length + planConflicts.length + lintIssues.length + dataQualityIssues.length
   const slideCount = result?.plan?.slides.length ?? 0
   const canGenerate = Boolean(jsonData && result?.plan && planErrors.length === 0 && !loading && !generating)
 
@@ -1049,9 +1054,15 @@ export default function App() {
         </div>
         <div className="header-actions">
           {Boolean(jsonData) && (
-            <span className={'status-pill ' + (planErrors.length ? 'error' : qualityCount ? 'warning' : 'success')}>
+            <button
+              type="button"
+              className={'status-pill ' + (planErrors.length ? 'error' : qualityCount ? 'warning' : 'success')}
+              onClick={() => qualityCount > 0 && setWorkspaceView('quality')}
+              disabled={qualityCount === 0 || loading}
+              title={qualityCount > 0 ? 'Открыть контроль качества данных' : 'Замечаний нет'}
+            >
               {loading ? 'Проверяем…' : planErrors.length ? 'Есть ошибки' : qualityCount ? `${qualityCount} замеч.` : 'Готово'}
-            </span>
+            </button>
           )}
           {saveState !== 'idle' && (
             <span className={'save-state ' + saveState} role="status">
@@ -1151,6 +1162,14 @@ export default function App() {
             <h2>Превью презентации</h2>
             <p>Здесь появится структура будущей презентации</p>
           </div>
+        ) : workspaceView === 'quality' ? (
+          <QualityDashboard
+            issues={dataQualityIssues}
+            warnings={planWarnings}
+            conflicts={planConflicts}
+            lintIssues={lintIssues}
+            onBack={() => setWorkspaceView('preview')}
+          />
         ) : (
           <>
             {loading && <p>Загрузка…</p>}
@@ -1391,6 +1410,87 @@ function LintRow({ issue }: { issue: LintIssue }) {
       <b>{issue.message}</b>
       <div className="lint-text">«{issue.text}» — {issue.tier} (req {issue.requirement_id})</div>
     </div>
+  )
+}
+
+function QualityDashboard({
+  issues,
+  warnings,
+  conflicts,
+  lintIssues,
+  onBack,
+}: {
+  issues: QualityIssue[]
+  warnings: string[]
+  conflicts: string[]
+  lintIssues: LintIssue[]
+  onBack: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLocaleLowerCase('ru')
+  const filtered = normalizedQuery
+    ? issues.filter((issue) => [issue.rpp_title, issue.trdate, issue.quarter, issue.product, issue.stream, issue.tier]
+        .some((value) => value.toLocaleLowerCase('ru').includes(normalizedQuery)))
+    : issues
+
+  return (
+    <section className="quality-workspace">
+      <div className="quality-workspace-header">
+        <div>
+          <span className="eyebrow">Контроль качества</span>
+          <h2>Замечания к данным</h2>
+          <p>Исправьте источник JSON и загрузите выгрузку повторно. Роадмап пока строится с указанным fallback.</p>
+        </div>
+        <button type="button" onClick={onBack}>← К презентации</button>
+      </div>
+
+      <div className="quality-summary-cards">
+        <div><strong>{issues.length}</strong><span>структурированных замечаний</span></div>
+        <div><strong>{warnings.length + conflicts.length}</strong><span>системных предупреждений</span></div>
+        <div><strong>{lintIssues.length}</strong><span>ошибок текстов</span></div>
+      </div>
+
+      {issues.length > 0 && (
+        <>
+          <div className="quality-table-toolbar">
+            <h3>Даты релизов</h3>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Поиск по RPP title, дате, кварталу…"
+            />
+          </div>
+          <div className="quality-table-wrap">
+            <table className="quality-table">
+              <thead><tr><th>Проверка</th><th>RPP title</th><th>TrDate</th><th>Квартал</th></tr></thead>
+              <tbody>
+                {filtered.map((issue) => (
+                  <tr key={`${issue.code}-${issue.release_id}-${issue.product}-${issue.tier}`}>
+                    <td><span className={`quality-severity ${issue.severity}`}>{issue.message}</span></td>
+                    <td><strong>{issue.rpp_title || `Release ${issue.release_id}`}</strong><small>{issue.product} · {issue.stream} · {issue.tier}</small></td>
+                    <td>{issue.trdate}</td>
+                    <td>{issue.quarter}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filtered.length === 0 && <p className="quality-empty">По этому запросу замечаний нет.</p>}
+          </div>
+        </>
+      )}
+
+      {(warnings.length > 0 || conflicts.length > 0 || lintIssues.length > 0) && (
+        <details className="quality-secondary">
+          <summary>Другие замечания ({warnings.length + conflicts.length + lintIssues.length})</summary>
+          <ul>
+            {warnings.map((warning, index) => <li key={`warning-${index}`}>{warning}</li>)}
+            {conflicts.map((conflict, index) => <li key={`conflict-${index}`}>{conflict}</li>)}
+            {lintIssues.map((issue, index) => <li key={`lint-${index}`}>{issue.message}: «{issue.text}»</li>)}
+          </ul>
+        </details>
+      )}
+    </section>
   )
 }
 

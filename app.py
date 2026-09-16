@@ -100,22 +100,23 @@ class DiffRequest(BaseModel):
 def _build(req: PlanRequest):
     errors = validate_roadmap(req.json_data)
     if errors:
-        return None, errors, [], [], None
+        return None, errors, [], [], [], None
     model = normalize_roadmap(req.json_data, language=req.language)
     plan = build_slide_plan(model, req.plugin_settings)
     lint_issues = lint_model(model)
-    return plan, [], model.warnings, lint_issues, model
+    return plan, [], model.warnings, lint_issues, model.quality_issues, model
 
 
 @app.post("/api/plan")
 def api_plan(req: PlanRequest):
-    plan, errors, warnings, lint_issues, model = _build(req)
+    plan, errors, warnings, lint_issues, quality_issues, model = _build(req)
     if plan is None:
-        return {"errors": errors, "plan": None, "warnings": [], "lint_issues": [], "tree": None, "releases": []}
+        return {"errors": errors, "plan": None, "warnings": [], "lint_issues": [], "quality_issues": [], "tree": None, "releases": []}
     return {
         "errors": [],
         "warnings": warnings,
         "lint_issues": lint_issues,
+        "quality_issues": quality_issues,
         "plan": asdict(plan),
         "tree": build_tree(model),
         "releases": list_releases(model),
@@ -124,7 +125,7 @@ def api_plan(req: PlanRequest):
 
 @app.post("/api/pptx")
 def api_pptx(req: PlanRequest):
-    plan, errors, _, _, _ = _build(req)
+    plan, errors, _, _, _, _ = _build(req)
     if plan is None:
         raise HTTPException(status_code=422, detail={"errors": errors})
     prs = build_presentation(plan)

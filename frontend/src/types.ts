@@ -68,6 +68,19 @@ export interface LintIssue {
   message: string
 }
 
+export interface QualityIssue {
+  code: string
+  severity: 'warning' | 'error'
+  message: string
+  release_id: number
+  rpp_title: string
+  trdate: string
+  quarter: string
+  product: string
+  stream: string
+  tier: string
+}
+
 export interface TreeTier {
   name: string
 }
@@ -118,6 +131,7 @@ export interface PlanResponse {
   errors: string[]
   warnings: string[]
   lint_issues: LintIssue[]
+  quality_issues: QualityIssue[]
   plan: SlidePlan | null
   tree: Tree | null
   releases: ReleaseInfo[]
