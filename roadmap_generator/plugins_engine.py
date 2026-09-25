@@ -77,6 +77,7 @@ class StaticSlide:
     pptx: str = ""
     prompt: str = ""
     language: str = "ru"
+    position: str = "end"
 
 
 @dataclass
@@ -181,14 +182,18 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
             product_intro = [] if get_product_slide_hidden_flag(pname) else [DividerSlide("product", pname)]
             product_decks.append((pname, product_intro + deck_items))
 
-    slides = _assemble_with_static(product_decks, get_static_slides(model.language))
+    configured_static = get_static_slides(model.language)
+    slides = _assemble_with_static(product_decks, configured_static)
 
     meta = get_deck_meta()
     deck: List[Union[TitleSlide, ThankYouSlide, DividerSlide, RoadmapSlide, StaticSlide]] = [
-        TitleSlide(title=meta["title"], year=meta["year"], version=meta["version"]),
+        _to_static_slide(ss) for ss in configured_static if ss["position"] == "first"
     ]
+    if meta.get("include_title_slide", True):
+        deck.append(TitleSlide(title=meta["title"], year=meta["year"], version=meta["version"]))
     deck.extend(slides)
-    deck.append(ThankYouSlide(text=get_service_string("thank_you", model.language)))
+    if meta.get("include_thank_you_slide", True):
+        deck.append(ThankYouSlide(text=get_service_string("thank_you", model.language)))
     return SlidePlan(slides=deck, conflicts=conflicts)
 
 
@@ -198,15 +203,25 @@ def _assemble_with_static(product_decks, static_slides) -> List[Union[DividerSli
     for pname, deck_items in product_decks:
         for ss in static_slides:
             if ss["position"] == f"before:{pname}":
-                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", ""), prompt=ss.get("prompt", ""), language=ss["language"]))
+                result.append(_to_static_slide(ss))
         result.extend(deck_items)
         for ss in static_slides:
             if ss["position"] == f"after:{pname}":
-                result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", ""), prompt=ss.get("prompt", ""), language=ss["language"]))
+                result.append(_to_static_slide(ss))
     for ss in static_slides:
         if ss["position"] == "end":
-            result.append(StaticSlide(name=ss["name"], pptx=ss.get("pptx", ""), prompt=ss.get("prompt", ""), language=ss["language"]))
+            result.append(_to_static_slide(ss))
     return result
+
+
+def _to_static_slide(slide: dict) -> StaticSlide:
+    return StaticSlide(
+        name=slide["name"],
+        pptx=slide.get("pptx", ""),
+        prompt=slide.get("prompt", ""),
+        language=slide["language"],
+        position=slide.get("position", "end"),
+    )
 
 
 def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings, inheritance_note=None, exclude_req_ids=None):

@@ -481,6 +481,38 @@ button.danger {
   font-size: 14px;
 }
 
+.diff-summary > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.diff-details {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  margin-top: 12px;
+  overflow: auto;
+}
+
+.diff-group {
+  display: grid;
+  gap: 5px;
+}
+
+.diff-item {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--hover);
+}
+
+.diff-item small {
+  color: var(--text-muted);
+}
+
 .diff-badge {
   display: inline-block;
   margin-left: 8px;
@@ -536,6 +568,13 @@ button.danger {
 .deck-meta-row {
   display: flex;
   gap: 6px;
+}
+
+.deck-slide-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
 }
 
 .service-strings {
@@ -818,6 +857,12 @@ button.danger {
   font-size: 11px;
 }
 
+.keep-source-format {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+}
+
 .dropzone {
   border: 2px dashed var(--border-strong);
   border-radius: 8px;
@@ -927,6 +972,10 @@ button.danger {
 .grouped {
   display: flex;
   flex-direction: column;
+}
+
+.product-bundle {
+  display: contents;
 }
 
 .group .group {
@@ -1135,6 +1184,19 @@ button.danger {
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
+}
+
+.logo-group-title {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.logo-upload.compact {
+  padding: 3px 7px;
+  border-style: solid;
 }
 
 .product-logo-row {

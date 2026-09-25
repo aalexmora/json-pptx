@@ -1,7 +1,7 @@
 """Тесты для `roadmap_generator/diffing.py` (этап 7)."""
 from __future__ import annotations
 
-from roadmap_generator.diffing import compute_diff, match_previous_project
+from roadmap_generator.diffing import build_diff_details, compute_diff, match_previous_project
 from roadmap_generator.schema import normalize_roadmap
 
 
@@ -38,6 +38,11 @@ def test_compute_diff_new_changed_removed():
     assert diff.new_requirement_ids == [30]
     assert diff.removed_requirement_ids == [20]
     assert diff.changed_requirement_ids == [10]
+    details = build_diff_details(old, new, diff)
+    changed = details["changed_requirements"][0]
+    assert changed["path"] == "P > S > T"
+    assert changed["text"] == "changed text"
+    assert changed["changes"]["text"] == {"before": "old text", "after": "changed text"}
 
 
 def test_compute_diff_release_changed_when_quarter_moves():

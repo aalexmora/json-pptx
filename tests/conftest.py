@@ -30,6 +30,7 @@ def _isolate_profile(tmp_path):
 def _reset_state(tmp_path, monkeypatch):
     """Сбрасывает состояние тестов, не затрагивая пользовательские логотипы."""
     monkeypatch.setattr(product_logos, "LOGO_DIR", tmp_path / "product-logos")
+    monkeypatch.setattr(product_logos, "PRODUCT_SLIDE_DIR", tmp_path / "product-slide-images")
     monkeypatch.setattr(product_logos, "TIER_LOGO_DIR", tmp_path / "tier-logos")
     ordering._reset_state()
     labels._reset_state()

@@ -52,6 +52,7 @@ export interface StaticSlide {
   pptx: string
   prompt: string
   language: 'ru' | 'en'
+  position: string
 }
 
 export type Slide = RoadmapSlide | DividerSlide | TitleSlide | ThankYouSlide | StaticSlide
@@ -122,7 +123,13 @@ export interface Profile {
   labels: Record<string, string>
   linter_rules: { pattern: string; description: string }[]
   under_approval_ids: number[]
-  deck_meta: { title: string; year: string; version: string }
+  deck_meta: {
+    title: string
+    year: string
+    version: string
+    include_title_slide: boolean
+    include_thank_you_slide: boolean
+  }
   service_strings: Record<string, { ru: string; en: string }>
   static_slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]
   product_languages: Record<string, { ru: boolean; en: boolean }>
@@ -150,8 +157,20 @@ export interface DiffResult {
 
 export interface DiffResponse {
   diff: DiffResult
+  details: Record<string, DiffDetail[]>
   new_tier_paths: string[]
   removed_tier_paths: string[]
+}
+
+export interface DiffDetail {
+  id: number
+  path: string
+  before_path?: string
+  title?: string
+  quarter?: string
+  text?: string
+  kbr?: string | null
+  changes?: Record<string, { before: unknown; after: unknown }>
 }
 
 export interface TemplateInfo {

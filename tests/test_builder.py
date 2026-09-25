@@ -12,9 +12,9 @@ from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
-from roadmap_generator import ordering, tier_names
+from roadmap_generator import ordering, static_slides, tier_names
 from roadmap_generator.builder import build_presentation
-from roadmap_generator.plugins_engine import RoadmapSlide, build_slide_plan
+from roadmap_generator.plugins_engine import RoadmapSlide, SlidePlan, StaticSlide, build_slide_plan
 from roadmap_generator.schema import normalize_roadmap
 from roadmap_generator.template_registry import get_layout_shape_names
 
@@ -392,7 +392,7 @@ def test_group_and_feature_fonts_are_inherited_separately(tmp_path, monkeypatch)
     paragraphs = [paragraph for paragraph in rendered.text_frame.paragraphs if paragraph.text]
 
     assert [paragraph.text for paragraph in paragraphs] == [
-        "Application A", "• Feature A *", "Application B", "• Feature B *",
+        "Application A", "• Feature A", "Application B", "• Feature B",
     ]
     assert [paragraph.runs[0].font.size.pt for paragraph in paragraphs] == [18, 10, 18, 10]
     assert [paragraph.runs[0].font.name for paragraph in paragraphs] == [
@@ -482,6 +482,35 @@ def test_title_and_thank_you_slides(load_fixture, synthetic_template_path):
     # первый слайд — титульный (дефолтный заголовок «Roadmap»), последний — «Спасибо!»
     assert "Roadmap" in texts[0]
     assert "Спасибо!" in texts[-1]
+
+
+def test_static_slide_keeps_source_formatting(tmp_path, monkeypatch, synthetic_template_path):
+    source = Presentation()
+    source_slide = source.slides.add_slide(source.slide_layouts[6])
+    source_slide.background.fill.solid()
+    source_slide.background.fill.fore_color.rgb = RGBColor(0x12, 0x34, 0x56)
+    box = source_slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
+    box.name = "formatted_source"
+    run = box.text_frame.paragraphs[0].add_run()
+    run.text = "Keep source formatting"
+    run.font.name = "Arial"
+    run.font.size = Pt(27)
+    run.font.bold = True
+    run.font.color.rgb = RGBColor(0xAA, 0x22, 0x33)
+    source_path = tmp_path / "static-source.pptx"
+    source.save(source_path)
+    monkeypatch.setattr(static_slides, "STATIC_SLIDES_DIR", tmp_path)
+
+    rendered = build_presentation(SlidePlan(slides=[StaticSlide(name="Static", pptx=source_path.name)]))
+    rendered_slide = rendered.slides[0]
+    rendered_box = next(shape for shape in rendered_slide.shapes if shape.name == "formatted_source")
+    rendered_run = rendered_box.text_frame.paragraphs[0].runs[0]
+
+    assert rendered_slide.background.fill.fore_color.rgb == RGBColor(0x12, 0x34, 0x56)
+    assert rendered_run.font.name == "Arial"
+    assert rendered_run.font.size == Pt(27)
+    assert rendered_run.font.bold is True
+    assert rendered_run.font.color.rgb == RGBColor(0xAA, 0x22, 0x33)
 
 
 def test_template_with_linked_picture_does_not_crash(load_fixture, tmp_path, monkeypatch):
@@ -754,7 +783,7 @@ def test_tier_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):
     monkeypatch.setattr("roadmap_generator.product_logos.TIER_LOGO_DIR", logo_dir)
     from roadmap_generator import product_logos
 
-    product_logos.save_tier_logo("Threat Data Feeds", blue, "png")
+    product_logos.save_tier_logo("Kaspersky Threat Intelligence", blue, "png")
 
     tpl_path = _template_with_named_shapes(
         tmp_path, "tier_logo_template.pptx",
@@ -767,3 +796,31 @@ def test_tier_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):
     assert slide is not None
     pics = [sh for sh in slide.shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
     assert any(p.image.blob == blue for p in pics), "картинка должна быть заменена на лого тира"
+
+
+def test_product_slide_image_replaces_product_divider_placeholder(load_fixture, tmp_path, monkeypatch):
+    blue = _png_rgb(0, 0, 255)
+    red = _png_rgb(255, 0, 0)
+    image_dir = tmp_path / "product_slide_images"
+    monkeypatch.setattr("roadmap_generator.product_logos.PRODUCT_SLIDE_DIR", image_dir)
+    from roadmap_generator import product_logos
+
+    product_logos.save_product_slide_image("Kaspersky Threat Intelligence", blue, "png")
+    tpl_path = _template_with_named_shapes(
+        tmp_path,
+        "product_slide_image_template.pptx",
+        [
+            {"name": "_slide_type_product", "kind": "text", "text": ""},
+            {"name": "Product_Name", "kind": "text", "text": "Product"},
+            {"name": "_product_slide_image", "kind": "picture", "bytes": red},
+        ],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
+
+    prs = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+    product_slide = next(
+        slide for slide in prs.slides
+        if any(shape.name == "Product_Name" for shape in slide.shapes)
+    )
+    pictures = [shape for shape in product_slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert any(picture.image.blob == blue for picture in pictures)

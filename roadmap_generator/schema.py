@@ -245,7 +245,7 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
       если `CrDate` отсутствует/null, использует `TrDate` и создаёт замечание качества;
     - фильтрует Requirements по `Visibility` для выбранного языка;
     - при `language == "en"` дополнительно отбрасывает Requirements без `MarketingTitleEn`;
-    - `Kbr == "Yes"` — признак «Subject to Change» (S2C): помечает фичу как под вопросом.
+    - `Kbr == "Subject to Change"` (без учёта регистра) — признак S2C.
 
     Плагины здесь НЕ применяются.
     """
@@ -302,8 +302,10 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                         if "Kbr" not in raw_req:
                             missing_kbr += 1
 
-                        # KBR == "Yes" → фича под вопросом (Subject to Change, S2C)
-                        is_subject_to_change = (kbr == "Yes")
+                        is_subject_to_change = (
+                            isinstance(kbr, str)
+                            and kbr.strip().casefold() == "subject to change"
+                        )
 
                         visibility = raw_req.get("Visibility")
                         visible_in = _visibility_languages(visibility)

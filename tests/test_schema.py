@@ -402,7 +402,7 @@ def test_normalize_kbr_s2c_fallbacks(load_fixture):
     assert by_id[10001].kbr == "No"
     assert by_id[10001].is_subject_to_change is False
 
-    assert by_id[10002].kbr == "Yes"
+    assert by_id[10002].kbr == "Subject To Change"
     assert by_id[10002].is_subject_to_change is True
 
     # нет Kbr -> None -> не S2C
@@ -416,12 +416,12 @@ def test_normalize_kbr_s2c_fallbacks(load_fixture):
     assert any("Kbr" in w for w in model.warnings)
 
 
-def test_normalize_real_data_kbr_yes_means_s2c(real_data):
+def test_normalize_real_data_kbr_yes_is_not_s2c(real_data):
     model = normalize_roadmap(real_data, language="ru")
     next_tier = model.products[0].streams[0].tiers[0]
     for release in next_tier.releases:
         for req in release.requirements:
-            assert req.is_subject_to_change is True
+            assert req.is_subject_to_change is False
 
 
 def test_normalize_stc_absent_is_not_validation_error(load_fixture):

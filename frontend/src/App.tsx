@@ -28,6 +28,7 @@ import type {
   Tree,
 } from './types'
 import {
+  deleteProductSlideImage,
   deleteProductLogo,
   deleteTemplate,
   deleteTierLogo,
@@ -35,18 +36,26 @@ import {
   fetchDiff,
   fetchHealth,
   fetchPlan,
+  getProductSlideImageStatuses,
   getProductLogoStatuses,
   getProfile,
   getTierLogoStatuses,
   listTemplates,
   saveProfile,
   setActiveTemplate,
+  uploadProductSlideImage,
   uploadProductLogo,
   uploadStaticSlidePptx,
   uploadTemplate,
   uploadTierLogo,
   type ProductLogoStatus,
 } from './api'
+import {
+  clearWorkspaceSession,
+  readWorkspaceSession,
+  saveWorkspaceSession,
+  type WorkspaceSession,
+} from './workspaceSession'
 
 const SAMPLE = JSON.stringify(
   [
@@ -78,7 +87,7 @@ const SAMPLE = JSON.stringify(
                     {
                       Id: 12,
                       Title: '[BRQ] B',
-                      Kbr: 'Yes',
+                      Kbr: 'Subject to Change',
                       MarketingTitleEn: 'Android 16 support',
                       MarketingTitle: 'Поддержка Android 16',
                       IsSubjectToChange: true,
@@ -128,65 +137,8 @@ type AppTitleMode = 'auto' | 'on' | 'off'
 type ExpansionLevel = 'products' | 'streams' | 'tiers' | 'features' | 'custom'
 type BulkExpansionLevel = Exclude<ExpansionLevel, 'custom'>
 
-const WORKSPACE_SESSION_KEY = 'roadmap-pptx.workspace.v1'
-
-interface WorkspaceSession {
-  version: 2
-  jsonData: unknown
-  jsonText: string
-  language: 'ru' | 'en'
-  apptitleMode: AppTitleMode
-  leftCollapsed: boolean
-  rightCollapsed: boolean
-  rightWidth: number
-  collapsedNodes: string[]
-  expansionLevel: ExpansionLevel
-  lastBulkExpansionLevel: BulkExpansionLevel
-}
-
-function readWorkspaceSession(): WorkspaceSession | null {
-  try {
-    const raw = localStorage.getItem(WORKSPACE_SESSION_KEY)
-    if (!raw) return null
-    const saved = JSON.parse(raw) as Record<string, unknown>
-    if (saved.version !== 1 && saved.version !== 2) return null
-    const language = saved.language === 'en' ? 'en' : 'ru'
-    const apptitleMode: AppTitleMode =
-      saved.apptitleMode === 'on' || saved.apptitleMode === 'off' ? saved.apptitleMode : 'auto'
-    const rightWidth = typeof saved.rightWidth === 'number'
-      ? Math.max(240, Math.min(600, saved.rightWidth))
-      : 320
-    return {
-      version: 2,
-      jsonData: saved.jsonData ?? null,
-      jsonText: typeof saved.jsonText === 'string' ? saved.jsonText : '',
-      language,
-      apptitleMode,
-      leftCollapsed: saved.leftCollapsed === true,
-      rightCollapsed: saved.rightCollapsed === true,
-      rightWidth,
-      collapsedNodes: Array.isArray(saved.collapsedNodes)
-        ? saved.collapsedNodes.filter((item): item is string => typeof item === 'string')
-        : [],
-      expansionLevel:
-        saved.expansionLevel === 'products' || saved.expansionLevel === 'streams' ||
-        saved.expansionLevel === 'tiers' || saved.expansionLevel === 'features' ||
-        saved.expansionLevel === 'custom'
-          ? saved.expansionLevel
-          : 'features',
-      lastBulkExpansionLevel:
-        saved.lastBulkExpansionLevel === 'products' || saved.lastBulkExpansionLevel === 'streams' ||
-        saved.lastBulkExpansionLevel === 'tiers' || saved.lastBulkExpansionLevel === 'features'
-          ? saved.lastBulkExpansionLevel
-          : 'features',
-    }
-  } catch {
-    localStorage.removeItem(WORKSPACE_SESSION_KEY)
-    return null
-  }
-}
-
 function positionLabel(position: string): string {
+  if (position === 'first') return 'Первый (заглавный) слайд'
   if (position === 'end') return 'В конце презентации'
   if (position.startsWith('before:')) return `Перед продуктом «${position.slice(7)}»`
   if (position.startsWith('after:')) return `После продукта «${position.slice(6)}»`
@@ -242,6 +194,11 @@ const productNodeKey = (product: string) => JSON.stringify(['product', product])
 const streamNodeKey = (product: string, stream: string) => JSON.stringify(['stream', product, stream])
 const tierNodeKey = (product: string, stream: string, tier: string) =>
   JSON.stringify(['tier', product, stream, tier])
+
+function usesTierLogoNames(productName: string): boolean {
+  const normalized = productName.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en')
+  return ['next', 'kaspersky next', 'symphony'].includes(normalized) || normalized.startsWith('kaspersky symphony')
+}
 
 function slideBulletCount(slide: RoadmapSlide): number {
   return slide.columns.reduce(
@@ -416,11 +373,10 @@ type DropHandlerFactory = (
 ) => DragBinding
 
 export default function App() {
-  const [restoredSession] = useState<WorkspaceSession | null>(() => readWorkspaceSession())
-  const [jsonText, setJsonText] = useState(restoredSession?.jsonText ?? '')
-  const [jsonData, setJsonData] = useState<unknown>(restoredSession?.jsonData ?? null)
-  const [language, setLanguage] = useState<'ru' | 'en'>(restoredSession?.language ?? 'ru')
-  const [apptitleMode, setApptitleMode] = useState<AppTitleMode>(restoredSession?.apptitleMode ?? 'auto')
+  const [jsonText, setJsonText] = useState('')
+  const [jsonData, setJsonData] = useState<unknown>(null)
+  const [language, setLanguage] = useState<'ru' | 'en'>('ru')
+  const [apptitleMode, setApptitleMode] = useState<AppTitleMode>('auto')
   const [result, setResult] = useState<PlanResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [appVersion, setAppVersion] = useState('')
@@ -438,23 +394,20 @@ export default function App() {
   const projectFileRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<{ parentPath: string; index: number } | null>(null)
   const [diff, setDiff] = useState<DiffResponse | null>(null)
-  const [leftCollapsed, setLeftCollapsed] = useState(restoredSession?.leftCollapsed ?? false)
-  const [rightCollapsed, setRightCollapsed] = useState(restoredSession?.rightCollapsed ?? false)
-  const [rightWidth, setRightWidth] = useState(restoredSession?.rightWidth ?? 320)
-  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(
-    () => new Set(restoredSession?.collapsedNodes ?? []),
-  )
-  const [expansionLevel, setExpansionLevel] = useState<ExpansionLevel>(
-    restoredSession?.expansionLevel ?? 'features',
-  )
-  const [lastBulkExpansionLevel, setLastBulkExpansionLevel] = useState<BulkExpansionLevel>(
-    restoredSession?.lastBulkExpansionLevel ?? 'features',
-  )
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
+  const [rightWidth, setRightWidth] = useState(320)
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set())
+  const [expansionLevel, setExpansionLevel] = useState<ExpansionLevel>('features')
+  const [lastBulkExpansionLevel, setLastBulkExpansionLevel] = useState<BulkExpansionLevel>('features')
+  const [workspaceSessionReady, setWorkspaceSessionReady] = useState(false)
   const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
   const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality'>('preview')
-  const [staticModal, setStaticModal] = useState({ open: false, name: '', position: 'end', pptx: '', prompt: '' })
+  const [staticModal, setStaticModal] = useState({ open: false, editIndex: null as number | null, name: '', position: 'end', pptx: '', prompt: '' })
   const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [logoRefresh, setLogoRefresh] = useState(0)
+  const [productSlideStatus, setProductSlideStatus] = useState<Record<string, ProductLogoStatus>>({})
+  const [productSlideRefresh, setProductSlideRefresh] = useState(0)
   const [tierLogoStatus, setTierLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [tierLogoRefresh, setTierLogoRefresh] = useState(0)
   const saveTimerRef = useRef<number | null>(null)
@@ -476,6 +429,14 @@ export default function App() {
     () => (result?.tree?.products ?? []).flatMap((p) => p.streams.flatMap((s) => s.tiers.map((t) => t.name))),
     [result],
   )
+  const tierLogoNames = useMemo(() => [...new Set(
+    (result?.tree?.products ?? []).flatMap((product) => {
+      const useTiers = usesTierLogoNames(product.name)
+      return useTiers
+        ? product.streams.flatMap((stream) => stream.tiers.map((tier) => tier.name))
+        : [product.name]
+    }),
+  )], [result])
 
   // Статус логотипов продуктов обновляется при смене списка продуктов и после
   // загрузки/удаления лого (logoRefresh). Сами файлы живут на бэке (data/img/…).
@@ -492,11 +453,22 @@ export default function App() {
     }
   }, [productNames, logoRefresh])
 
+  useEffect(() => {
+    if (!productNames.length) return
+    let alive = true
+    getProductSlideImageStatuses(productNames)
+      .then((statuses) => {
+        if (alive) setProductSlideStatus(statuses)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [productNames, productSlideRefresh])
+
   // Статус логотипов тиров.
   useEffect(() => {
-    if (!tierNames.length) return
+    if (!tierLogoNames.length) return
     let alive = true
-    getTierLogoStatuses(tierNames)
+    getTierLogoStatuses(tierLogoNames)
       .then((statuses) => {
         if (alive) setTierLogoStatus(statuses)
       })
@@ -504,7 +476,7 @@ export default function App() {
     return () => {
       alive = false
     }
-  }, [tierNames, tierLogoRefresh])
+  }, [tierLogoNames, tierLogoRefresh])
 
   function buildSettings(): Record<string, unknown> {
     const global: Record<string, unknown> = {}
@@ -592,6 +564,32 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
+    let active = true
+    readWorkspaceSession()
+      .then((session) => {
+        if (!active || !session) return
+        setJsonText(session.jsonText)
+        setJsonData(session.jsonData)
+        setLanguage(session.language)
+        setApptitleMode(session.apptitleMode)
+        setLeftCollapsed(session.leftCollapsed)
+        setRightCollapsed(session.rightCollapsed)
+        setRightWidth(session.rightWidth)
+        setCollapsedNodes(new Set(session.collapsedNodes))
+        setExpansionLevel(session.expansionLevel)
+        setLastBulkExpansionLevel(session.lastBulkExpansionLevel)
+      })
+      .catch(() => {
+        if (active) setError('Не удалось восстановить рабочую сессию из хранилища браузера.')
+      })
+      .finally(() => {
+        if (active) setWorkspaceSessionReady(true)
+      })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!workspaceSessionReady) return
     const session: WorkspaceSession = {
       version: 2,
       jsonData,
@@ -605,12 +603,10 @@ export default function App() {
       expansionLevel,
       lastBulkExpansionLevel,
     }
-    try {
-      localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(session))
-    } catch {
-      setError('Не удалось сохранить рабочую сессию в браузере: возможно, JSON слишком большой.')
-    }
-  }, [jsonData, jsonText, language, apptitleMode, leftCollapsed, rightCollapsed, rightWidth, collapsedNodes, expansionLevel, lastBulkExpansionLevel])
+    saveWorkspaceSession(session).catch(() => {
+      setError('Не удалось сохранить рабочую сессию в хранилище браузера.')
+    })
+  }, [workspaceSessionReady, jsonData, jsonText, language, apptitleMode, leftCollapsed, rightCollapsed, rightWidth, collapsedNodes, expansionLevel, lastBulkExpansionLevel])
 
   useEffect(() => {
     const compact = window.matchMedia('(max-width: 900px)')
@@ -722,7 +718,9 @@ export default function App() {
     if (!window.confirm('Удалить загруженный JSON и очистить текущее превью? Глобальные настройки сохранятся.')) {
       return
     }
-    localStorage.removeItem(WORKSPACE_SESSION_KEY)
+    clearWorkspaceSession().catch(() => {
+      setError('Не удалось очистить рабочую сессию в хранилище браузера.')
+    })
     setJsonText('')
     setJsonData(null)
     setResult(null)
@@ -858,8 +856,16 @@ export default function App() {
     setCollapsedNodes(collapsedNodesForLevel(products, level))
   }
 
-  function openStaticSlideModal(position = 'end') {
-    setStaticModal({ open: true, name: '', position, pptx: '', prompt: '' })
+  function openStaticSlideModal(position = 'end', editIndex: number | null = null) {
+    const existing = editIndex === null ? null : profile?.static_slides?.[editIndex]
+    setStaticModal({
+      open: true,
+      editIndex,
+      name: existing?.name ?? '',
+      position: existing?.position ?? position,
+      pptx: existing?.pptx ?? '',
+      prompt: existing?.prompt ?? '',
+    })
   }
 
   function handleDeleteStaticSlide(index: number) {
@@ -880,20 +886,29 @@ export default function App() {
 
   function submitStaticSlide() {
     if (!profile) return
-    handleStaticSlides([
-      ...(profile.static_slides ?? []),
-      {
-        name: staticModal.name,
-        position: staticModal.position,
-        pptx: staticModal.pptx,
-        prompt: staticModal.prompt,
-        language,
-      },
-    ])
+    const nextSlide = {
+      name: staticModal.name,
+      position: staticModal.position,
+      pptx: staticModal.pptx,
+      prompt: staticModal.prompt,
+      language,
+    }
+    const slides = [...(profile.static_slides ?? [])]
+    if (staticModal.editIndex === null) slides.push(nextSlide)
+    else slides[staticModal.editIndex] = { ...slides[staticModal.editIndex], ...nextSlide }
+    handleStaticSlides(slides)
     closeStaticSlideModal()
   }
 
   function handleDeckMeta(field: 'title' | 'year' | 'version', value: string) {
+    if (!profile) return
+    persist({ ...profile, deck_meta: { ...profile.deck_meta, [field]: value } })
+  }
+
+  function handleDeckSlideToggle(
+    field: 'include_title_slide' | 'include_thank_you_slide',
+    value: boolean,
+  ) {
     if (!profile) return
     persist({ ...profile, deck_meta: { ...profile.deck_meta, [field]: value } })
   }
@@ -961,6 +976,18 @@ export default function App() {
     deleteProductLogo(name)
       .then(() => setLogoRefresh((n) => n + 1))
       .catch(() => setError('Не удалось удалить логотип продукта.'))
+  }
+
+  function handleUploadProductSlideImage(name: string, file: File) {
+    uploadProductSlideImage(name, file)
+      .then(() => setProductSlideRefresh((n) => n + 1))
+      .catch(() => setError('Не удалось загрузить заглушку продуктового слайда.'))
+  }
+
+  function handleDeleteProductSlideImage(name: string) {
+    deleteProductSlideImage(name)
+      .then(() => setProductSlideRefresh((n) => n + 1))
+      .catch(() => setError('Не удалось удалить заглушку продуктового слайда.'))
   }
 
   function handleUploadTierLogo(name: string, file: File) {
@@ -1203,12 +1230,7 @@ export default function App() {
             )}
 
             {diff && diff.diff && (
-              <div className="diff-summary">
-                <b>Изменения относительно прошлой загрузки:</b>{' '}
-                +{diff.diff.new_requirement_ids?.length ?? 0} новых,{' '}
-                ~{diff.diff.changed_requirement_ids?.length ?? 0} изменено,{' '}
-                −{diff.diff.removed_requirement_ids?.length ?? 0} удалено
-              </div>
+              <DiffSummary diff={diff} />
             )}
 
             {result && result.plan && (
@@ -1289,6 +1311,7 @@ export default function App() {
               slides={profile.static_slides ?? []}
               language={language}
               onPromptChange={handleStaticSlidePrompt}
+              onEdit={(index) => openStaticSlideModal('end', index)}
               onDelete={handleDeleteStaticSlide}
             />
           </details>
@@ -1322,20 +1345,28 @@ export default function App() {
         {profile && productNames.length > 0 && (
           <details className="section">
             <summary>Логотипы продуктов</summary>
+            <div className="logo-group-title">Логотип для roadmap-слайдов</div>
             <ProductLogosPanel
               productNames={productNames}
               statuses={logoStatus}
               onUpload={handleUploadLogo}
               onDelete={handleDeleteLogo}
             />
+            <div className="logo-group-title">Заглушка продуктового слайда</div>
+            <ProductLogosPanel
+              productNames={productNames}
+              statuses={productSlideStatus}
+              onUpload={handleUploadProductSlideImage}
+              onDelete={handleDeleteProductSlideImage}
+            />
           </details>
         )}
 
-        {profile && tierNames.length > 0 && (
+        {profile && tierLogoNames.length > 0 && (
           <details className="section">
             <summary>Логотипы тиров</summary>
             <ProductLogosPanel
-              productNames={tierNames}
+              productNames={tierLogoNames}
               statuses={tierLogoStatus}
               onUpload={handleUploadTierLogo}
               onDelete={handleDeleteTierLogo}
@@ -1386,6 +1417,14 @@ export default function App() {
           </label>
           <div className="deck-meta">
             <span className="deck-meta-title">Титульный слайд</span>
+            <label className="deck-slide-toggle">
+              <input
+                type="checkbox"
+                checked={profile?.deck_meta?.include_title_slide !== false}
+                onChange={(e) => handleDeckSlideToggle('include_title_slide', e.target.checked)}
+              />
+              Генерировать первый слайд
+            </label>
             <input
               type="text"
               placeholder="Заголовок"
@@ -1406,6 +1445,14 @@ export default function App() {
                 onChange={(e) => handleDeckMeta('version', e.target.value)}
               />
             </div>
+            <label className="deck-slide-toggle">
+              <input
+                type="checkbox"
+                checked={profile?.deck_meta?.include_thank_you_slide !== false}
+                onChange={(e) => handleDeckSlideToggle('include_thank_you_slide', e.target.checked)}
+              />
+              Генерировать финальный слайд
+            </label>
           </div>
         </div>
 
@@ -1434,6 +1481,61 @@ function LintRow({ issue }: { issue: LintIssue }) {
       <b>{issue.message}</b>
       <div className="lint-text">«{issue.text}» — {issue.tier} (req {issue.requirement_id})</div>
     </div>
+  )
+}
+
+function DiffSummary({ diff }: { diff: DiffResponse }) {
+  const groups = [
+    ['Новые требования', diff.details?.new_requirements ?? []],
+    ['Изменённые требования', diff.details?.changed_requirements ?? []],
+    ['Удалённые требования', diff.details?.removed_requirements ?? []],
+    ['Новые релизы', diff.details?.new_releases ?? []],
+    ['Изменённые релизы', diff.details?.changed_releases ?? []],
+    ['Удалённые релизы', diff.details?.removed_releases ?? []],
+  ] as const
+  const fieldLabel: Record<string, string> = {
+    text: 'название',
+    kbr: 'Kbr',
+    title: 'релиз',
+    quarter: 'квартал',
+  }
+  const value = (item: unknown) => item === null || item === undefined || item === '' ? '—' : String(item)
+
+  return (
+    <details className="diff-summary" open>
+      <summary>
+        <b>Изменения относительно прошлой загрузки</b>
+        <span>
+          +{diff.diff.new_requirement_ids?.length ?? 0} ·
+          {' '}~{diff.diff.changed_requirement_ids?.length ?? 0} ·
+          {' '}−{diff.diff.removed_requirement_ids?.length ?? 0}
+        </span>
+      </summary>
+      <div className="diff-details">
+        {diff.new_tier_paths.length > 0 && (
+          <div><b>Новые тиры:</b> {diff.new_tier_paths.join(', ')}</div>
+        )}
+        {diff.removed_tier_paths.length > 0 && (
+          <div><b>Удалённые тиры:</b> {diff.removed_tier_paths.join(', ')}</div>
+        )}
+        {groups.filter(([, items]) => items.length > 0).map(([label, items]) => (
+          <section key={label} className="diff-group">
+            <b>{label}</b>
+            {items.map((item) => (
+              <div key={`${label}:${item.id}`} className="diff-item">
+                <span>{item.text || item.title || `ID ${item.id}`}</span>
+                <small>{item.path}</small>
+                {item.changes && Object.entries(item.changes).map(([field, change]) => (
+                  <small key={field}>
+                    {fieldLabel[field] ?? field}: {value(change.before)} → {value(change.after)}
+                  </small>
+                ))}
+              </div>
+            ))}
+          </section>
+        ))}
+      </div>
+    </details>
   )
 }
 
@@ -1676,16 +1778,16 @@ function StaticSlideModal({
   onClose,
   onSubmit,
 }: {
-  modal: { open: boolean; name: string; position: string; pptx: string; prompt: string }
+  modal: { open: boolean; editIndex: number | null; name: string; position: string; pptx: string; prompt: string }
   productNames: string[]
-  onChange: (patch: Partial<{ name: string; position: string; pptx: string; prompt: string }>) => void
+  onChange: (patch: Partial<{ editIndex: number | null; name: string; position: string; pptx: string; prompt: string }>) => void
   onClose: () => void
   onSubmit: () => void
 }) {
   const [dragOver, setDragOver] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  const positions = ['end', ...productNames.flatMap((p) => [`before:${p}`, `after:${p}`])]
+  const positions = ['first', 'end', ...productNames.flatMap((p) => [`before:${p}`, `after:${p}`])]
 
   useEffect(() => {
     if (!modal.open) return
@@ -1713,7 +1815,7 @@ function StaticSlideModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="static-slide-title" onClick={(e) => e.stopPropagation()}>
-        <h3 id="static-slide-title">Новый статичный слайд</h3>
+        <h3 id="static-slide-title">{modal.editIndex === null ? 'Новый статичный слайд' : 'Редактирование статичного слайда'}</h3>
         <label className="modal-field">
           Название:
           <input autoFocus type="text" value={modal.name} onChange={(e) => onChange({ name: e.target.value })} />
@@ -1758,7 +1860,7 @@ function StaticSlideModal({
             if (file) upload(file)
           }}
         >
-          {modal.pptx ? `📎 ${modal.pptx}` : 'Перетащите .pptx сюда или кликните для выбора'}
+          {modal.pptx ? `📎 ${modal.pptx} · кликните, чтобы заменить` : 'Перетащите .pptx сюда или кликните для выбора'}
           <input
             ref={fileRef}
             type="file"
@@ -1771,10 +1873,13 @@ function StaticSlideModal({
             }}
           />
         </div>
+        <small className="keep-source-format">Форматирование исходного слайда сохраняется (Keep Source Formatting).</small>
         {uploadError && <div className="error" role="alert">{uploadError}</div>}
         <div className="modal-actions">
           <button onClick={onClose}>Отмена</button>
-          <button className="primary-button" onClick={onSubmit} disabled={!modal.pptx}>Добавить</button>
+          <button className="primary-button" onClick={onSubmit} disabled={!modal.pptx}>
+            {modal.editIndex === null ? 'Добавить' : 'Сохранить'}
+          </button>
         </div>
       </div>
     </div>
@@ -1889,11 +1994,13 @@ function StaticSlidesList({
   slides,
   language,
   onPromptChange,
+  onEdit,
   onDelete,
 }: {
   slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]
   language: 'ru' | 'en'
   onPromptChange: (index: number, prompt: string) => void
+  onEdit: (index: number) => void
   onDelete: (index: number) => void
 }) {
   const visibleSlides = slides
@@ -1918,7 +2025,10 @@ function StaticSlidesList({
               />
             </label>
           </span>
-          <span className="static-list-pos">{s.position}</span>
+          <span className="static-list-pos">{positionLabel(s.position)}</span>
+          <button title="Заменить файл или изменить позицию" onClick={() => onEdit(sourceIndex)}>
+            Изменить
+          </button>
           <button title="Удалить" onClick={() => onDelete(sourceIndex)}>
             ✕
           </button>
@@ -2064,6 +2174,8 @@ function GroupedSlides({
 
   return (
     <div className="grouped">
+      {top.filter((slide) => isStatic(slide) && slide.position === 'first')
+        .map((slide) => card(slide, slides.indexOf(slide)))}
       {top.filter(isTitle).map((slide) => card(slide, slides.indexOf(slide)))}
       {products.map((product, productIndex) => {
         const key = productNodeKey(product.product)
@@ -2085,47 +2197,54 @@ function GroupedSlides({
           productNamesInOrder.map(productNodeKey),
         )
         return (
-          <div key={product.product} className="group">
-            <HierarchyHeader
-              className="product-h"
-              badge="PRODUCT"
-              title={product.product}
-              summary={summaryParts.join(' · ')}
-              expanded={expanded}
-              onToggle={() => toggleNode(key)}
-              drag={drag}
-              highlighted={recentlyReorderedNodes.has(key)}
-            >
-              {langLabel(product.product) && <span className="lang-badge">{langLabel(product.product)}</span>}
-              {hasRealHierarchy && (
-                <label
-                  className="inheritance-check"
-                  title="Во всех Stream продукта убирает фичи, уже показанные в предыдущих Tier, и добавляет заметку о наследовании"
-                >
-                  <input
-                    type="checkbox"
-                    checked={!!productInheritanceFlags[product.product]}
-                    onChange={(event) => onToggleInheritance(product.product, event.target.checked)}
-                  />
-                  <span className="inheritance-check-text">
-                    Наследование
-                    <small>для всех Stream продукта</small>
-                  </span>
-                </label>
+          <div key={product.product} className="product-bundle">
+            {top.filter((slide) => isStatic(slide) && slide.position === `before:${product.product}`)
+              .map((slide) => card(slide, slides.indexOf(slide)))}
+            <div className="group">
+              <HierarchyHeader
+                className="product-h"
+                badge="PRODUCT"
+                title={product.product}
+                summary={summaryParts.join(' · ')}
+                expanded={expanded}
+                onToggle={() => toggleNode(key)}
+                drag={drag}
+                highlighted={recentlyReorderedNodes.has(key)}
+              >
+                {langLabel(product.product) && <span className="lang-badge">{langLabel(product.product)}</span>}
+                {hasRealHierarchy && (
+                  <label
+                    className="inheritance-check"
+                    title="Во всех Stream продукта убирает фичи, уже показанные в предыдущих Tier, и добавляет заметку о наследовании"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!productInheritanceFlags[product.product]}
+                      onChange={(event) => onToggleInheritance(product.product, event.target.checked)}
+                    />
+                    <span className="inheritance-check-text">
+                      Наследование
+                      <small>для всех Stream продукта</small>
+                    </span>
+                  </label>
+                )}
+              </HierarchyHeader>
+              {expanded && product.streams.map((stream) =>
+                renderStream(
+                  product.product,
+                  stream,
+                  Math.max(0, streamNames.indexOf(stream.stream)),
+                  streamNames,
+                ),
               )}
-            </HierarchyHeader>
-            {expanded && product.streams.map((stream) =>
-              renderStream(
-                product.product,
-                stream,
-                Math.max(0, streamNames.indexOf(stream.stream)),
-                streamNames,
-              ),
-            )}
+            </div>
+            {top.filter((slide) => isStatic(slide) && slide.position === `after:${product.product}`)
+              .map((slide) => card(slide, slides.indexOf(slide)))}
           </div>
         )
       })}
-      {top.filter(isStatic).map((slide) => card(slide, slides.indexOf(slide)))}
+      {top.filter((slide) => isStatic(slide) && slide.position === 'end')
+        .map((slide) => card(slide, slides.indexOf(slide)))}
       {top.filter(isThankYou).map((slide) => card(slide, slides.indexOf(slide)))}
     </div>
   )
@@ -2276,6 +2395,18 @@ function ProductLogosPanel({
             {st?.has_logo ? (
               <>
                 <img className="product-logo-img" src={st.url ?? ''} alt={name} />
+                <label className="logo-upload compact">
+                  Заменить
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) onUpload(name, f)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
                 <button className="logo-delete" onClick={() => onDelete(name)} title="Удалить лого">
                   ✕
                 </button>
@@ -2338,6 +2469,7 @@ function SlideCard({
         {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">STATIC</span>
         <span className="divider-title">{slide.name || '(без названия)'}</span>
+        <span className="title-sub">{positionLabel(slide.position)}</span>
       </div>
     )
   }

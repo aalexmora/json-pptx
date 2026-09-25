@@ -23,6 +23,7 @@ from cairosvg import svg2png
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 IMG_DIR = PROJECT_ROOT / "data" / "img"
 LOGO_DIR = IMG_DIR / "product" / "logo"          # продукт (обратная совместимость)
+PRODUCT_SLIDE_DIR = IMG_DIR / "product" / "slide" # крупная заглушка Product-слайда
 TIER_LOGO_DIR = IMG_DIR / "tier" / "logo"        # тир
 
 # Форматы, которые python-pptx может вставить напрямую. Загруженный SVG сначала
@@ -152,6 +153,30 @@ def list_all() -> List[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Изображения-заглушки Product-слайдов
+# ---------------------------------------------------------------------------
+
+def save_product_slide_image(product_name: str, data: bytes, ext: str = "png") -> str:
+    return _save_logo(PRODUCT_SLIDE_DIR, product_name, data, ext)
+
+
+def delete_product_slide_image(product_name: str) -> bool:
+    return _delete_logo(PRODUCT_SLIDE_DIR, product_name)
+
+
+def product_slide_image_path(product_name: str) -> Optional[Path]:
+    return _logo_path(PRODUCT_SLIDE_DIR, product_name)
+
+
+def product_slide_image_url(product_name: str) -> Optional[str]:
+    return _logo_url(PRODUCT_SLIDE_DIR, "/img/product/slide", product_name)
+
+
+def product_slide_status(products: List[str]) -> dict:
+    return _status(PRODUCT_SLIDE_DIR, "/img/product/slide", products)
+
+
+# ---------------------------------------------------------------------------
 # Логотипы тиров
 # ---------------------------------------------------------------------------
 
@@ -180,6 +205,19 @@ def list_tier_logos() -> List[dict]:
     return _list_all(TIER_LOGO_DIR, "/img/tier/logo")
 
 
+def tier_logo_key(product_name: str, tier_name: str) -> str:
+    """Ключ библиотеки: Tier для Next/Symphony, иначе Product."""
+    normalized_product = " ".join((product_name or "").casefold().split())
+    is_next_family = normalized_product in {"next", "kaspersky next"}
+    is_symphony_family = (
+        normalized_product == "symphony"
+        or normalized_product.startswith("kaspersky symphony")
+    )
+    if is_next_family or is_symphony_family:
+        return tier_name
+    return product_name
+
+
 # ---------------------------------------------------------------------------
 # Сброс (для тестов)
 # ---------------------------------------------------------------------------
@@ -187,4 +225,5 @@ def list_tier_logos() -> List[dict]:
 def reset_logo_state() -> None:
     """Сбрасывает библиотеки лого продуктов и тиров."""
     _reset(LOGO_DIR)
+    _reset(PRODUCT_SLIDE_DIR)
     _reset(TIER_LOGO_DIR)

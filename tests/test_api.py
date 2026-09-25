@@ -173,6 +173,35 @@ def test_svg_product_logo_upload_is_converted_to_png(tmp_path, monkeypatch):
     assert saved.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
+def test_product_slide_image_upload_status_and_delete(tmp_path, monkeypatch):
+    monkeypatch.setattr(product_logos, "PRODUCT_SLIDE_DIR", tmp_path / "product-slide-images")
+    png = b"\x89PNG\r\n\x1a\nplaceholder"
+
+    with TestClient(app) as c:
+        uploaded = c.post(
+            "/api/product-slide-images/upload",
+            data={"product_name": "Product A"},
+            files={"file": ("cover.png", png, "image/png")},
+        )
+        status = c.post(
+            "/api/product-slide-images/status",
+            json={"products": ["Product A", "Product B"]},
+        ).json()["logos"]
+        deleted = c.delete("/api/product-slide-images", params={"product_name": "Product A"})
+
+    assert uploaded.status_code == 200
+    assert status["Product A"]["has_logo"] is True
+    assert status["Product B"]["has_logo"] is False
+    assert deleted.status_code == 200
+
+
+def test_tier_logo_key_uses_product_except_for_next_and_symphony():
+    assert product_logos.tier_logo_key("Kaspersky Endpoint Security", "Tier A") == "Kaspersky Endpoint Security"
+    assert product_logos.tier_logo_key("Kaspersky Next", "Tier A") == "Tier A"
+    assert product_logos.tier_logo_key("Kaspersky Symphony XDR", "Tier B") == "Tier B"
+    assert product_logos.tier_logo_key("Kaspersky Next Generation Firewall", "Tier C") == "Kaspersky Next Generation Firewall"
+
+
 def test_logo_upload_rejects_unsupported_format(tmp_path, monkeypatch):
     monkeypatch.setattr(product_logos, "LOGO_DIR", tmp_path / "product-logos")
 

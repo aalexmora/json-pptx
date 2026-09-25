@@ -12,6 +12,7 @@ import io
 from collections import Counter, defaultdict
 
 from pptx import Presentation
+from pptx.enum.dml import MSO_FILL_TYPE
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
@@ -506,7 +507,8 @@ def _render_roadmap_from_template(
     # Логотип тира из библиотеки (плейсхолдер logo_tier/_logo_tier в шаблоне).
     tier_logo_shape = _first_shape_for_role(all_by_name, "tier_logo")
     if tier_logo_shape is not None and tier_logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-        _replace_picture(new_slide, tier_logo_shape, product_logos.tier_logo_path(slide.tier))
+        tier_key = product_logos.tier_logo_key(slide.product, slide.tier)
+        _replace_picture(new_slide, tier_logo_shape, product_logos.tier_logo_path(tier_key))
 
     header_proto = text_by_name.get("col_header")
     bullets_proto = text_by_name.get("col_bullets")
@@ -626,8 +628,25 @@ def _copy_slides_from(prs, source_path: str) -> None:
     blank = prs.slide_layouts[6]
     for source_slide in source.slides:
         new_slide = prs.slides.add_slide(blank)
+        _copy_slide_background(source_slide, new_slide)
         for shape in source_slide.shapes:
             _append_shape(new_slide, shape)
+
+
+def _copy_slide_background(source_slide, target_slide) -> None:
+    """Сохраняет явный одноцветный фон статичного слайда публичным API."""
+    if source_slide.follow_master_background:
+        return
+    source_fill = source_slide.background.fill
+    if source_fill.type != MSO_FILL_TYPE.SOLID:
+        return
+    target_fill = target_slide.background.fill
+    target_fill.solid()
+    if source_fill.fore_color.rgb is not None:
+        target_fill.fore_color.rgb = source_fill.fore_color.rgb
+    elif source_fill.fore_color.theme_color is not None:
+        target_fill.fore_color.theme_color = source_fill.fore_color.theme_color
+        target_fill.fore_color.brightness = source_fill.fore_color.brightness
 
 
 def _render_title(prs, layout, slide: TitleSlide, w: float, h: float) -> None:
@@ -673,6 +692,16 @@ def _render_divider_from_template(prs, source_slide, slide: DividerSlide, produc
     }
     if slide.divider_type == "product":
         _set_text(_first_shape_for_role(text_by_name, "product_name"), slide.title)
+        all_by_name = {_normalize_name(shape.name): shape for shape in new_slide.shapes}
+        image_shape = _first_shape_for_role(all_by_name, "product_slide_image")
+        if image_shape is None:
+            image_shape = _first_shape_for_role(all_by_name, "product_logo")
+        if image_shape is not None and image_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+            _replace_picture(
+                new_slide,
+                image_shape,
+                product_logos.product_slide_image_path(slide.title),
+            )
     else:
         _set_text(_first_shape_for_role(text_by_name, "stream_name"), slide.title)
         _set_text(_first_shape_for_role(text_by_name, "product_name"), product)

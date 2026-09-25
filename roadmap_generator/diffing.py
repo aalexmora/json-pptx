@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import Any, List
 
 from roadmap_generator.ordering import SEPARATOR
 from roadmap_generator.schema import RoadmapModel, _normalize_name
@@ -107,3 +107,73 @@ def compute_diff(old_model: RoadmapModel, new_model: RoadmapModel) -> DiffResult
             if _requirement_signature(old_reqs[qid]) != _requirement_signature(new_reqs[qid])
         ),
     )
+
+
+def build_diff_details(
+    old_model: RoadmapModel,
+    new_model: RoadmapModel,
+    diff: DiffResult,
+) -> dict[str, list[dict[str, Any]]]:
+    """Человекочитаемые записи diff с путём и значениями до/после."""
+    old_releases = _release_details(old_model)
+    new_releases = _release_details(new_model)
+    old_requirements = _requirement_details(old_model)
+    new_requirements = _requirement_details(new_model)
+    return {
+        "new_releases": [new_releases[item_id] for item_id in diff.new_release_ids],
+        "changed_releases": [
+            _changed_detail(old_releases[item_id], new_releases[item_id])
+            for item_id in diff.changed_release_ids
+        ],
+        "removed_releases": [old_releases[item_id] for item_id in diff.removed_release_ids],
+        "new_requirements": [new_requirements[item_id] for item_id in diff.new_requirement_ids],
+        "changed_requirements": [
+            _changed_detail(old_requirements[item_id], new_requirements[item_id])
+            for item_id in diff.changed_requirement_ids
+        ],
+        "removed_requirements": [old_requirements[item_id] for item_id in diff.removed_requirement_ids],
+    }
+
+
+def _release_details(model: RoadmapModel) -> dict[int, dict[str, Any]]:
+    return {
+        release.id: {
+            "id": release.id,
+            "path": f"{product.name}{SEPARATOR}{stream.name}{SEPARATOR}{tier.name}",
+            "title": release.title or release.app_title,
+            "quarter": release.quarter,
+        }
+        for product in model.products
+        for stream in product.streams
+        for tier in stream.tiers
+        for release in tier.releases
+    }
+
+
+def _requirement_details(model: RoadmapModel) -> dict[int, dict[str, Any]]:
+    return {
+        requirement.id: {
+            "id": requirement.id,
+            "path": f"{product.name}{SEPARATOR}{stream.name}{SEPARATOR}{tier.name}",
+            "text": (
+                requirement.marketing_title_en
+                if model.language == "en" and requirement.marketing_title_en
+                else requirement.marketing_title
+            ),
+            "kbr": requirement.kbr,
+        }
+        for product in model.products
+        for stream in product.streams
+        for tier in stream.tiers
+        for release in tier.releases
+        for requirement in release.requirements
+    }
+
+
+def _changed_detail(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    changed_fields = {
+        key: {"before": before.get(key), "after": after.get(key)}
+        for key in sorted((set(before) | set(after)) - {"id", "path"})
+        if before.get(key) != after.get(key)
+    }
+    return {**after, "before_path": before["path"], "changes": changed_fields}

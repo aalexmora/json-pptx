@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry, tier_names
 from roadmap_generator.builder import build_presentation
-from roadmap_generator.diffing import compute_diff, match_previous_project
+from roadmap_generator.diffing import build_diff_details, compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
 from roadmap_generator.plugins_engine import build_slide_plan, build_tree, list_releases
 from roadmap_generator.schema import normalize_roadmap, validate_roadmap
@@ -151,6 +151,7 @@ def api_diff(req: DiffRequest):
     match = match_previous_project(old_model, req.new_json)
     return {
         "diff": asdict(diff),
+        "details": build_diff_details(old_model, new_model, diff),
         "new_tier_paths": match.new_tier_paths,
         "removed_tier_paths": match.removed_tier_paths,
     }
@@ -225,6 +226,32 @@ def delete_product_logo(product_name: str):
     removed = product_logos.delete_logo(product_name)
     if not removed:
         raise HTTPException(status_code=404, detail="logo not found")
+    return {"status": "ok"}
+
+
+@app.post("/api/product-slide-images/upload")
+async def upload_product_slide_image(product_name: str = Form(...), file: UploadFile = File(...)):
+    data = await file.read()
+    ext = Path(file.filename or "slide.png").suffix.lstrip(".").lower() or "png"
+    try:
+        prepared, stored_ext = product_logos.prepare_logo_upload(data, ext)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    filename = product_logos.save_product_slide_image(product_name, prepared, stored_ext)
+    return {"filename": filename, "url": product_logos.product_slide_image_url(product_name)}
+
+
+@app.post("/api/product-slide-images/status")
+def product_slide_images_status(payload: dict):
+    products = payload.get("products", [])
+    return {"logos": product_logos.product_slide_status(products)}
+
+
+@app.delete("/api/product-slide-images")
+def delete_product_slide_image(product_name: str):
+    removed = product_logos.delete_product_slide_image(product_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail="product slide image not found")
     return {"status": "ok"}
 
 

@@ -27,7 +27,7 @@ def test_subject_to_change_sorts_false_first():
         "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
             "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
             "Requirements": [
-                {"Id": 10, "Kbr": "Yes", "MarketingTitle": "Tentative"},
+                {"Id": 10, "Kbr": "Subject to Change", "MarketingTitle": "Tentative"},
                 {"Id": 11, "Kbr": "No", "MarketingTitle": "Confirmed"},
             ],
         }]}]}],
@@ -296,3 +296,25 @@ def test_static_slides_insertion(load_fixture):
     idx_pre = next(i for i, s in enumerate(plan.slides) if isinstance(s, StaticSlide) and s.name == "Pre")
     idx_prod = next(i for i, s in enumerate(plan.slides) if isinstance(s, DividerSlide) and s.divider_type == "product")
     assert idx_pre < idx_prod
+
+
+def test_first_static_slide_and_optional_generated_ends(load_fixture):
+    from roadmap_generator import deck_meta
+    from roadmap_generator.plugins_engine import TitleSlide
+
+    static_slides.save_static_slides([
+        {"name": "Own cover", "position": "first", "language": "ru"},
+    ])
+    deck_meta.import_state({
+        "include_title_slide": False,
+        "include_thank_you_slide": False,
+    })
+    plan = build_slide_plan(
+        normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="ru"),
+        {},
+    )
+
+    assert isinstance(plan.slides[0], StaticSlide)
+    assert plan.slides[0].position == "first"
+    assert not any(isinstance(slide, TitleSlide) for slide in plan.slides)
+    assert not any(isinstance(slide, ThankYouSlide) for slide in plan.slides)
