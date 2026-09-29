@@ -749,8 +749,8 @@ def test_number_placeholder_filled_with_ordinal(load_fixture, tmp_path, monkeypa
     assert _shape_text_by_name(slide, "_number") == expected
 
 
-def test_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):
-    """Плейсхолдер `_logo` подменяется лого продукта из библиотеки."""
+def test_product_logo_is_not_replaced_on_roadmap_slide(load_fixture, tmp_path, monkeypatch):
+    """Библиотека старых логотипов больше не влияет на roadmap-слайды."""
     blue = _png_rgb(0, 0, 255)
     red = _png_rgb(255, 0, 0)
 
@@ -771,7 +771,8 @@ def test_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):
     assert slide is not None
     pics = [sh for sh in slide.shapes if sh.shape_type == MSO_SHAPE_TYPE.PICTURE]
     assert pics, "логотип должен остаться картинкой на слайде"
-    assert any(p.image.blob == blue for p in pics), "картинка должна быть заменена на лого из библиотеки"
+    assert not any(p.image.blob == blue for p in pics), "логотип продукта не должен подставляться"
+    assert any(p.image.blob == red for p in pics), "картинка из шаблона должна остаться без замены"
 
 
 def test_tier_logo_replaced_from_library(load_fixture, tmp_path, monkeypatch):

@@ -499,11 +499,6 @@ def _render_roadmap_from_template(
     if number is not None:
         _set_text(number, str(len(prs.slides)))
 
-    # Логотип продукта из библиотеки (плейсхолдер logo/_logo в шаблоне).
-    logo_shape = _first_shape_for_role(all_by_name, "product_logo")
-    if logo_shape is not None and logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-        _replace_picture(new_slide, logo_shape, product_logos.logo_path(slide.product))
-
     # Логотип тира из библиотеки (плейсхолдер logo_tier/_logo_tier в шаблоне).
     tier_logo_shape = _first_shape_for_role(all_by_name, "tier_logo")
     if tier_logo_shape is not None and tier_logo_shape.shape_type == MSO_SHAPE_TYPE.PICTURE:

@@ -1,15 +1,10 @@
-"""Библиотека логотипов продуктов и тиров.
+"""Библиотека PNG-фонов продуктовых слайдов и логотипов тиров.
 
-Файлы лежат на диске в `data/img/{product|tier}/logo/{slug}.png` и раздаются по
-URL `/img/{product|tier}/logo/{slug}.png` (см. app.py — `IMG_DIR` смонтирован как
-`/img`). Ключ лого = слаг канонического имени (продукта или тира) из дерева
-(нормализация: нижний регистр, не-буквы/цифры → дефис).
-
-Маппинг «имя → лого» задаётся самим именем файла: загрузили лого для продукта
-«Kaspersky SD-WAN» → `product/logo/sd-wan.png` → билдер подставит его в плейсхолдер
-`logo`/`_logo`; для тира «Kaspersky Next XDR Expert» → `tier/logo/kaspersky-next-xdr-expert.png`
-→ плейсхолдер `logo_tier`/`_logo_tier`. Лого не обязательны: нет файла — плейсхолдер
-просто копируется как в шаблоне.
+Фон Product-слайда хранится в `data/img/product/slide/{slug}.png` и подставляется
+в `product_slide_image`/`_product_slide_image`. Логотип тира хранится в
+`data/img/tier/logo/{slug}.*` и подставляется в `tier_logo`/`_tier_logo`.
+`data/img/product/logo` и связанные функции оставлены только для обратной
+совместимости API: генератор больше не использует эти логотипы на roadmap-слайдах.
 """
 from __future__ import annotations
 
@@ -23,7 +18,7 @@ from cairosvg import svg2png
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 IMG_DIR = PROJECT_ROOT / "data" / "img"
 LOGO_DIR = IMG_DIR / "product" / "logo"          # продукт (обратная совместимость)
-PRODUCT_SLIDE_DIR = IMG_DIR / "product" / "slide" # крупная заглушка Product-слайда
+PRODUCT_SLIDE_DIR = IMG_DIR / "product" / "slide" # PNG-фон Product-слайда
 TIER_LOGO_DIR = IMG_DIR / "tier" / "logo"        # тир
 
 # Форматы, которые python-pptx может вставить напрямую. Загруженный SVG сначала
@@ -47,6 +42,18 @@ def prepare_logo_upload(data: bytes, ext: str) -> Tuple[bytes, str]:
     except Exception as exc:
         raise ValueError("Не удалось прочитать SVG-файл") from exc
     return png, "png"
+
+
+def prepare_product_slide_upload(data: bytes, ext: str) -> Tuple[bytes, str]:
+    """Принимает только PNG-фон для продуктового слайда-заглушки."""
+    normalized_ext = "." + ext.lstrip(".").lower()
+    if normalized_ext != ".png":
+        raise ValueError("Фон продуктового слайда должен быть в формате PNG")
+    if not data:
+        raise ValueError("Файл фона пуст")
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("Не удалось прочитать PNG-файл")
+    return data, "png"
 
 
 def slugify(name: str) -> str:
@@ -153,7 +160,7 @@ def list_all() -> List[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Изображения-заглушки Product-слайдов
+# PNG-фоны Product-слайдов-заглушек
 # ---------------------------------------------------------------------------
 
 def save_product_slide_image(product_name: str, data: bytes, ext: str = "png") -> str:

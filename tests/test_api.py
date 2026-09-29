@@ -195,6 +195,30 @@ def test_product_slide_image_upload_status_and_delete(tmp_path, monkeypatch):
     assert deleted.status_code == 200
 
 
+def test_product_slide_image_rejects_non_png(tmp_path, monkeypatch):
+    monkeypatch.setattr(product_logos, "PRODUCT_SLIDE_DIR", tmp_path / "product-slide-images")
+
+    with TestClient(app) as c:
+        response = c.post(
+            "/api/product-slide-images/upload",
+            data={"product_name": "Product A"},
+            files={"file": ("cover.jpg", b"not-a-png", "image/jpeg")},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Фон продуктового слайда должен быть в формате PNG"
+
+    with TestClient(app) as c:
+        invalid_png = c.post(
+            "/api/product-slide-images/upload",
+            data={"product_name": "Product A"},
+            files={"file": ("cover.png", b"not-a-png", "image/png")},
+        )
+
+    assert invalid_png.status_code == 422
+    assert invalid_png.json()["detail"] == "Не удалось прочитать PNG-файл"
+
+
 def test_tier_logo_key_uses_product_except_for_next_and_symphony():
     assert product_logos.tier_logo_key("Kaspersky Endpoint Security", "Tier A") == "Kaspersky Endpoint Security"
     assert product_logos.tier_logo_key("Kaspersky Next", "Tier A") == "Tier A"

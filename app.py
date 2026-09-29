@@ -234,7 +234,7 @@ async def upload_product_slide_image(product_name: str = Form(...), file: Upload
     data = await file.read()
     ext = Path(file.filename or "slide.png").suffix.lstrip(".").lower() or "png"
     try:
-        prepared, stored_ext = product_logos.prepare_logo_upload(data, ext)
+        prepared, stored_ext = product_logos.prepare_product_slide_upload(data, ext)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     filename = product_logos.save_product_slide_image(product_name, prepared, stored_ext)

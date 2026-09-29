@@ -29,7 +29,6 @@ import type {
 } from './types'
 import {
   deleteProductSlideImage,
-  deleteProductLogo,
   deleteTemplate,
   deleteTierLogo,
   downloadPptx,
@@ -37,14 +36,12 @@ import {
   fetchHealth,
   fetchPlan,
   getProductSlideImageStatuses,
-  getProductLogoStatuses,
   getProfile,
   getTierLogoStatuses,
   listTemplates,
   saveProfile,
   setActiveTemplate,
   uploadProductSlideImage,
-  uploadProductLogo,
   uploadStaticSlidePptx,
   uploadTemplate,
   uploadTierLogo,
@@ -404,8 +401,6 @@ export default function App() {
   const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
   const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality'>('preview')
   const [staticModal, setStaticModal] = useState({ open: false, editIndex: null as number | null, name: '', position: 'end', pptx: '', prompt: '' })
-  const [logoStatus, setLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
-  const [logoRefresh, setLogoRefresh] = useState(0)
   const [productSlideStatus, setProductSlideStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [productSlideRefresh, setProductSlideRefresh] = useState(0)
   const [tierLogoStatus, setTierLogoStatus] = useState<Record<string, ProductLogoStatus>>({})
@@ -437,21 +432,6 @@ export default function App() {
         : [product.name]
     }),
   )], [result])
-
-  // Статус логотипов продуктов обновляется при смене списка продуктов и после
-  // загрузки/удаления лого (logoRefresh). Сами файлы живут на бэке (data/img/…).
-  useEffect(() => {
-    if (!productNames.length) return
-    let alive = true
-    getProductLogoStatuses(productNames)
-      .then((statuses) => {
-        if (alive) setLogoStatus(statuses)
-      })
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [productNames, logoRefresh])
 
   useEffect(() => {
     if (!productNames.length) return
@@ -966,28 +946,16 @@ export default function App() {
     })
   }
 
-  function handleUploadLogo(name: string, file: File) {
-    uploadProductLogo(name, file)
-      .then(() => setLogoRefresh((n) => n + 1))
-      .catch(() => setError('Не удалось загрузить логотип продукта.'))
-  }
-
-  function handleDeleteLogo(name: string) {
-    deleteProductLogo(name)
-      .then(() => setLogoRefresh((n) => n + 1))
-      .catch(() => setError('Не удалось удалить логотип продукта.'))
-  }
-
   function handleUploadProductSlideImage(name: string, file: File) {
     uploadProductSlideImage(name, file)
       .then(() => setProductSlideRefresh((n) => n + 1))
-      .catch(() => setError('Не удалось загрузить заглушку продуктового слайда.'))
+      .catch(() => setError('Не удалось загрузить PNG-фон продуктового слайда.'))
   }
 
   function handleDeleteProductSlideImage(name: string) {
     deleteProductSlideImage(name)
       .then(() => setProductSlideRefresh((n) => n + 1))
-      .catch(() => setError('Не удалось удалить заглушку продуктового слайда.'))
+      .catch(() => setError('Не удалось удалить фон продуктового слайда.'))
   }
 
   function handleUploadTierLogo(name: string, file: File) {
@@ -1335,20 +1303,17 @@ export default function App() {
 
         {profile && productNames.length > 0 && (
           <details className="section">
-            <summary>Логотипы продуктов</summary>
-            <div className="logo-group-title">Логотип для roadmap-слайдов</div>
-            <ProductLogosPanel
-              productNames={productNames}
-              statuses={logoStatus}
-              onUpload={handleUploadLogo}
-              onDelete={handleDeleteLogo}
-            />
-            <div className="logo-group-title">Заглушка продуктового слайда</div>
+            <summary>Фоны продуктовых слайдов</summary>
+            <div className="product-slide-help">
+              PNG-фон подставляется на страницу-заглушку соответствующего продукта.
+            </div>
             <ProductLogosPanel
               productNames={productNames}
               statuses={productSlideStatus}
               onUpload={handleUploadProductSlideImage}
               onDelete={handleDeleteProductSlideImage}
+              accept="image/png,.png"
+              deleteTitle="Удалить фон"
             />
           </details>
         )}
@@ -2359,11 +2324,15 @@ function ProductLogosPanel({
   statuses,
   onUpload,
   onDelete,
+  accept = 'image/png,image/jpeg,image/webp,image/svg+xml,.svg',
+  deleteTitle = 'Удалить логотип',
 }: {
   productNames: string[]
   statuses: Record<string, ProductLogoStatus>
   onUpload: (name: string, file: File) => void
   onDelete: (name: string) => void
+  accept?: string
+  deleteTitle?: string
 }) {
   return (
     <div className="product-logos">
@@ -2381,7 +2350,7 @@ function ProductLogosPanel({
                   Заменить
                   <input
                     type="file"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                    accept={accept}
                     onChange={(e) => {
                       const f = e.target.files?.[0]
                       if (f) onUpload(name, f)
@@ -2389,7 +2358,7 @@ function ProductLogosPanel({
                     }}
                   />
                 </label>
-                <button className="logo-delete" onClick={() => onDelete(name)} title="Удалить лого">
+                <button className="logo-delete" onClick={() => onDelete(name)} title={deleteTitle}>
                   ✕
                 </button>
               </>
@@ -2398,7 +2367,7 @@ function ProductLogosPanel({
                 Загрузить
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
+                  accept={accept}
                   onChange={(e) => {
                     const f = e.target.files?.[0]
                     if (f) onUpload(name, f)

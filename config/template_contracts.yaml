@@ -13,8 +13,9 @@
 #   slide_title  — название тира
 #   Product_Name — название продукта
 #   roadmap_label                  — статичный ярлык «Roadmap»
-#   product_logo / tier_logo       — логотипы продукта и тира
-#   product_slide_image            — крупная заглушка Product-слайда
+#   product_logo                   — legacy-алиас фона Product-слайда
+#   tier_logo                      — логотип тира
+#   product_slide_image            — PNG-фон Product-слайда-заглушки
 #   quarter_marker                 — декоративная точка квартала
 #   subject_to_change_footnote     — единая сноска Subject to Change
 #   tier_inheritance_note          — многострочная заметка наследования
