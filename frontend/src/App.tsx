@@ -1220,15 +1220,6 @@ export default function App() {
           <>
             {loading && <p>Загрузка…</p>}
             {notice && <div className="message success-message" role="status"><strong>Готово</strong><span>{notice}</span></div>}
-            {result && result.lint_issues.length > 0 && (
-              <div className="lint">
-                <h3>Ошибки линтера ({result.lint_issues.length})</h3>
-                {result.lint_issues.map((issue, index) => (
-                  <LintRow key={index} issue={issue} />
-                ))}
-              </div>
-            )}
-
             {diff && diff.diff && (
               <DiffSummary diff={diff} />
             )}
@@ -1471,15 +1462,6 @@ export default function App() {
         onClose={closeStaticSlideModal}
         onSubmit={submitStaticSlide}
       />
-    </div>
-  )
-}
-
-function LintRow({ issue }: { issue: LintIssue }) {
-  return (
-    <div className="lint-item">
-      <b>{issue.message}</b>
-      <div className="lint-text">«{issue.text}» — {issue.tier} (req {issue.requirement_id})</div>
     </div>
   )
 }
