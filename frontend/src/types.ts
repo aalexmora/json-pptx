@@ -113,6 +113,60 @@ export interface ReleaseInfo {
   tier: string
 }
 
+export interface ReleaseProblem {
+  release_id: number | null
+  title: string
+  product: string
+  stream: string
+  tier: string
+  trdate: string | null
+  crdate: string | null
+  codes: string[]
+}
+
+export interface JsonReport {
+  requirements: {
+    unique: number
+    occurrences: number
+    reused: number
+    duplicate_occurrences: number
+  }
+  releases: {
+    total: number
+    with_problems: number
+    missing_crdate: number
+    invalid_crdate: number
+    invalid_trdate: number
+    missing_app_title: number
+    empty_requirements: number
+  }
+  release_problems: ReleaseProblem[]
+}
+
+export interface PublicFeatureRequirement {
+  req_id: string
+  title: string
+}
+
+export interface PublicFeatureProduct {
+  product: string
+  public: number
+  mapped: number
+  unmapped: number
+  requirements: PublicFeatureRequirement[]
+}
+
+export interface PublicFeaturesReport {
+  filename: string
+  data_rows: number
+  invalid_req_id_rows: number
+  public_features: number
+  mapped_public_features: number
+  unmapped_public_features: number
+  mapped_percent: number
+  products: PublicFeatureProduct[]
+}
+
 export interface Profile {
   ordering: {
     order: Record<string, string[]>
@@ -144,6 +198,7 @@ export interface PlanResponse {
   plan: SlidePlan | null
   tree: Tree | null
   releases: ReleaseInfo[]
+  report: JsonReport
 }
 
 export interface DiffResult {

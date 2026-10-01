@@ -42,6 +42,7 @@ def test_plan_endpoint(load_fixture):
         assert r.status_code == 200
         body = r.json()
         assert body["errors"] == []
+        assert body["report"]["requirements"]["unique"] > 0
         slides = body["plan"]["slides"]
         assert slides
         # первый слайд — титульный (TitleSlide с полем year/version)

@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, static_slides, strings, template_registry, tier_names
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, reports, static_slides, strings, template_registry, tier_names
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.diffing import build_diff_details, compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
@@ -110,8 +110,9 @@ def _build(req: PlanRequest):
 @app.post("/api/plan")
 def api_plan(req: PlanRequest):
     plan, errors, warnings, lint_issues, quality_issues, model = _build(req)
+    report = reports.build_json_report(req.json_data)
     if plan is None:
-        return {"errors": errors, "plan": None, "warnings": [], "lint_issues": [], "quality_issues": [], "tree": None, "releases": []}
+        return {"errors": errors, "plan": None, "warnings": [], "lint_issues": [], "quality_issues": [], "tree": None, "releases": [], "report": report}
     return {
         "errors": [],
         "warnings": warnings,
@@ -120,7 +121,34 @@ def api_plan(req: PlanRequest):
         "plan": asdict(plan),
         "tree": build_tree(model),
         "releases": list_releases(model),
+        "report": report,
     }
+
+
+@app.post("/api/reports/public-features")
+async def public_features_report(
+    json_data: str = Form(...),
+    file: UploadFile = File(...),
+):
+    filename = Path(file.filename or "report.xlsx").name
+    if Path(filename).suffix.lower() != ".xlsx":
+        raise HTTPException(status_code=422, detail="Отчёт должен быть в формате XLSX")
+    try:
+        parsed_json = json.loads(json_data)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Не удалось прочитать текущий JSON") from exc
+    if not isinstance(parsed_json, list):
+        raise HTTPException(status_code=422, detail="Текущий JSON должен быть списком продуктов")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="XLSX-файл пуст")
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=422, detail="XLSX-файл превышает 20 МБ")
+    try:
+        return reports.analyze_public_features_xlsx(data, parsed_json, filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/pptx")

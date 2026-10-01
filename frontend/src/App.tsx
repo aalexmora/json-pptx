@@ -17,6 +17,7 @@ import type {
   LintIssue,
   PlanResponse,
   Profile,
+  PublicFeaturesReport,
   QualityIssue,
   ReleaseInfo,
   RoadmapSlide,
@@ -42,6 +43,7 @@ import {
   saveProfile,
   setActiveTemplate,
   uploadProductSlideImage,
+  uploadPublicFeaturesReport,
   uploadStaticSlidePptx,
   uploadTemplate,
   uploadTierLogo,
@@ -399,7 +401,11 @@ export default function App() {
   const [lastBulkExpansionLevel, setLastBulkExpansionLevel] = useState<BulkExpansionLevel>('features')
   const [workspaceSessionReady, setWorkspaceSessionReady] = useState(false)
   const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
-  const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality'>('preview')
+  const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality' | 'reports'>('preview')
+  const [publicFeaturesReport, setPublicFeaturesReport] = useState<PublicFeaturesReport | null>(null)
+  const [publicFeaturesLoading, setPublicFeaturesLoading] = useState(false)
+  const [publicFeaturesError, setPublicFeaturesError] = useState<string | null>(null)
+  const publicFeaturesRequestRef = useRef(0)
   const [staticModal, setStaticModal] = useState({ open: false, editIndex: null as number | null, name: '', position: 'end', pptx: '', prompt: '' })
   const [productSlideStatus, setProductSlideStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [productSlideRefresh, setProductSlideRefresh] = useState(0)
@@ -618,6 +624,10 @@ export default function App() {
     } else {
       setDiff(null)
     }
+    publicFeaturesRequestRef.current += 1
+    setPublicFeaturesReport(null)
+    setPublicFeaturesLoading(false)
+    setPublicFeaturesError(null)
     setJsonData(data)
   }
 
@@ -679,6 +689,10 @@ export default function App() {
         setLanguage(lang)
         setApptitleMode(groupingMode)
         setDiff(null)
+        publicFeaturesRequestRef.current += 1
+        setPublicFeaturesReport(null)
+        setPublicFeaturesLoading(false)
+        setPublicFeaturesError(null)
         if (project.profile) {
           await saveProfile(project.profile)
           // Backend нормализует старые профили (Tier-флаги → Product-флаги).
@@ -705,6 +719,10 @@ export default function App() {
     setJsonData(null)
     setResult(null)
     setDiff(null)
+    setPublicFeaturesReport(null)
+    setPublicFeaturesError(null)
+    publicFeaturesRequestRef.current += 1
+    setWorkspaceView('preview')
     setError(null)
     setNotice(null)
     setCollapsedNodes(new Set())
@@ -729,6 +747,23 @@ export default function App() {
       setError('Ошибка генерации: ' + e)
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handlePublicFeaturesUpload(file: File) {
+    if (!jsonData) return
+    const requestId = publicFeaturesRequestRef.current + 1
+    publicFeaturesRequestRef.current = requestId
+    setPublicFeaturesLoading(true)
+    setPublicFeaturesError(null)
+    try {
+      const uploadedReport = await uploadPublicFeaturesReport(jsonData, file)
+      if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesReport(uploadedReport)
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : String(uploadError)
+      if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesError(message)
+    } finally {
+      if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesLoading(false)
     }
   }
 
@@ -1078,6 +1113,16 @@ export default function App() {
               {loading ? 'Проверяем…' : planErrors.length ? 'Есть ошибки' : qualityCount ? `${qualityCount} замеч.` : 'Готово'}
             </button>
           )}
+          {Boolean(jsonData) && (
+            <button
+              type="button"
+              className={'reports-button' + (workspaceView === 'reports' ? ' active' : '')}
+              onClick={() => setWorkspaceView('reports')}
+              disabled={loading}
+            >
+              Отчёты
+            </button>
+          )}
           {saveState !== 'idle' && (
             <span className={'save-state ' + saveState} role="status">
               {saveState === 'saving' && 'Сохранение…'}
@@ -1182,6 +1227,15 @@ export default function App() {
             warnings={planWarnings}
             conflicts={planConflicts}
             lintIssues={lintIssues}
+            onBack={() => setWorkspaceView('preview')}
+          />
+        ) : workspaceView === 'reports' ? (
+          <ReportsDashboard
+            report={result?.report ?? null}
+            publicFeatures={publicFeaturesReport}
+            publicFeaturesLoading={publicFeaturesLoading}
+            publicFeaturesError={publicFeaturesError}
+            onUpload={handlePublicFeaturesUpload}
             onBack={() => setWorkspaceView('preview')}
           />
         ) : (
@@ -1428,6 +1482,160 @@ export default function App() {
         onSubmit={submitStaticSlide}
       />
     </div>
+  )
+}
+
+const RELEASE_PROBLEM_LABELS: Record<string, string> = {
+  missing_crdate: 'CrDate не заполнена',
+  invalid_crdate: 'CrDate не распознана',
+  invalid_trdate: 'TrDate не распознана',
+  missing_app_title: 'AppTitle не заполнен',
+  empty_requirements: 'Нет Requirements',
+}
+
+function ReportsDashboard({
+  report,
+  publicFeatures,
+  publicFeaturesLoading,
+  publicFeaturesError,
+  onUpload,
+  onBack,
+}: {
+  report: PlanResponse['report'] | null
+  publicFeatures: PublicFeaturesReport | null
+  publicFeaturesLoading: boolean
+  publicFeaturesError: string | null
+  onUpload: (file: File) => void
+  onBack: () => void
+}) {
+  const maxUnmapped = Math.max(1, ...(publicFeatures?.products.map((product) => product.unmapped) ?? []))
+
+  return (
+    <section className="reports-workspace">
+      <div className="reports-workspace-header">
+        <div>
+          <span className="eyebrow">Текущий JSON</span>
+          <h2>Отчёты</h2>
+          <p>Ключевые показатели состава JSON и качества релизов.</p>
+        </div>
+        <button type="button" onClick={onBack}>← К презентации</button>
+      </div>
+
+      {report ? (
+        <div className="reports-summary-cards">
+          <div>
+            <span>Уникальные Requirements</span>
+            <strong>{report.requirements.unique}</strong>
+            <small>{report.requirements.occurrences} вхождений · {report.requirements.reused} повторяются</small>
+          </div>
+          <div className={report.releases.with_problems ? 'warning' : ''}>
+            <span>Релизы с проблемами</span>
+            <strong>{report.releases.with_problems} из {report.releases.total}</strong>
+            <small>Проверка дат, AppTitle и пустых релизов</small>
+          </div>
+          <div className={report.releases.missing_crdate ? 'warning' : ''}>
+            <span>Без CrDate</span>
+            <strong>{report.releases.missing_crdate}</strong>
+            <small>Квартал рассчитан по TrDate</small>
+          </div>
+        </div>
+      ) : (
+        <p className="quality-empty">Отчёт рассчитывается…</p>
+      )}
+
+      {report && report.release_problems.length > 0 && (
+        <details className="report-release-details">
+          <summary>Проблемные релизы ({report.release_problems.length})</summary>
+          <div className="quality-table-wrap">
+            <table className="quality-table">
+              <thead><tr><th>Релиз</th><th>Проблемы</th><th>TrDate</th><th>CrDate</th></tr></thead>
+              <tbody>
+                {report.release_problems.map((release, index) => (
+                  <tr key={`${release.release_id ?? 'unknown'}-${index}`}>
+                    <td>
+                      <strong>{release.title || `Release ${release.release_id ?? '—'}`}</strong>
+                      <small>{release.product} · {release.stream} · {release.tier}</small>
+                    </td>
+                    <td>{release.codes.map((code) => RELEASE_PROBLEM_LABELS[code] ?? code).join(', ')}</td>
+                    <td>{release.trdate || '—'}</td>
+                    <td>{release.crdate || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      <section className="public-features-report">
+        <div className="public-features-heading">
+          <div>
+            <h3>Публичные фичи без маппинга</h3>
+            <p>XLSX сопоставляется с текущим JSON по ReqId. Файл не сохраняется.</p>
+          </div>
+          <label className={'xlsx-upload-button' + (publicFeaturesLoading ? ' disabled' : '')}>
+            {publicFeaturesLoading ? 'Проверяем…' : publicFeatures ? 'Заменить XLSX' : 'Загрузить XLSX'}
+            <input
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              disabled={publicFeaturesLoading}
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) onUpload(file)
+                event.target.value = ''
+              }}
+            />
+          </label>
+        </div>
+        <p className="public-features-hint">
+          Обязательные колонки: <code>ReqId</code> и <code>IsPublished</code>. Для группировки используются <code>Application</code> и <code>Requirement</code>.
+        </p>
+
+        {publicFeaturesError && <div className="message error-message" role="alert">{publicFeaturesError}</div>}
+
+        {publicFeatures && (
+          <>
+            <div className="public-features-summary">
+              <div><span>Публичных фичей</span><strong>{publicFeatures.public_features}</strong></div>
+              <div><span>Есть в JSON</span><strong>{publicFeatures.mapped_public_features}</strong></div>
+              <div className={publicFeatures.unmapped_public_features ? 'warning' : 'success'}>
+                <span>Не замаплено</span><strong>{publicFeatures.unmapped_public_features}</strong>
+              </div>
+            </div>
+            <div className="public-features-file">
+              {publicFeatures.filename} · найдено в JSON {publicFeatures.mapped_percent}%
+              {publicFeatures.invalid_req_id_rows > 0 && ` · пропущено строк без ReqId: ${publicFeatures.invalid_req_id_rows}`}
+            </div>
+
+            {publicFeatures.products.length > 0 ? (
+              <div className="public-features-chart" aria-label="Незамапленные публичные фичи по продуктам">
+                {publicFeatures.products.map((product) => (
+                  <details className="public-feature-product" key={product.product}>
+                    <summary>
+                      <span className="public-feature-product-name">{product.product}</span>
+                      <span className="public-feature-bar" aria-hidden="true">
+                        <span style={{ width: `${product.unmapped * 100 / maxUnmapped}%` }} />
+                      </span>
+                      <strong>{product.unmapped}</strong>
+                    </summary>
+                    <div className="public-feature-requirements">
+                      {product.requirements.map((requirement) => (
+                        <div key={requirement.req_id}>
+                          <code>{requirement.req_id}</code>
+                          <span>{requirement.title || 'Без названия'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <div className="public-features-complete">Все публичные фичи из XLSX найдены в текущем JSON.</div>
+            )}
+          </>
+        )}
+      </section>
+    </section>
   )
 }
 

@@ -1,4 +1,4 @@
-import type { DiffResponse, PlanResponse, Profile, TemplateInfo } from './types'
+import type { DiffResponse, PlanResponse, Profile, PublicFeaturesReport, TemplateInfo } from './types'
 
 export async function fetchHealth(): Promise<{ status: string; version: string }> {
   const res = await fetch('/api/health')
@@ -50,6 +50,21 @@ export async function fetchDiff(
     body: JSON.stringify({ old_json: oldJson, new_json: newJson, language }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function uploadPublicFeaturesReport(
+  jsonData: unknown,
+  file: File,
+): Promise<PublicFeaturesReport> {
+  const form = new FormData()
+  form.append('json_data', JSON.stringify(jsonData))
+  form.append('file', file)
+  const res = await fetch('/api/reports/public-features', { method: 'POST', body: form })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { detail?: string } | null
+    throw new Error(body?.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
