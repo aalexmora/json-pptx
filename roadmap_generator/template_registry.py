@@ -79,7 +79,7 @@ _SHAPE_HINTS = {
     "product_logo": "legacy-алиас картинки-фона Product-слайда",
     "product_slide_image": "PNG-фон Product-слайда-заглушки",
     "tier_logo": "картинка-логотип тира — билдер подставит лого тира из библиотеки",
-    "quarter_marker": "точка квартала над col_header — клонируется для каждой колонки",
+    "quarter_marker": "точка квартала над col_header — один маркер на квартал в пределах слайда",
     "subject_to_change_footnote": "сноска Subject to Change — показывается один раз",
     "tier_inheritance_note": "многострочная заметка со списком предыдущих Tier",
     "slide_number": "порядковый номер слайда",

@@ -533,7 +533,8 @@ def _render_roadmap_from_template(
             header.width = Inches(w - MARGIN) - header.left
             bullets.width = Inches(w - MARGIN) - bullets.left
 
-        if marker_proto is not None:
+        first_column_for_quarter = i == 0 or slide.columns[i - 1].quarter != col.quarter
+        if marker_proto is not None and first_column_for_quarter:
             marker = marker_proto if i == 0 else _clone_shape(new_slide, marker_proto)
             marker.left = header.left + marker_header_offset
         # Каждая колонка, включая подколонки переполненного квартала, должна

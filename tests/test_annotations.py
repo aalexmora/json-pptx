@@ -93,7 +93,7 @@ def test_tier_inheritance_note_lists_all_previous_tiers(load_fixture):
 
 
 # ---------------------------------------------------------------------------
-# Наследование: дедупликация фич
+# Наследование: заметка без фильтрации фич
 # ---------------------------------------------------------------------------
 
 def _all_bullet_texts(slide):
@@ -126,8 +126,8 @@ def _two_tier_data():
     }]
 
 
-def test_tier_inheritance_dedup_removes_junior_features():
-    """При включённом наследовании старший тир не дублирует фичи младшего."""
+def test_tier_inheritance_keeps_requirements_and_adds_note():
+    """Галка добавляет заметку, но не скрывает Requirements текущего Tier."""
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
     plan = build_slide_plan(normalize_roadmap(_two_tier_data(), language="ru"), {})
     slides = _roadmap_slides(plan)
@@ -136,8 +136,9 @@ def test_tier_inheritance_dedup_removes_junior_features():
     senior = next(s for s in slides if s.tier == "Senior")
 
     assert "Junior feature" in _all_bullet_texts(junior)
-    assert "Junior feature" not in _all_bullet_texts(senior)
+    assert "Junior feature" in _all_bullet_texts(senior)
     assert "Senior feature" in _all_bullet_texts(senior)
+    assert "S / Junior" in senior.inheritance_note
 
 
 def test_tier_inheritance_disabled_keeps_duplicates():
@@ -151,8 +152,8 @@ def test_tier_inheritance_disabled_keeps_duplicates():
     assert "Senior feature" in texts
 
 
-def test_tier_inheritance_skips_tier_empty_after_dedup():
-    """Tier без уникальных фич после дедупликации не создаёт roadmap-слайд."""
+def test_tier_inheritance_keeps_tier_with_only_reused_feature():
+    """Tier с повторным Requirement остаётся в плане при включённой галке."""
     data = _two_tier_data()
     senior_requirements = data[0]["Streams"][0]["Tiers"][1]["Releases"][0]["Requirements"]
     senior_requirements[:] = senior_requirements[:1]
@@ -161,23 +162,27 @@ def test_tier_inheritance_skips_tier_empty_after_dedup():
     plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
     tier_names = [slide.tier for slide in _roadmap_slides(plan)]
 
-    assert tier_names == ["Junior"]
+    assert tier_names == ["Junior", "Senior"]
+    senior = next(slide for slide in _roadmap_slides(plan) if slide.tier == "Senior")
+    assert _all_bullet_texts(senior) == ["Junior feature"]
 
 
-def test_tier_inheritance_dedup_uses_effective_tree_order():
-    """Предыдущий Tier определяется сохранённым порядком дерева, а не сырого JSON."""
+def test_tier_inheritance_note_uses_effective_tree_order_without_filtering():
+    """Порядок влияет на заметку, но не на состав Requirements."""
     ordering.save_order("Kaspersky Next > S", ["Senior", "Junior"])
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
 
     plan = build_slide_plan(normalize_roadmap(_two_tier_data(), language="ru"), {})
     slides = _roadmap_slides(plan)
 
-    assert [slide.tier for slide in slides] == ["Senior"]
-    assert "Senior feature" in _all_bullet_texts(slides[0])
+    assert [slide.tier for slide in slides] == ["Senior", "Junior"]
+    assert _all_bullet_texts(slides[0]) == ["Junior feature", "Senior feature"]
+    assert _all_bullet_texts(slides[1]) == ["Junior feature"]
+    assert "S / Senior" in slides[1].inheritance_note
 
 
-def test_product_inheritance_deduplicates_across_all_product_streams():
-    """Product-флаг использует единую историю Id для всех Stream продукта."""
+def test_product_inheritance_keeps_requirements_across_all_product_streams():
+    """Product-флаг добавляет заметки, не фильтруя одинаковые Id между Stream."""
     def make_stream(stream_name, base_text, unique_id):
         return {
             "Stream": stream_name,
@@ -210,11 +215,11 @@ def test_product_inheritance_deduplicates_across_all_product_streams():
     base_slides = [slide for slide in slides if slide.tier == "Base"]
     senior_by_stream = {slide.stream: slide for slide in slides if slide.tier == "Senior"}
 
-    assert len(base_slides) == 1
+    assert len(base_slides) == 2
     assert set(senior_by_stream) == {"S1", "S2"}
-    assert "Base S1" in _all_bullet_texts(base_slides[0])
-    assert _all_bullet_texts(senior_by_stream["S1"]) == ["Unique S1"]
-    assert _all_bullet_texts(senior_by_stream["S2"]) == ["Unique S2"]
+    assert [_all_bullet_texts(slide) for slide in base_slides] == [["Base S1"], ["Base S2"]]
+    assert _all_bullet_texts(senior_by_stream["S1"]) == ["Base S1", "Unique S1"]
+    assert _all_bullet_texts(senior_by_stream["S2"]) == ["Base S2", "Unique S2"]
     assert "S1 / Base" in senior_by_stream["S1"].inheritance_note
     assert "S1 / Senior" in senior_by_stream["S2"].inheritance_note
     assert "S2 / Base" in senior_by_stream["S2"].inheritance_note

@@ -294,6 +294,44 @@ def test_header_shown_on_every_subslot(load_fixture, tmp_path, monkeypatch):
     assert headers == ["Q1 2025", "Q1 2025"]
 
 
+def test_quarter_marker_is_not_duplicated_for_overflow_columns(tmp_path, monkeypatch):
+    """Подколонки одного квартала используют один quarter_marker на слайде."""
+    tpl = Presentation()
+    source = tpl.slides.add_slide(tpl.slide_layouts[6])
+    header = source.shapes.add_textbox(Inches(1.0), Inches(1.8), Inches(1.2), Inches(0.3))
+    header.name = "col_header"
+    bullets = source.shapes.add_textbox(Inches(0.9), Inches(2.5), Inches(2.7), Inches(3.1))
+    bullets.name = "col_bullets"
+    marker = source.shapes.add_shape(
+        MSO_SHAPE.OVAL, Inches(0.96), Inches(1.3), Inches(0.2), Inches(0.2),
+    )
+    marker.name = "quarter_marker"
+    path = tmp_path / "overflow-marker.pptx"
+    tpl.save(path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: str(path))
+
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1,
+            "AppTitle": "A",
+            "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [
+                {"Id": 1000 + i, "Kbr": "Yes", "MarketingTitle": f"f{i}"}
+                for i in range(25)
+            ],
+        }]}]}],
+    }]
+    slide = _roadmap_slide(build_presentation(
+        build_slide_plan(normalize_roadmap(data, language="ru"), {}),
+    ))
+
+    headers = [shape for shape in slide.shapes if shape.name == "col_header"]
+    markers = [shape for shape in slide.shapes if shape.name == "quarter_marker"]
+    assert len(headers) == 2
+    assert len(markers) == 1
+
+
 def test_template_geometry_markers_and_product_name(tmp_path, monkeypatch):
     tpl = Presentation()
     tpl.slide_width = Inches(13.333)

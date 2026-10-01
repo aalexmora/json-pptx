@@ -403,6 +403,7 @@ export default function App() {
   const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
   const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality' | 'reports'>('preview')
   const [publicFeaturesReport, setPublicFeaturesReport] = useState<PublicFeaturesReport | null>(null)
+  const [publicFeaturesFile, setPublicFeaturesFile] = useState<File | null>(null)
   const [publicFeaturesLoading, setPublicFeaturesLoading] = useState(false)
   const [publicFeaturesError, setPublicFeaturesError] = useState<string | null>(null)
   const publicFeaturesRequestRef = useRef(0)
@@ -624,11 +625,8 @@ export default function App() {
     } else {
       setDiff(null)
     }
-    publicFeaturesRequestRef.current += 1
-    setPublicFeaturesReport(null)
-    setPublicFeaturesLoading(false)
-    setPublicFeaturesError(null)
     setJsonData(data)
+    if (publicFeaturesFile) void refreshPublicFeatures(data, publicFeaturesFile)
   }
 
   function handleLoad() {
@@ -689,10 +687,6 @@ export default function App() {
         setLanguage(lang)
         setApptitleMode(groupingMode)
         setDiff(null)
-        publicFeaturesRequestRef.current += 1
-        setPublicFeaturesReport(null)
-        setPublicFeaturesLoading(false)
-        setPublicFeaturesError(null)
         if (project.profile) {
           await saveProfile(project.profile)
           // Backend нормализует старые профили (Tier-флаги → Product-флаги).
@@ -700,6 +694,7 @@ export default function App() {
           setProfile(await getProfile())
         }
         setJsonData(data)
+        if (publicFeaturesFile) void refreshPublicFeatures(data, publicFeaturesFile)
       } catch {
         setError('Файл не является корректным проектом')
       }
@@ -719,9 +714,8 @@ export default function App() {
     setJsonData(null)
     setResult(null)
     setDiff(null)
-    setPublicFeaturesReport(null)
-    setPublicFeaturesError(null)
     publicFeaturesRequestRef.current += 1
+    setPublicFeaturesLoading(false)
     setWorkspaceView('preview')
     setError(null)
     setNotice(null)
@@ -750,21 +744,28 @@ export default function App() {
     }
   }
 
-  async function handlePublicFeaturesUpload(file: File) {
-    if (!jsonData) return
+  async function refreshPublicFeatures(data: unknown, file: File, rememberFile = false) {
     const requestId = publicFeaturesRequestRef.current + 1
     publicFeaturesRequestRef.current = requestId
     setPublicFeaturesLoading(true)
     setPublicFeaturesError(null)
     try {
-      const uploadedReport = await uploadPublicFeaturesReport(jsonData, file)
-      if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesReport(uploadedReport)
+      const uploadedReport = await uploadPublicFeaturesReport(data, file)
+      if (publicFeaturesRequestRef.current === requestId) {
+        setPublicFeaturesReport(uploadedReport)
+        if (rememberFile) setPublicFeaturesFile(file)
+      }
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : String(uploadError)
       if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesError(message)
     } finally {
       if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesLoading(false)
     }
+  }
+
+  async function handlePublicFeaturesUpload(file: File) {
+    if (!jsonData) return
+    await refreshPublicFeatures(jsonData, file, true)
   }
 
   const saveQueue = useRef<Promise<void>>(Promise.resolve())
@@ -2373,7 +2374,7 @@ function GroupedSlides({
                 {hasRealHierarchy && (
                   <label
                     className="inheritance-check"
-                    title="Во всех Stream продукта убирает фичи, уже показанные в предыдущих Tier, и добавляет заметку о наследовании"
+                    title="Добавляет заметку о предыдущих Tier. Требования из текущего Tier не скрываются"
                   >
                     <input
                       type="checkbox"
