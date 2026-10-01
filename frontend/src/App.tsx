@@ -1526,7 +1526,10 @@ function ReportsDashboard({
           <div>
             <span>Уникальные Requirements</span>
             <strong>{report.requirements.unique}</strong>
-            <small>{report.requirements.occurrences} вхождений · {report.requirements.reused} повторяются</small>
+            <small>
+              {report.requirements.occurrences} вхождений = {report.requirements.unique} первых +{' '}
+              {report.requirements.duplicate_occurrences} повторных; {report.requirements.reused} ReqId повторяются
+            </small>
           </div>
           <div className={report.releases.with_problems ? 'warning' : ''}>
             <span>Релизы с проблемами</span>
@@ -1571,13 +1574,13 @@ function ReportsDashboard({
         <div className="public-features-heading">
           <div>
             <h3>Публичные фичи без маппинга</h3>
-            <p>XLSX сопоставляется с текущим JSON по ReqId. Файл не сохраняется.</p>
+            <p>CSV сопоставляется с текущим JSON по ReqId. Файл не сохраняется.</p>
           </div>
-          <label className={'xlsx-upload-button' + (publicFeaturesLoading ? ' disabled' : '')}>
-            {publicFeaturesLoading ? 'Проверяем…' : publicFeatures ? 'Заменить XLSX' : 'Загрузить XLSX'}
+          <label className={'csv-upload-button' + (publicFeaturesLoading ? ' disabled' : '')}>
+            {publicFeaturesLoading ? 'Проверяем…' : publicFeatures ? 'Заменить CSV' : 'Загрузить CSV'}
             <input
               type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept=".csv,text/csv,text/tab-separated-values"
               disabled={publicFeaturesLoading}
               onChange={(event) => {
                 const file = event.target.files?.[0]
@@ -1588,7 +1591,7 @@ function ReportsDashboard({
           </label>
         </div>
         <p className="public-features-hint">
-          Обязательные колонки: <code>ReqId</code> и <code>IsPublished</code>. Для группировки используются <code>Application</code> и <code>Requirement</code>.
+          CSV с разделителем TAB (также распознаются «;» и «,»). Обязательные колонки: <code>ReqId</code> и <code>IsPublished</code>. Для группировки используются <code>Application</code> и <code>Requirement</code>.
         </p>
 
         {publicFeaturesError && <div className="message error-message" role="alert">{publicFeaturesError}</div>}
@@ -1630,7 +1633,7 @@ function ReportsDashboard({
                 ))}
               </div>
             ) : (
-              <div className="public-features-complete">Все публичные фичи из XLSX найдены в текущем JSON.</div>
+              <div className="public-features-complete">Все публичные фичи из CSV найдены в текущем JSON.</div>
             )}
           </>
         )}

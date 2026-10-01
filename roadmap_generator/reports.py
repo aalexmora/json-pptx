@@ -1,19 +1,17 @@
-"""Расчёты отчётности по сырому roadmap JSON и загруженному XLSX.
+"""Расчёты отчётности по сырому roadmap JSON и загруженному CSV.
 
-Модуль не зависит от FastAPI и python-pptx. XLSX используется только как
+Модуль не зависит от FastAPI и python-pptx. CSV используется только как
 временный источник данных: файл читается из bytes и нигде не сохраняется.
 """
 from __future__ import annotations
 
+import csv
 import re
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from datetime import datetime
-from io import BytesIO
+from io import StringIO
 from typing import Any
-from zipfile import BadZipFile
-
-from openpyxl import load_workbook
-from openpyxl.utils.exceptions import InvalidFileException
 
 
 _DATE_FORMATS = (
@@ -84,15 +82,22 @@ def _normalized_header(value: Any) -> str:
 
 def _header_indexes(row: tuple[Any, ...]) -> dict[str, int] | None:
     aliases = {
-        "req_id": {"reqid", "requirementid"},
-        "is_published": {"ispublished", "published"},
-        "product": {"application", "product", "productname"},
-        "title": {"requirement", "requirementtitle", "feature", "title"},
+        "req_id": ("reqid", "requirementid"),
+        "is_published": ("ispublished", "published"),
+        "product": ("application", "product", "productname"),
+        "title": ("requirement", "requirementtitle", "feature", "title"),
     }
     normalized = [_normalized_header(value) for value in row]
     indexes: dict[str, int] = {}
     for field, names in aliases.items():
-        index = next((i for i, value in enumerate(normalized) if value in names), None)
+        index = next(
+            (
+                normalized.index(alias)
+                for alias in names
+                if alias in normalized
+            ),
+            None,
+        )
         if index is not None:
             indexes[field] = index
     if "req_id" in indexes and "is_published" in indexes:
@@ -186,78 +191,91 @@ def collect_json_requirement_ids(data: list[dict]) -> set[str]:
     return ids
 
 
-def analyze_public_features_xlsx(
-    workbook_bytes: bytes,
-    json_data: list[dict],
-    filename: str = "report.xlsx",
-) -> dict[str, Any]:
-    """Сопоставляет публичные фичи XLSX с Requirements JSON по ReqId."""
+def _decode_csv(csv_bytes: bytes) -> str:
+    encodings = ("utf-16",) if csv_bytes.startswith((b"\xff\xfe", b"\xfe\xff")) else (
+        "utf-8-sig",
+        "cp1251",
+    )
+    for encoding in encodings:
+        try:
+            return csv_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("Не удалось определить кодировку CSV (поддерживаются UTF-8, UTF-16 и Windows-1251)")
+
+
+def _csv_reader_with_headers(text: str) -> tuple[Iterator[list[str]], dict[str, int]]:
+    sample = text[:65536]
+    delimiters: list[str] = []
     try:
-        workbook = load_workbook(BytesIO(workbook_bytes), read_only=True, data_only=True)
-    except (InvalidFileException, OSError, ValueError, KeyError, BadZipFile) as exc:
-        raise ValueError("Не удалось прочитать XLSX-файл") from exc
+        delimiters.append(csv.Sniffer().sniff(sample, delimiters="\t;,").delimiter)
+    except csv.Error:
+        pass
+    for delimiter in ("\t", ";", ","):
+        if delimiter not in delimiters:
+            delimiters.append(delimiter)
+
+    for delimiter in delimiters:
+        rows = csv.reader(StringIO(text), delimiter=delimiter)
+        for _ in range(50):
+            row = next(rows, None)
+            if row is None:
+                break
+            indexes = _header_indexes(tuple(row))
+            if indexes is not None:
+                return rows, indexes
+    raise ValueError("В CSV не найдены обязательные колонки ReqId и IsPublished")
+
+
+def analyze_public_features_csv(
+    csv_bytes: bytes,
+    json_data: list[dict],
+    filename: str = "report.csv",
+) -> dict[str, Any]:
+    """Сопоставляет публичные фичи CSV с Requirements JSON по ReqId."""
+    rows, indexes = _csv_reader_with_headers(_decode_csv(csv_bytes))
 
     public_by_id: dict[str, dict[str, Any]] = {}
     product_ids: dict[str, set[str]] = defaultdict(set)
-    parsed_sheets = 0
     data_rows = 0
     invalid_req_id_rows = 0
 
-    try:
-        for sheet in workbook.worksheets:
-            rows = sheet.iter_rows(values_only=True)
-            indexes: dict[str, int] | None = None
-            for _ in range(50):
-                row = next(rows, None)
-                if row is None:
-                    break
-                indexes = _header_indexes(row)
-                if indexes is not None:
-                    break
-            if indexes is None:
-                continue
+    for row in rows:
+        data_rows += 1
+        req_id = _normalize_req_id(
+            row[indexes["req_id"]] if indexes["req_id"] < len(row) else None
+        )
+        if req_id is None:
+            if any(value.strip() for value in row):
+                invalid_req_id_rows += 1
+            continue
+        published = _is_published(
+            row[indexes["is_published"]]
+            if indexes["is_published"] < len(row)
+            else None
+        )
+        if not published:
+            continue
 
-            parsed_sheets += 1
-            for row in rows:
-                data_rows += 1
-                req_id = _normalize_req_id(
-                    row[indexes["req_id"]] if indexes["req_id"] < len(row) else None
-                )
-                if req_id is None:
-                    if any(value not in (None, "") for value in row):
-                        invalid_req_id_rows += 1
-                    continue
-                published = _is_published(
-                    row[indexes["is_published"]]
-                    if indexes["is_published"] < len(row)
-                    else None
-                )
-                if not published:
-                    continue
+        product = "Без продукта"
+        if "product" in indexes and indexes["product"] < len(row):
+            product = str(row[indexes["product"]] or "").strip() or product
+        title = ""
+        if "title" in indexes and indexes["title"] < len(row):
+            title = str(row[indexes["title"]] or "").strip()
 
-                product = "Без продукта"
-                if "product" in indexes and indexes["product"] < len(row):
-                    product = str(row[indexes["product"]] or "").strip() or product
-                title = ""
-                if "title" in indexes and indexes["title"] < len(row):
-                    title = str(row[indexes["title"]] or "").strip()
+        item = public_by_id.setdefault(req_id, {
+            "req_id": req_id,
+            "title": title,
+            "products": set(),
+        })
+        if not item["title"] and title:
+            item["title"] = title
+        item["products"].add(product)
+        product_ids[product].add(req_id)
 
-                item = public_by_id.setdefault(req_id, {
-                    "req_id": req_id,
-                    "title": title,
-                    "products": set(),
-                })
-                if not item["title"] and title:
-                    item["title"] = title
-                item["products"].add(product)
-                product_ids[product].add(req_id)
-    finally:
-        workbook.close()
-
-    if parsed_sheets == 0:
-        raise ValueError("В XLSX не найдены обязательные колонки ReqId и IsPublished")
     if not public_by_id:
-        raise ValueError("В XLSX нет строк с IsPublished=true и корректным ReqId")
+        raise ValueError("В CSV нет строк с IsPublished=true и корректным ReqId")
 
     json_ids = collect_json_requirement_ids(json_data)
     public_ids = set(public_by_id)

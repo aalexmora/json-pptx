@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.10.1
+> **Версия:** 1.17.2
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
@@ -51,6 +51,26 @@ docker compose up -d --build
 - За reverse-proxy (nginx) достаточно проксировать на `127.0.0.1:8000`;
   для загрузки `.pptx`/JSON поднимите `client_max_body_size` (напр. `50m`).
 - Один воркер: состояние хранится in-memory + файлы, реплицировать нельзя.
+
+### Быстрый production-деплой
+
+Скрипт публикует только уже staged-файлы, сам выполняет необходимые проверки,
+создаёт commit, отправляет `main` в GitHub, пересобирает сервис на сервере и
+проверяет `/api/health`:
+
+```bash
+git add -- app.py roadmap_generator/example.py roadmap_generator/version.py tests/test_example.py
+./scripts/deploy.sh -m "feat: example change"
+```
+
+Backend-тесты и frontend-сборка запускаются только при изменениях соответствующей
+части проекта. JSON/XLSX/CSV из `Requirements/`, `frontend/dist`, runtime-данные,
+секреты и генерируемая PPTX-фикстура блокируются автоматически. Для изменений
+`builder.py`/`layout.py` после визуальной проверки используется
+`./scripts/deploy.sh --visual-qa-ok -m "..."`.
+
+Настройки сервера можно переопределить переменными `DEPLOY_HOST`, `DEPLOY_PATH`,
+`DEPLOY_SERVICE`, `DEPLOY_CONTAINER`, `DEPLOY_SSH_KEY` и `DEPLOY_HEALTH_URL`.
 
 ## Как пользоваться
 

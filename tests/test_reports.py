@@ -1,24 +1,27 @@
 from __future__ import annotations
 
+import csv
 import json
-from io import BytesIO
+from io import StringIO
 
 import pytest
 from fastapi.testclient import TestClient
-from openpyxl import Workbook
 
 from app import app
-from roadmap_generator.reports import analyze_public_features_xlsx, build_json_report
+from roadmap_generator.reports import analyze_public_features_csv, build_json_report
 
 
-def _xlsx_bytes(rows: list[list[object]]) -> bytes:
-    workbook = Workbook()
-    sheet = workbook.active
+def _csv_bytes(
+    rows: list[list[object]],
+    *,
+    delimiter: str = "\t",
+    encoding: str = "utf-8-sig",
+) -> bytes:
+    output = StringIO(newline="")
+    writer = csv.writer(output, delimiter=delimiter)
     for row in rows:
-        sheet.append(row)
-    output = BytesIO()
-    workbook.save(output)
-    return output.getvalue()
+        writer.writerow(row)
+    return output.getvalue().encode(encoding)
 
 
 def _roadmap() -> list[dict]:
@@ -84,38 +87,49 @@ def test_build_json_report_counts_requirements_and_release_problems():
     assert report["release_problems"][2]["codes"] == ["missing_crdate", "empty_requirements"]
 
 
-def test_analyze_public_features_xlsx_maps_public_features_by_req_id():
-    data = _xlsx_bytes([
+def test_analyze_public_features_csv_maps_public_features_by_req_id():
+    data = _csv_bytes([
         ["Application", "Requirement", "ReqId", "IsPublished"],
-        ["Product A", "Mapped", 10, True],
-        ["Product A", "Not mapped", 30, "true"],
-        ["Product B", "Not public", 40, False],
-        ["Product B", "Same missing feature", 30, 1],
+        ["Продукт А", "Есть в JSON", 10, True],
+        ["Продукт А", "Не замаплено", 30, "true"],
+        ["Продукт Б", "Не публично", 40, False],
+        ["Продукт Б", "Та же отсутствующая фича", 30, 1],
     ])
 
-    report = analyze_public_features_xlsx(data, _roadmap(), "features.xlsx")
+    report = analyze_public_features_csv(data, _roadmap(), "features.csv")
 
-    assert report["filename"] == "features.xlsx"
+    assert report["filename"] == "features.csv"
     assert report["public_features"] == 2
     assert report["mapped_public_features"] == 1
     assert report["unmapped_public_features"] == 1
     assert report["mapped_percent"] == 50.0
-    assert [product["product"] for product in report["products"]] == ["Product A", "Product B"]
-    assert report["products"][0]["requirements"] == [{"req_id": "30", "title": "Not mapped"}]
+    assert [product["product"] for product in report["products"]] == ["Продукт А", "Продукт Б"]
+    assert report["products"][0]["requirements"] == [{"req_id": "30", "title": "Не замаплено"}]
 
 
-def test_analyze_public_features_xlsx_requires_columns():
-    data = _xlsx_bytes([
+def test_analyze_public_features_csv_supports_semicolon_and_prefers_application():
+    data = _csv_bytes([
+        ["Product", "Application", "Requirement", "ReqId", "IsPublished"],
+        ["Линейка", "Приложение", "Фича", 30, True],
+    ], delimiter=";", encoding="cp1251")
+
+    report = analyze_public_features_csv(data, _roadmap(), "features.csv")
+
+    assert report["products"][0]["product"] == "Приложение"
+
+
+def test_analyze_public_features_csv_requires_columns():
+    data = _csv_bytes([
         ["Application", "Requirement", "ReqId"],
         ["Product A", "Feature", 10],
     ])
 
     with pytest.raises(ValueError, match="ReqId и IsPublished"):
-        analyze_public_features_xlsx(data, _roadmap())
+        analyze_public_features_csv(data, _roadmap())
 
 
 def test_public_features_report_endpoint():
-    data = _xlsx_bytes([
+    data = _csv_bytes([
         ["Application", "Requirement", "ReqId", "IsPublished"],
         ["Product A", "Mapped", 10, True],
         ["Product A", "Not mapped", 30, True],
@@ -124,12 +138,16 @@ def test_public_features_report_endpoint():
     with TestClient(app) as client:
         response = client.post(
             "/api/reports/public-features",
-            data={"json_data": json.dumps(_roadmap())},
             files={
+                "json_file": (
+                    "roadmap.json",
+                    json.dumps(_roadmap()).encode("utf-8"),
+                    "application/json",
+                ),
                 "file": (
-                    "features.xlsx",
+                    "features.csv",
                     data,
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "text/tab-separated-values",
                 ),
             },
         )
@@ -138,13 +156,44 @@ def test_public_features_report_endpoint():
     assert response.json()["unmapped_public_features"] == 1
 
 
-def test_public_features_report_endpoint_rejects_non_xlsx():
+def test_public_features_report_endpoint_accepts_json_larger_than_one_mb():
+    roadmap = _roadmap()
+    roadmap[0]["unused_large_field"] = "я" * 600_000
+    data = _csv_bytes([
+        ["Application", "Requirement", "ReqId", "IsPublished"],
+        ["Product A", "Mapped", 10, True],
+    ])
+
     with TestClient(app) as client:
         response = client.post(
             "/api/reports/public-features",
-            data={"json_data": json.dumps(_roadmap())},
-            files={"file": ("features.csv", b"ReqId,IsPublished\n10,true", "text/csv")},
+            files={
+                "json_file": (
+                    "roadmap.json",
+                    json.dumps(roadmap).encode("utf-8"),
+                    "application/json",
+                ),
+                "file": ("features.csv", data, "text/tab-separated-values"),
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["mapped_public_features"] == 1
+
+
+def test_public_features_report_endpoint_rejects_non_csv():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/reports/public-features",
+            files={
+                "json_file": (
+                    "roadmap.json",
+                    json.dumps(_roadmap()).encode("utf-8"),
+                    "application/json",
+                ),
+                "file": ("features.xlsx", b"not xlsx", "application/octet-stream"),
+            },
         )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Отчёт должен быть в формате XLSX"
+    assert response.json()["detail"] == "Отчёт должен быть в формате CSV"

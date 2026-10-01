@@ -58,7 +58,11 @@ export async function uploadPublicFeaturesReport(
   file: File,
 ): Promise<PublicFeaturesReport> {
   const form = new FormData()
-  form.append('json_data', JSON.stringify(jsonData))
+  form.append(
+    'json_file',
+    new Blob([JSON.stringify(jsonData)], { type: 'application/json' }),
+    'roadmap.json',
+  )
   form.append('file', file)
   const res = await fetch('/api/reports/public-features', { method: 'POST', body: form })
   if (!res.ok) {

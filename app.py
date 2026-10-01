@@ -127,26 +127,31 @@ def api_plan(req: PlanRequest):
 
 @app.post("/api/reports/public-features")
 async def public_features_report(
-    json_data: str = Form(...),
+    json_file: UploadFile = File(...),
     file: UploadFile = File(...),
 ):
-    filename = Path(file.filename or "report.xlsx").name
-    if Path(filename).suffix.lower() != ".xlsx":
-        raise HTTPException(status_code=422, detail="Отчёт должен быть в формате XLSX")
+    filename = Path(file.filename or "report.csv").name
+    if Path(filename).suffix.lower() != ".csv":
+        raise HTTPException(status_code=422, detail="Отчёт должен быть в формате CSV")
+    raw_json = await json_file.read()
+    if not raw_json:
+        raise HTTPException(status_code=422, detail="Текущий JSON пуст")
+    if len(raw_json) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=422, detail="Текущий JSON превышает 25 МБ")
     try:
-        parsed_json = json.loads(json_data)
-    except json.JSONDecodeError as exc:
+        parsed_json = json.loads(raw_json.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=422, detail="Не удалось прочитать текущий JSON") from exc
     if not isinstance(parsed_json, list):
         raise HTTPException(status_code=422, detail="Текущий JSON должен быть списком продуктов")
 
     data = await file.read()
     if not data:
-        raise HTTPException(status_code=422, detail="XLSX-файл пуст")
+        raise HTTPException(status_code=422, detail="CSV-файл пуст")
     if len(data) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=422, detail="XLSX-файл превышает 20 МБ")
+        raise HTTPException(status_code=422, detail="CSV-файл превышает 20 МБ")
     try:
-        return reports.analyze_public_features_xlsx(data, parsed_json, filename)
+        return reports.analyze_public_features_csv(data, parsed_json, filename)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

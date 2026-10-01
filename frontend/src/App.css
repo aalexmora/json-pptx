@@ -1670,7 +1670,7 @@ button.status-pill:disabled {
   margin: 0 0 5px;
 }
 
-.xlsx-upload-button {
+.csv-upload-button {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -1686,12 +1686,12 @@ button.status-pill:disabled {
   font-weight: 700;
 }
 
-.xlsx-upload-button.disabled {
+.csv-upload-button.disabled {
   cursor: default;
   opacity: 0.55;
 }
 
-.xlsx-upload-button input {
+.csv-upload-button input {
   display: none;
 }
 
