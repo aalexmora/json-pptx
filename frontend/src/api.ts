@@ -1,7 +1,13 @@
-import type { DiffResponse, PlanResponse, Profile, PublicFeaturesReport, TemplateInfo } from './types'
+import type { DiffResponse, PlanResponse, Profile, PublicFeaturesReport, ReleaseLog, TemplateInfo } from './types'
 
 export async function fetchHealth(): Promise<{ status: string; version: string }> {
   const res = await fetch('/api/health')
+  return res.json()
+}
+
+export async function fetchReleaseLog(): Promise<ReleaseLog> {
+  const res = await fetch('/api/release-log')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 

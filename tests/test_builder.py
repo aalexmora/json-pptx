@@ -272,8 +272,8 @@ def test_inherits_slide_size(load_fixture, synthetic_template_path):
     assert prs.slide_height == template.slide_height
 
 
-def test_header_shown_on_every_subslot(load_fixture, tmp_path, monkeypatch):
-    """Каждая подколонка переполненного квартала получает свой col_header."""
+def test_quarter_header_is_not_duplicated_across_subslots(load_fixture, tmp_path, monkeypatch):
+    """Заголовок квартала остаётся только в первой подколонке."""
     tpl_path = _template_with_named_shapes(tmp_path, "hdr_template.pptx", [])
     monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
     data = [{
@@ -290,8 +290,7 @@ def test_header_shown_on_every_subslot(load_fixture, tmp_path, monkeypatch):
         for s in prs.slides for sh in s.shapes
         if sh.name == "col_header"
     ]
-    # 2 слота одного квартала → квартал указан в обеих шапках.
-    assert headers == ["Q1 2025", "Q1 2025"]
+    assert headers == ["Q1 2025", ""]
 
 
 def test_quarter_marker_is_not_duplicated_for_overflow_columns(tmp_path, monkeypatch):
@@ -736,41 +735,24 @@ def test_s2c_duplicate_alias_placeholders_are_cleared(load_fixture, tmp_path, mo
     assert "LEGACY" not in texts
 
 
-def test_inheritance_note_uses_named_placeholder_and_one_tier_per_line(load_fixture, tmp_path, monkeypatch):
+def test_retired_inheritance_placeholder_is_always_cleared(load_fixture, tmp_path, monkeypatch):
     tpl_path = _template_with_named_shapes(
         tmp_path,
         "inheritance_template.pptx",
         [{"name": "tier_inheritance_note", "kind": "text", "text": "INHERITANCE PLACEHOLDER"}],
     )
-    template = Presentation(tpl_path)
-    placeholder = next(shape for shape in template.slides[0].shapes if shape.name == "tier_inheritance_note")
-    placeholder.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor(0x00, 0x6D, 0xFF)
-    template.save(tpl_path)
     monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: tpl_path)
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
     prs = build_presentation(_plan(load_fixture, "tier_hierarchy_next.json"))
 
-    notes = [
-        _shape_text_by_name(slide, "tier_inheritance_note")
-        for slide in prs.slides
-        if _shape_text_by_name(slide, "tier_inheritance_note")
-    ]
-    assert notes
-    lines = notes[-1].splitlines()
-    assert lines[0] == "вкл. все фичи предыдущих тиров:"
-    assert all(line.startswith("• ") for line in lines[1:])
-    assert "INHERITANCE PLACEHOLDER" not in notes[-1]
-    rendered_shape = next(
-        shape
+    placeholders = [
+        shape.text
         for slide in prs.slides
         for shape in slide.shapes
-        if shape.name == "tier_inheritance_note" and shape.text
-    )
-    assert all(
-        run.font.color.rgb == RGBColor(0x00, 0x6D, 0xFF)
-        for paragraph in rendered_shape.text_frame.paragraphs
-        for run in paragraph.runs
-    )
+        if shape.name == "tier_inheritance_note" and shape.has_text_frame
+    ]
+    assert placeholders
+    assert set(placeholders) == {""}
 
 
 def test_number_placeholder_filled_with_ordinal(load_fixture, tmp_path, monkeypatch):

@@ -7,7 +7,11 @@
 ## Согласованные с заказчиком решения (отклонения/уточнения к ТЗ v4)
 
 - **Гибкие колонки** (§4.2 п.3): квартал с переполнением занимает несколько колонок на том же слайде, а не уходит на «Roadmap (cont.)». Лимит — `MAX_BULLETS_PER_COLUMN` в `plugins_engine.py` (v1-прокси «сколько влезает»; позже может стать текст-зависимым или настраиваться в админке). Пагинация ≤4 колонок сохраняется.
-- **Аннотации — текст, не шейпы шаблона** (§10): `Subject to Change` = `*` в конце текста фичи + сноска внизу слайда; `tier_inheritance_note` = текстовая заметка; `under_approval` — аналогично. Секция `annotations` в `config/template_contracts.yaml` **отсутствует**.
+- **Аннотации — текст, не шейпы шаблона** (§10): `Subject to Change` = `*` в конце текста фичи + сноска внизу слайда; `under_approval` — аналогично. Секция `annotations` в `config/template_contracts.yaml` **отсутствует**.
+- **Наследование Tier отменено**: контрола в UI нет, заметки не рендерятся, фичи между Tier не дедуплицируются; legacy-плейсхолдер в старом шаблоне очищается.
+- **Квартал не дублируется в подколонках**: `Qx YYYY` и `quarter_marker` показываются только в первой колонке квартала на каждом слайде.
+- **Годовые отчёты**: вкладки 2026/2027 фильтруются только по `Release.TrDate`; CSV-блок единый, заполненные продукты требуют корректный `CrDate` и непустой `ApplicableForProducts` для каждого Requirement.
+- **Журнал версии**: версия в шапке кликабельна и открывает журнал с разделами «Реализовано в релизе» и «Осталось»; версия берётся из `APP_VERSION`.
 - **Dev-линтер** (вне ТЗ v4): `linter.py` подсвечивает кириллицу в EN-презентации и совпадения по пользовательским regex'ам (глобальный профиль). Результат показывается в превью.
 
 ## Технологический стек
@@ -78,12 +82,14 @@ roadmap-pptx-generator/
 │   ├── builder.py                  # build_presentation
 │   ├── layout.py                   # fit_bullets_dynamic и геометрия
 │   ├── diffing.py                  # match_previous_project, compute_diff
-│   ├── ordering.py                 # get_effective_order, save_order, get/save/resolve_apptitle_priority, флаг наследования тира
+│   ├── ordering.py                 # get_effective_order, save_order, get/save/resolve_apptitle_priority
 │   ├── labels.py                   # get_apptitle_label, save_apptitle_label
 │   ├── linter.py                   # dev-линтер: кириллица в EN + пользовательские regex'ы
 │   ├── static_slides.py            # статичные слайды пользователя (title/text/точка вставки)
 │   ├── deck_meta.py                # метаданные титульного слайда (заголовок/год/версия)
 │   ├── approval.py                 # флаги «под согласованием» (Id релизов)
+│   ├── reports.py                  # годовые отчёты и сопоставление CSV
+│   ├── release_log.py              # журнал текущей APP_VERSION
 │   ├── version.py                  # APP_VERSION — версия приложения (обновлять при каждом изменении)
 │   └── strings.py                  # служебные RU/EN строки (дефолты + override из профиля)
 ├── plugins/
@@ -92,7 +98,6 @@ roadmap-pptx-generator/
 │   ├── apptitle_grouping.py
 │   ├── subject_to_change_badge.py
 │   ├── under_approval_badge.py
-│   ├── tier_inheritance_note.py
 │   └── intro_outro_static_slide.py
 ├── config/
 │   └── template_contracts.yaml     # состав именованных шейпов (данные, не код — ТЗ v4 раздел 10)
@@ -182,10 +187,6 @@ roadmap-pptx-generator/
 - **Symptom:** после переименования AppTitle через синонимы в презентации внезапно пропала группировка для этого продукта.
   **Cause:** переименование применяется, но продукт не входит в default-scope `apptitle_grouping` (не Next-линия) и плагин выключен.
   **Fix:** это ожидаемое поведение (см. §4.4 ТЗ v4) — переименование no-op без активной группировки, не баг; тест должен проверять это как штатный сценарий.
-
-- **Symptom:** плагин `tier_inheritance_note` не находит «предыдущий» тир.
-  **Cause:** осталась ссылка на старое отдельное хранилище иерархии тиров вместо чтения порядка через `ordering.get_effective_order`.
-  **Fix:** `tier_inheritance_note` должен брать порядок тиров исключительно из `ordering.py`, отдельного стора для иерархии больше нет.
 
 - **Symptom:** матчинг по имени не находит продукт, хотя название «то же самое».
   **Cause:** разное написание пробелов вокруг дефиса между выгрузками («SD - WAN» vs «SD-WAN»).

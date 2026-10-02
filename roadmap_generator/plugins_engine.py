@@ -18,7 +18,6 @@ from roadmap_generator.product_languages import is_product_visible
 from roadmap_generator.ordering import (
     SEPARATOR,
     get_effective_order,
-    get_product_inheritance_flag,
     get_product_slide_hidden_flag,
     resolve_apptitle_order,
 )
@@ -146,11 +145,7 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
         if not is_product_visible(pname, model.language):
             continue
         product = products_by_name[pname]
-        product_inheritance = get_product_inheritance_flag(pname)
         deck_items: List[Union[DividerSlide, RoadmapSlide]] = []
-        # Список предыдущих Tier создаётся заново внутри цикла Product:
-        # заметка о наследовании никогда не пересекает границу следующего продукта.
-        product_previous_tiers: List[str] = []
 
         for sname in get_effective_order(pname, [s.name for s in product.streams]):
             stream = next(s for s in product.streams if s.name == sname)
@@ -159,16 +154,9 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
             ordered_tiers = get_effective_order(f"{pname}{SEPARATOR}{sname}", tier_names)
             for tname in ordered_tiers:
                 tier = next(t for t in stream.tiers if t.name == tname)
-                inherit = bool(product_previous_tiers) and product_inheritance
-                inheritance_note = None
-                if inherit:
-                    previous = "\n".join(f"• {tier_name}" for tier_name in product_previous_tiers)
-                    inheritance_note = f"{get_service_string('inheritance_prefix', model.language)}\n{previous}"
                 slides = _build_tier_slides(
                     model.language, pname, sname, tname, tier, filters, groupers, plugin_settings,
-                    inheritance_note,
                 )
-                product_previous_tiers.append(f"{sname} / {tname}")
                 stream_slides.extend(slides)
             if stream_slides:
                 if sname != "-":
@@ -221,7 +209,7 @@ def _to_static_slide(slide: dict) -> StaticSlide:
     )
 
 
-def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings, inheritance_note=None):
+def _build_tier_slides(language, product, stream, tier, tier_obj, filters, groupers, plugin_settings):
     parent_path = f"{product}{SEPARATOR}{stream}{SEPARATOR}{tier}"
 
     bullets: List[Bullet] = []
@@ -259,7 +247,7 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
     _apply_under_approval(columns, language)
     _apply_group_order_and_labels(columns)
 
-    return _paginate(product, stream, tier, columns, language, inheritance_note)
+    return _paginate(product, stream, tier, columns, language)
 
 
 def _resolve_plugin_settings(plugin, plugin_settings, product_name, parent_path) -> dict:
@@ -424,7 +412,6 @@ def _paginate(
     tier: str,
     columns: List[Column],
     language: str,
-    inheritance_note: str,
 ) -> List[RoadmapSlide]:
     """TOR v2 §4 шаг 2: раскладка слотов по слайдам (ровно 4 слота на слайд).
 
@@ -445,13 +432,12 @@ def _paginate(
     def make_slide(slots: List[Column], continuation: bool) -> RoadmapSlide:
         has_stc = any(b.is_subject_to_change for col in slots for b in _column_all_bullets(col))
         footnote = get_service_string("subject_to_change_footnote", language) if has_stc else ""
-        note = inheritance_note if (not continuation and inheritance_note) else ""
         return RoadmapSlide(
             product=product, stream=stream, tier=tier,
             columns=slots, continuation=continuation,
             has_subject_to_change=has_stc,
             footnote=footnote,
-            inheritance_note=note,
+            inheritance_note="",
             language=language,
         )
 
@@ -476,7 +462,7 @@ def _paginate(
 
 
 def build_tree(model: RoadmapModel) -> dict:
-    """Упорядоченное дерево Product → Stream → Tier (с флагом наследования тира)."""
+    """Упорядоченное дерево Product → Stream → Tier."""
     products_by_name = {p.name: p for p in model.products}
     products = []
     for pname in get_effective_order("", [p.name for p in model.products]):
@@ -490,7 +476,6 @@ def build_tree(model: RoadmapModel) -> dict:
             streams.append({"name": sname, "tiers": tiers})
         products.append({
             "name": pname,
-            "inheritance_flag": get_product_inheritance_flag(pname),
             "streams": streams,
         })
     return {"products": products}

@@ -1,4 +1,4 @@
-"""Тесты для текстовых аннотаций (Этап 6): Subject to Change и наследование тиров."""
+"""Тесты текстовых аннотаций и отменённого наследования Tier."""
 from __future__ import annotations
 
 from roadmap_generator import ordering, static_slides, strings
@@ -54,21 +54,16 @@ def test_no_footnote_without_subject_to_change(load_fixture):
 
 
 # ---------------------------------------------------------------------------
-# Наследование тиров
+# Наследование Tier выведено из использования
 # ---------------------------------------------------------------------------
 
-def test_tier_inheritance_note_on_subsequent_tier(load_fixture):
+def test_legacy_inheritance_flag_does_not_add_notes(load_fixture):
     model = normalize_roadmap(load_fixture("tier_hierarchy_next.json"), language="en")
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
     plan = build_slide_plan(model, {})
     slides = _roadmap_slides(plan)
 
-    opt = next(s for s in slides if s.tier == "Kaspersky Next EDR Optimum")
-    assert "inc. all features of previous tier(s):" in opt.inheritance_note
-    assert "Kaspersky Next EDR Foundations" in opt.inheritance_note
-
-    foundations = next(s for s in slides if s.tier == "Kaspersky Next EDR Foundations")
-    assert foundations.inheritance_note == ""
+    assert all(slide.inheritance_note == "" for slide in slides)
 
 
 def test_tier_inheritance_note_disabled_by_default(load_fixture):
@@ -77,23 +72,16 @@ def test_tier_inheritance_note_disabled_by_default(load_fixture):
     assert all(s.inheritance_note == "" for s in _roadmap_slides(plan))
 
 
-def test_tier_inheritance_note_lists_all_previous_tiers(load_fixture):
+def test_legacy_inheritance_flag_never_lists_previous_tiers(load_fixture):
     model = normalize_roadmap(load_fixture("tier_hierarchy_next.json"), language="en")
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
     plan = build_slide_plan(model, {})
     slides = _roadmap_slides(plan)
-    xdr = next(s for s in slides if s.tier == "Kaspersky Next XDR Optimum")
-    assert "Kaspersky Next EDR Foundations" in xdr.inheritance_note
-    assert "Kaspersky Next EDR Optimum" in xdr.inheritance_note
-    assert xdr.inheritance_note.splitlines() == [
-        "inc. all features of previous tier(s):",
-        "• Kaspersky Next Optimum / Kaspersky Next EDR Foundations",
-        "• Kaspersky Next Optimum / Kaspersky Next EDR Optimum",
-    ]
+    assert all(slide.inheritance_note == "" for slide in slides)
 
 
 # ---------------------------------------------------------------------------
-# Наследование: заметка без фильтрации фич
+# Дубли фич между Tier сохраняются
 # ---------------------------------------------------------------------------
 
 def _all_bullet_texts(slide):
@@ -126,8 +114,7 @@ def _two_tier_data():
     }]
 
 
-def test_tier_inheritance_keeps_requirements_and_adds_note():
-    """Галка добавляет заметку, но не скрывает Requirements текущего Tier."""
+def test_retired_inheritance_keeps_duplicate_requirements_without_note():
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
     plan = build_slide_plan(normalize_roadmap(_two_tier_data(), language="ru"), {})
     slides = _roadmap_slides(plan)
@@ -138,7 +125,7 @@ def test_tier_inheritance_keeps_requirements_and_adds_note():
     assert "Junior feature" in _all_bullet_texts(junior)
     assert "Junior feature" in _all_bullet_texts(senior)
     assert "Senior feature" in _all_bullet_texts(senior)
-    assert "S / Junior" in senior.inheritance_note
+    assert senior.inheritance_note == ""
 
 
 def test_tier_inheritance_disabled_keeps_duplicates():
@@ -167,8 +154,8 @@ def test_tier_inheritance_keeps_tier_with_only_reused_feature():
     assert _all_bullet_texts(senior) == ["Junior feature"]
 
 
-def test_tier_inheritance_note_uses_effective_tree_order_without_filtering():
-    """Порядок влияет на заметку, но не на состав Requirements."""
+def test_tree_order_does_not_enable_inheritance_notes_or_filtering():
+    """Порядок Tier не включает заметки и не фильтрует Requirements."""
     ordering.save_order("Kaspersky Next > S", ["Senior", "Junior"])
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
 
@@ -178,7 +165,7 @@ def test_tier_inheritance_note_uses_effective_tree_order_without_filtering():
     assert [slide.tier for slide in slides] == ["Senior", "Junior"]
     assert _all_bullet_texts(slides[0]) == ["Junior feature", "Senior feature"]
     assert _all_bullet_texts(slides[1]) == ["Junior feature"]
-    assert "S / Senior" in slides[1].inheritance_note
+    assert all(slide.inheritance_note == "" for slide in slides)
 
 
 def test_product_inheritance_keeps_requirements_across_all_product_streams():
@@ -220,9 +207,7 @@ def test_product_inheritance_keeps_requirements_across_all_product_streams():
     assert [_all_bullet_texts(slide) for slide in base_slides] == [["Base S1"], ["Base S2"]]
     assert _all_bullet_texts(senior_by_stream["S1"]) == ["Base S1", "Unique S1"]
     assert _all_bullet_texts(senior_by_stream["S2"]) == ["Base S2", "Unique S2"]
-    assert "S1 / Base" in senior_by_stream["S1"].inheritance_note
-    assert "S1 / Senior" in senior_by_stream["S2"].inheritance_note
-    assert "S2 / Base" in senior_by_stream["S2"].inheritance_note
+    assert all(slide.inheritance_note == "" for slide in slides)
 
 
 def test_product_inheritance_never_deduplicates_next_product():
@@ -255,14 +240,14 @@ def test_product_inheritance_never_deduplicates_next_product():
     assert another.inheritance_note == ""
 
 
-def test_product_inheritance_flag_is_exposed_on_product_tree_node(load_fixture):
+def test_product_tree_does_not_expose_inheritance_flag(load_fixture):
     ordering.save_product_inheritance_flag("Kaspersky Next", True)
     model = normalize_roadmap(load_fixture("tier_hierarchy_next.json"), language="en")
 
     tree = build_tree(model)
     product = next(item for item in tree["products"] if item["name"] == "Kaspersky Next")
 
-    assert product["inheritance_flag"] is True
+    assert "inheritance_flag" not in product
     assert all("inheritance_flag" not in tier for stream in product["streams"] for tier in stream["tiers"])
 
 

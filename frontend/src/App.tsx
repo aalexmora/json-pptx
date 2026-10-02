@@ -20,6 +20,7 @@ import type {
   PublicFeaturesReport,
   QualityIssue,
   ReleaseInfo,
+  ReleaseLog,
   RoadmapSlide,
   Slide,
   StaticSlide,
@@ -36,6 +37,7 @@ import {
   fetchDiff,
   fetchHealth,
   fetchPlan,
+  fetchReleaseLog,
   getProductSlideImageStatuses,
   getProfile,
   getTierLogoStatuses,
@@ -126,7 +128,6 @@ const SERVICE_STRING_LABELS: Record<string, string> = {
   subject_to_change_footnote: 'Сноска «Subject to Change»',
   under_approval_badge: 'Бейдж «Под согласованием»',
   thank_you: 'Финальный слайд',
-  inheritance_prefix: 'Фраза наследования тира',
   roadmap_title: 'Заголовок «Roadmap»',
   roadmap_cont_title: 'Заголовок продолжения',
 }
@@ -281,7 +282,7 @@ function groupSlides(slides: Slide[], tree: Tree | null): { top: Slide[]; produc
   }
 
   // Дерево API — единственный источник порядка узлов. Пустые узлы (Tier/Stream/
-  // Product без единой фичи после фильтрации, дедупликации или скрытия языка)
+  // Product без единой фичи после фильтрации или скрытия языка)
   // в среднее окно не выводятся — как и в build_slide_plan, где им не создаётся
   // слайд. Фильтруем только рендер: полный `tree` остаётся источником списков
   // продуктов/тиров для правой панели (логотипы, языки), иначе скрытый продукт
@@ -379,6 +380,10 @@ export default function App() {
   const [result, setResult] = useState<PlanResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [appVersion, setAppVersion] = useState('')
+  const [releaseLog, setReleaseLog] = useState<ReleaseLog | null>(null)
+  const [releaseLogOpen, setReleaseLogOpen] = useState(false)
+  const [releaseLogLoading, setReleaseLogLoading] = useState(false)
+  const [releaseLogError, setReleaseLogError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -483,6 +488,17 @@ export default function App() {
       .then((h) => setAppVersion(h.version))
       .catch(() => {})
   }, [])
+
+  function openReleaseLog() {
+    setReleaseLogOpen(true)
+    if (releaseLog || releaseLogLoading) return
+    setReleaseLogLoading(true)
+    setReleaseLogError(null)
+    fetchReleaseLog()
+      .then(setReleaseLog)
+      .catch((error) => setReleaseLogError(String(error)))
+      .finally(() => setReleaseLogLoading(false))
+  }
 
   useEffect(() => {
     if (!jsonData || !profileLoaded) return
@@ -818,20 +834,6 @@ export default function App() {
     })
   }
 
-  function handleToggleInheritance(productName: string, flag: boolean) {
-    if (!profile) return
-    persist({
-      ...profile,
-      ordering: {
-        ...profile.ordering,
-        product_inheritance_flags: {
-          ...profile.ordering.product_inheritance_flags,
-          [productName]: flag,
-        },
-      },
-    })
-  }
-
   function handleToggleProductSlide(productName: string, generate: boolean) {
     if (!profile) return
     persist({
@@ -1100,7 +1102,16 @@ export default function App() {
             <h1>Roadmap → PPTX</h1>
             <span>Конструктор презентаций</span>
           </div>
-          {appVersion && <span className="app-version" title="Версия приложения">v{appVersion}</span>}
+          {appVersion && (
+            <button
+              type="button"
+              className="app-version"
+              title="Открыть журнал релиза"
+              onClick={openReleaseLog}
+            >
+              v{appVersion}
+            </button>
+          )}
         </div>
         <div className="header-actions">
           {Boolean(jsonData) && (
@@ -1281,8 +1292,6 @@ export default function App() {
                     collapsedNodes={collapsedNodes}
                     toggleNode={toggleNode}
                     recentlyReorderedNodes={recentlyReorderedNodes}
-                    productInheritanceFlags={profile?.ordering.product_inheritance_flags ?? {}}
-                    onToggleInheritance={handleToggleInheritance}
                     newTierPaths={newTierPaths}
                     productLanguages={profile?.product_languages ?? {}}
                   />
@@ -1482,6 +1491,14 @@ export default function App() {
         onClose={closeStaticSlideModal}
         onSubmit={submitStaticSlide}
       />
+      <ReleaseLogModal
+        open={releaseLogOpen}
+        version={appVersion}
+        releaseLog={releaseLog}
+        loading={releaseLogLoading}
+        error={releaseLogError}
+        onClose={() => setReleaseLogOpen(false)}
+      />
     </div>
   )
 }
@@ -1493,6 +1510,7 @@ const RELEASE_PROBLEM_LABELS: Record<string, string> = {
   missing_app_title: 'AppTitle не заполнен',
   empty_requirements: 'Нет Requirements',
 }
+const REPORT_YEARS = ['2026', '2027'] as const
 
 function ReportsDashboard({
   report,
@@ -1509,7 +1527,10 @@ function ReportsDashboard({
   onUpload: (file: File) => void
   onBack: () => void
 }) {
+  const [selectedYear, setSelectedYear] = useState<(typeof REPORT_YEARS)[number]>('2026')
   const maxUnmapped = Math.max(1, ...(publicFeatures?.products.map((product) => product.unmapped) ?? []))
+  const yearReport = report?.years[selectedYear] ?? null
+  const completeProducts = publicFeatures?.complete_products_by_year[selectedYear] ?? []
 
   return (
     <section className="reports-workspace">
@@ -1521,55 +1542,6 @@ function ReportsDashboard({
         </div>
         <button type="button" onClick={onBack}>← К презентации</button>
       </div>
-
-      {report ? (
-        <div className="reports-summary-cards">
-          <div>
-            <span>Уникальные Requirements</span>
-            <strong>{report.requirements.unique}</strong>
-            <small>
-              {report.requirements.occurrences} вхождений = {report.requirements.unique} первых +{' '}
-              {report.requirements.duplicate_occurrences} повторных; {report.requirements.reused} ReqId повторяются
-            </small>
-          </div>
-          <div className={report.releases.with_problems ? 'warning' : ''}>
-            <span>Релизы с проблемами</span>
-            <strong>{report.releases.with_problems} из {report.releases.total}</strong>
-            <small>Проверка дат, AppTitle и пустых релизов</small>
-          </div>
-          <div className={report.releases.missing_crdate ? 'warning' : ''}>
-            <span>Без CrDate</span>
-            <strong>{report.releases.missing_crdate}</strong>
-            <small>Квартал рассчитан по TrDate</small>
-          </div>
-        </div>
-      ) : (
-        <p className="quality-empty">Отчёт рассчитывается…</p>
-      )}
-
-      {report && report.release_problems.length > 0 && (
-        <details className="report-release-details">
-          <summary>Проблемные релизы ({report.release_problems.length})</summary>
-          <div className="quality-table-wrap">
-            <table className="quality-table">
-              <thead><tr><th>Релиз</th><th>Проблемы</th><th>TrDate</th><th>CrDate</th></tr></thead>
-              <tbody>
-                {report.release_problems.map((release, index) => (
-                  <tr key={`${release.release_id ?? 'unknown'}-${index}`}>
-                    <td>
-                      <strong>{release.title || `Release ${release.release_id ?? '—'}`}</strong>
-                      <small>{release.product} · {release.stream} · {release.tier}</small>
-                    </td>
-                    <td>{release.codes.map((code) => RELEASE_PROBLEM_LABELS[code] ?? code).join(', ')}</td>
-                    <td>{release.trdate || '—'}</td>
-                    <td>{release.crdate || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
 
       <section className="public-features-report">
         <div className="public-features-heading">
@@ -1592,7 +1564,7 @@ function ReportsDashboard({
           </label>
         </div>
         <p className="public-features-hint">
-          CSV с разделителем TAB (также распознаются «;» и «,»). Обязательные колонки: <code>ReqId</code> и <code>IsPublished</code>. Для группировки используются <code>Application</code> и <code>Requirement</code>.
+          CSV с разделителем TAB (также распознаются «;» и «,»). Обязательные колонки: <code>ReqId</code>, <code>IsPublished</code> и <code>ApplicableForProducts</code>. Для группировки используются <code>Application</code> и <code>Requirement</code>.
         </p>
 
         {publicFeaturesError && <div className="message error-message" role="alert">{publicFeaturesError}</div>}
@@ -1637,6 +1609,92 @@ function ReportsDashboard({
               <div className="public-features-complete">Все публичные фичи из CSV найдены в текущем JSON.</div>
             )}
           </>
+        )}
+      </section>
+
+      <div className="reports-year-tabs" role="tablist" aria-label="Год отчёта">
+        {REPORT_YEARS.map((year) => (
+          <button
+            key={year}
+            type="button"
+            role="tab"
+            aria-selected={selectedYear === year}
+            className={selectedYear === year ? 'active' : ''}
+            onClick={() => setSelectedYear(year)}
+          >
+            {year}
+          </button>
+        ))}
+      </div>
+
+      <section className="report-year-panel" role="tabpanel" aria-label={`Отчёт за ${selectedYear} год`}>
+        {yearReport ? (
+          <>
+            <div className="reports-summary-cards">
+              <div>
+                <span>Уникальные Requirements</span>
+                <strong>{yearReport.requirements.unique}</strong>
+                <small>
+                  {yearReport.requirements.occurrences} вхождений = {yearReport.requirements.unique} первых +{' '}
+                  {yearReport.requirements.duplicate_occurrences} повторных; {yearReport.requirements.reused} ReqId повторяются
+                </small>
+              </div>
+              <div className={yearReport.releases.with_problems ? 'warning' : ''}>
+                <span>Релизы с проблемами</span>
+                <strong>{yearReport.releases.with_problems} из {yearReport.releases.total}</strong>
+                <small>Год определяется только по TrDate</small>
+              </div>
+              <div className={yearReport.releases.missing_crdate ? 'warning' : ''}>
+                <span>Без CrDate</span>
+                <strong>{yearReport.releases.missing_crdate}</strong>
+                <small>Проверка заполненности и формата CrDate</small>
+              </div>
+            </div>
+
+            {yearReport.release_problems.length > 0 ? (
+              <details className="report-release-details">
+                <summary>Проблемные релизы ({yearReport.release_problems.length})</summary>
+                <div className="quality-table-wrap">
+                  <table className="quality-table">
+                    <thead><tr><th>Релиз</th><th>Проблемы</th><th>TrDate</th><th>CrDate</th></tr></thead>
+                    <tbody>
+                      {yearReport.release_problems.map((release, index) => {
+                        const title = release.title || `Release ${release.release_id ?? '—'}`
+                        return (
+                          <tr key={`${release.release_id ?? 'unknown'}-${index}`}>
+                            <td>
+                              {release.tfs_url ? (
+                                <a href={release.tfs_url} target="_blank" rel="noreferrer noopener"><strong>{title}</strong></a>
+                              ) : <strong>{title}</strong>}
+                              <small>{release.product} · {release.stream} · {release.tier}</small>
+                            </td>
+                            <td>{release.codes.map((code) => RELEASE_PROBLEM_LABELS[code] ?? code).join(', ')}</td>
+                            <td>{release.trdate || '—'}</td>
+                            <td>{release.crdate || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ) : (
+              <p className="quality-empty">Проблемных релизов за {selectedYear} год нет.</p>
+            )}
+
+            <section className="complete-products-report">
+              <h3>Заполненные продукты</h3>
+              {!publicFeatures ? (
+                <p>Загрузите CSV выше, чтобы проверить ApplicableForProducts для всех Requirements.</p>
+              ) : completeProducts.length > 0 ? (
+                <ul>{completeProducts.map((product) => <li key={product}>{product}</li>)}</ul>
+              ) : (
+                <p>За {selectedYear} год нет продуктов, полностью заполненных по CrDate и ApplicableForProducts.</p>
+              )}
+            </section>
+          </>
+        ) : (
+          <p className="quality-empty">Отчёт рассчитывается…</p>
         )}
       </section>
     </section>
@@ -1930,6 +1988,64 @@ function PriorityPanel({
   )
 }
 
+function ReleaseLogModal({
+  open,
+  version,
+  releaseLog,
+  loading,
+  error,
+  onClose,
+}: {
+  open: boolean
+  version: string
+  releaseLog: ReleaseLog | null
+  loading: boolean
+  error: string | null
+  onClose: () => void
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose])
+
+  if (!open) return null
+  const shownVersion = releaseLog?.version || version
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal release-log-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="release-log-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="release-log-header">
+          <h3 id="release-log-title">Версия {shownVersion}</h3>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть журнал релиза">×</button>
+        </div>
+        {loading && <p className="quality-empty">Загружаем журнал…</p>}
+        {error && <div className="message error-message" role="alert">{error}</div>}
+        {releaseLog && (
+          <div className="release-log-content">
+            <section>
+              <h4>Реализовано в релизе</h4>
+              <ul>{releaseLog.implemented.map((item) => <li key={item}>{item}</li>)}</ul>
+            </section>
+            <section>
+              <h4>Осталось</h4>
+              <ul>{releaseLog.remaining.map((item) => <li key={item}>{item}</li>)}</ul>
+            </section>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function StaticSlideModal({
   modal,
   productNames,
@@ -2206,8 +2322,6 @@ function GroupedSlides({
   collapsedNodes,
   toggleNode,
   recentlyReorderedNodes,
-  productInheritanceFlags,
-  onToggleInheritance,
   newTierPaths,
   productLanguages,
 }: {
@@ -2219,8 +2333,6 @@ function GroupedSlides({
   collapsedNodes: Set<string>
   toggleNode: (key: string) => void
   recentlyReorderedNodes: Set<string>
-  productInheritanceFlags: Record<string, boolean>
-  onToggleInheritance: (productName: string, flag: boolean) => void
   newTierPaths: Set<string>
   productLanguages: Record<string, { ru: boolean; en: boolean }>
 }) {
@@ -2341,7 +2453,6 @@ function GroupedSlides({
         const expanded = !collapsedNodes.has(key)
         const realStreams = product.streams.filter((stream) => isRealNodeName(stream.stream))
         const realTiers = product.streams.flatMap((stream) => stream.tiers.filter((tier) => isRealNodeName(tier.tier)))
-        const hasRealHierarchy = realStreams.length > 0 || realTiers.length > 0
         const streamNames = realStreams.map((stream) => stream.stream)
         const productSlides = product.streams.reduce((total, stream) => total + slidesCount(stream.tiers), 0)
         const summaryParts = []
@@ -2371,22 +2482,6 @@ function GroupedSlides({
                 highlighted={recentlyReorderedNodes.has(key)}
               >
                 {langLabel(product.product) && <span className="lang-badge">{langLabel(product.product)}</span>}
-                {hasRealHierarchy && (
-                  <label
-                    className="inheritance-check"
-                    title="Добавляет заметку о предыдущих Tier. Требования из текущего Tier не скрываются"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!productInheritanceFlags[product.product]}
-                      onChange={(event) => onToggleInheritance(product.product, event.target.checked)}
-                    />
-                    <span className="inheritance-check-text">
-                      Наследование
-                      <small>для всех Stream продукта</small>
-                    </span>
-                  </label>
-                )}
               </HierarchyHeader>
               {expanded && product.streams.map((stream) =>
                 renderStream(
@@ -2672,10 +2767,15 @@ function RoadmapCard({
         {slideNumber && <span className="slide-number">{slideNumber}</span>}
         <span className="badge">{slide.continuation ? 'Roadmap (cont.)' : 'Roadmap'}</span>
       </div>
-      {slide.inheritance_note && <div className="inheritance">{slide.inheritance_note}</div>}
       <div className="columns">
         {slide.columns.map((col, i) => (
-          <ColumnView key={i} col={col} newReqIds={newReqIds} changedReqIds={changedReqIds} />
+          <ColumnView
+            key={i}
+            col={col}
+            showQuarterHeader={i === 0 || slide.columns[i - 1].quarter !== col.quarter}
+            newReqIds={newReqIds}
+            changedReqIds={changedReqIds}
+          />
         ))}
       </div>
       {slide.footnote && <div className="footnote">{slide.footnote}</div>}
@@ -2685,10 +2785,12 @@ function RoadmapCard({
 
 function ColumnView({
   col,
+  showQuarterHeader,
   newReqIds,
   changedReqIds,
 }: {
   col: Column
+  showQuarterHeader: boolean
   newReqIds: Set<number>
   changedReqIds: Set<number>
 }) {
@@ -2699,8 +2801,10 @@ function ColumnView({
   let lastGroup: string | null = null
   return (
     <div className="column">
-      <div className="quarter">{col.quarter}</div>
-      {col.under_approval_badge && <div className="approval-badge">{col.under_approval_badge}</div>}
+      <div className="quarter">{showQuarterHeader ? col.quarter : '\u00a0'}</div>
+      {showQuarterHeader && col.under_approval_badge && (
+        <div className="approval-badge">{col.under_approval_badge}</div>
+      )}
       {bullets.map(({ b, group }, i) => {
         const showHeader = group !== null && group !== lastGroup
         lastGroup = group

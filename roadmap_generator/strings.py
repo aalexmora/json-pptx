@@ -12,7 +12,6 @@ DEFAULTS: Dict[str, Dict[str, str]] = {
     "subject_to_change_footnote": {"ru": "* Могут быть внесены изменения", "en": "* Subject to Change"},
     "under_approval_badge": {"ru": "На согласовании", "en": "In the approval process"},
     "thank_you": {"ru": "Спасибо!", "en": "Thank you!"},
-    "inheritance_prefix": {"ru": "вкл. все фичи предыдущих тиров:", "en": "inc. all features of previous tier(s):"},
     "roadmap_title": {"ru": "Роадмап", "en": "Roadmap"},
     "roadmap_cont_title": {"ru": "Роадмап (продолжение)", "en": "Roadmap (cont.)"},
 }

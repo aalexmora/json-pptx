@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from io import StringIO
 from typing import Any
+from urllib.parse import urlparse
 
 
 _DATE_FORMATS = (
@@ -19,6 +20,7 @@ _DATE_FORMATS = (
     "%m/%d/%Y %I:%M:%S %p",
 )
 _TRUE_VALUES = {"1", "true", "yes", "y", "да"}
+REPORT_YEARS = (2026, 2027)
 
 
 def _iter_releases(data: list[dict]):
@@ -40,17 +42,28 @@ def _iter_releases(data: list[dict]):
 
 
 def _parseable_date(value: Any) -> bool:
+    return _parse_date(value) is not None
+
+
+def _parse_date(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
-        return False
-    return any(_try_date(value, fmt) for fmt in _DATE_FORMATS)
+        return None
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
 
 
-def _try_date(value: str, fmt: str) -> bool:
-    try:
-        datetime.strptime(value, fmt)
-    except ValueError:
-        return False
-    return True
+def _http_url(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    url = value.strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return url
 
 
 def _normalize_req_id(value: Any) -> str | None:
@@ -84,6 +97,7 @@ def _header_indexes(row: tuple[Any, ...]) -> dict[str, int] | None:
     aliases = {
         "req_id": ("reqid", "requirementid"),
         "is_published": ("ispublished", "published"),
+        "applicable_for_products": ("applicableforproducts", "applicableproducts"),
         "product": ("application", "product", "productname"),
         "title": ("requirement", "requirementtitle", "feature", "title"),
     }
@@ -100,19 +114,36 @@ def _header_indexes(row: tuple[Any, ...]) -> dict[str, int] | None:
         )
         if index is not None:
             indexes[field] = index
-    if "req_id" in indexes and "is_published" in indexes:
+    if {"req_id", "is_published", "applicable_for_products"} <= indexes.keys():
         return indexes
     return None
 
 
 def build_json_report(data: list[dict]) -> dict[str, Any]:
-    """Возвращает компактную сводку Requirements и проблем релизов."""
+    """Возвращает независимые сводки за 2026 и 2027 годы по `TrDate`."""
+    releases_by_year: dict[int, list[tuple[str, str, str, dict[str, Any]]]] = {
+        year: [] for year in REPORT_YEARS
+    }
+    for product, stream, tier, release in _iter_releases(data):
+        trdate = _parse_date(release.get("TrDate"))
+        if trdate is not None and trdate.year in releases_by_year:
+            releases_by_year[trdate.year].append((product, stream, tier, release))
+
+    return {
+        "years": {
+            str(year): _build_year_report(releases_by_year[year])
+            for year in REPORT_YEARS
+        },
+    }
+
+
+def _build_year_report(
+    releases: list[tuple[str, str, str, dict[str, Any]]],
+) -> dict[str, Any]:
     requirement_occurrences: Counter[str] = Counter()
     release_problems: list[dict[str, Any]] = []
-    release_total = 0
 
-    for product, stream, tier, release in _iter_releases(data):
-        release_total += 1
+    for product, stream, tier, release in releases:
         requirements = release.get("Requirements")
         if isinstance(requirements, list):
             for requirement in requirements:
@@ -149,6 +180,7 @@ def build_json_report(data: list[dict]) -> dict[str, Any]:
                 "tier": tier,
                 "trdate": release.get("TrDate"),
                 "crdate": release.get("CrDate"),
+                "tfs_url": _http_url(release.get("TfsUrl")),
                 "codes": codes,
             })
 
@@ -164,7 +196,7 @@ def build_json_report(data: list[dict]) -> dict[str, Any]:
             "duplicate_occurrences": occurrence_total - len(requirement_occurrences),
         },
         "releases": {
-            "total": release_total,
+            "total": len(releases),
             "with_problems": len(release_problems),
             "missing_crdate": count_problem("missing_crdate"),
             "invalid_crdate": count_problem("invalid_crdate"),
@@ -224,7 +256,44 @@ def _csv_reader_with_headers(text: str) -> tuple[Iterator[list[str]], dict[str, 
             indexes = _header_indexes(tuple(row))
             if indexes is not None:
                 return rows, indexes
-    raise ValueError("В CSV не найдены обязательные колонки ReqId и IsPublished")
+    raise ValueError(
+        "В CSV не найдены обязательные колонки ReqId, IsPublished и ApplicableForProducts"
+    )
+
+
+def _complete_products_by_year(
+    json_data: list[dict],
+    applicable_req_ids: set[str],
+) -> dict[str, list[str]]:
+    releases_by_product_year: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+    for product, _, _, release in _iter_releases(json_data):
+        trdate = _parse_date(release.get("TrDate"))
+        if trdate is not None and trdate.year in REPORT_YEARS:
+            releases_by_product_year[(product, trdate.year)].append(release)
+
+    result: dict[str, list[str]] = {}
+    for year in REPORT_YEARS:
+        complete: list[str] = []
+        products = sorted({product for product, item_year in releases_by_product_year if item_year == year}, key=str.casefold)
+        for product in products:
+            releases = releases_by_product_year[(product, year)]
+            is_complete = True
+            for release in releases:
+                requirements = release.get("Requirements")
+                if not _parseable_date(release.get("CrDate")) or not isinstance(requirements, list) or not requirements:
+                    is_complete = False
+                    break
+                for requirement in requirements:
+                    req_id = _normalize_req_id(requirement.get("Id")) if isinstance(requirement, dict) else None
+                    if req_id is None or req_id not in applicable_req_ids:
+                        is_complete = False
+                        break
+                if not is_complete:
+                    break
+            if is_complete:
+                complete.append(product)
+        result[str(year)] = complete
+    return result
 
 
 def analyze_public_features_csv(
@@ -237,6 +306,7 @@ def analyze_public_features_csv(
 
     public_by_id: dict[str, dict[str, Any]] = {}
     product_ids: dict[str, set[str]] = defaultdict(set)
+    applicable_req_ids: set[str] = set()
     data_rows = 0
     invalid_req_id_rows = 0
 
@@ -249,6 +319,13 @@ def analyze_public_features_csv(
             if any(value.strip() for value in row):
                 invalid_req_id_rows += 1
             continue
+        applicable = (
+            row[indexes["applicable_for_products"]]
+            if indexes["applicable_for_products"] < len(row)
+            else ""
+        )
+        if str(applicable or "").strip():
+            applicable_req_ids.add(req_id)
         published = _is_published(
             row[indexes["is_published"]]
             if indexes["is_published"] < len(row)
@@ -313,4 +390,7 @@ def analyze_public_features_csv(
         "unmapped_public_features": len(unmapped_ids),
         "mapped_percent": round(len(mapped_ids) * 100 / len(public_ids), 1),
         "products": products,
+        "complete_products_by_year": _complete_products_by_year(
+            json_data, applicable_req_ids,
+        ),
     }

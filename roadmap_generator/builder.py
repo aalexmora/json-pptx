@@ -111,7 +111,19 @@ def build_presentation(plan: SlidePlan) -> Presentation:
             _render_roadmap_from_template(
                 prs, template_slides.get("roadmap"), blank, item, w, h, column_count,
             )
+    _clear_retired_inheritance_placeholders(prs)
     return prs
+
+
+def _clear_retired_inheritance_placeholders(prs: Presentation) -> None:
+    """Удаляет текст legacy-наследования со всех типов слайдов."""
+    for slide in prs.slides:
+        text_shapes_by_name: dict[str, list] = {}
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                text_shapes_by_name.setdefault(_normalize_name(shape.name), []).append(shape)
+        for shape in _text_shapes_for_role(text_shapes_by_name, "tier_inheritance_note"):
+            _clear(shape)
 
 
 def _next_roadmap_product(items: list, current_index: int) -> str:
@@ -537,31 +549,20 @@ def _render_roadmap_from_template(
         if marker_proto is not None and first_column_for_quarter:
             marker = marker_proto if i == 0 else _clone_shape(new_slide, marker_proto)
             marker.left = header.left + marker_header_offset
-        # Каждая колонка, включая подколонки переполненного квартала, должна
-        # оставаться самодостаточной: квартал заполняется в каждом col_header.
-        header_text = col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
+        # Подколонки одного квартала не дублируют его заголовок.
+        header_text = (
+            col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
+            if first_column_for_quarter
+            else ""
+        )
         _set_text(header, header_text)
         _fill_bullets_shape(bullets, col)
 
+    # Наследование Tier выведено из использования. Очищаем legacy-плейсхолдеры,
+    # чтобы старый шаблон не показывал текст-заглушку.
     inheritance_shapes = _text_shapes_for_role(text_shapes_by_name, "tier_inheritance_note")
-    if slide.inheritance_note:
-        if inheritance_shapes:
-            _set_text(inheritance_shapes[0], slide.inheritance_note)
-            for shape in inheritance_shapes[1:]:
-                _clear(shape)
-        else:
-            line_count = slide.inheritance_note.count("\n") + 1
-            note_height = min(1.8, max(0.45, line_count * 0.2))
-            _set_paragraph(
-                new_slide.shapes.add_textbox(
-                    Inches(MARGIN), Inches(h - 0.5 - note_height),
-                    Inches(w - 2 * MARGIN), Inches(note_height),
-                ),
-                slide.inheritance_note, 10, bold=False,
-            )
-    else:
-        for shape in inheritance_shapes:
-            _clear(shape)
+    for shape in inheritance_shapes:
+        _clear(shape)
 
     # Сноска Subject to Change — показывается ОДИН раз в шейпе s2c/_s2c.
     # Текстовый блок поверх — только если такого плейсхолдера в шаблоне нет.
@@ -727,20 +728,19 @@ def _render_roadmap(
     )
 
     top = 1.0
-    if slide.inheritance_note:
-        _set_paragraph(
-            s.shapes.add_textbox(Inches(MARGIN), Inches(0.88), Inches(w - 2 * MARGIN), Inches(0.3)),
-            slide.inheritance_note, 12, bold=False,
-        )
-        top = 1.25
 
     col_w = (w - 2 * MARGIN - (column_count - 1) * GAP) / column_count
     body_h = h - top - MARGIN
     x = MARGIN
 
     overflow: list = []
-    for col in slide.columns:
-        header = col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
+    for index, col in enumerate(slide.columns):
+        first_column_for_quarter = index == 0 or slide.columns[index - 1].quarter != col.quarter
+        header = (
+            col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
+            if first_column_for_quarter
+            else ""
+        )
         _set_paragraph(
             s.shapes.add_textbox(Inches(x), Inches(top), Inches(col_w), Inches(0.5)),
             header, HEADER_FONT_PT, bold=True,

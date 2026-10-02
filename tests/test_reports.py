@@ -35,6 +35,7 @@ def _roadmap() -> list[dict]:
                     {
                         "Id": 1,
                         "Title": "Release one",
+                        "TfsUrl": "https://tfs.example/releases/1",
                         "AppTitle": "App A",
                         "TrDate": "15.01.2026 21:00:00",
                         "CrDate": None,
@@ -59,6 +60,14 @@ def _roadmap() -> list[dict]:
                         "CrDate": "",
                         "Requirements": [],
                     },
+                    {
+                        "Id": 4,
+                        "Title": "Release four",
+                        "AppTitle": "App A",
+                        "TrDate": "15.01.2027 21:00:00",
+                        "CrDate": "16.01.2027 21:00:00",
+                        "Requirements": [{"Id": 20, "MarketingTitle": "Feature 20"}],
+                    },
                 ],
             }],
         }],
@@ -67,33 +76,39 @@ def _roadmap() -> list[dict]:
 
 def test_build_json_report_counts_requirements_and_release_problems():
     report = build_json_report(_roadmap())
+    report_2026 = report["years"]["2026"]
+    report_2027 = report["years"]["2027"]
 
-    assert report["requirements"] == {
+    assert report_2026["requirements"] == {
         "unique": 2,
-        "occurrences": 3,
-        "reused": 1,
-        "duplicate_occurrences": 1,
+        "occurrences": 2,
+        "reused": 0,
+        "duplicate_occurrences": 0,
     }
-    assert report["releases"] == {
-        "total": 3,
-        "with_problems": 3,
+    assert report_2026["releases"] == {
+        "total": 2,
+        "with_problems": 2,
         "missing_crdate": 2,
         "invalid_crdate": 0,
-        "invalid_trdate": 1,
-        "missing_app_title": 1,
+        "invalid_trdate": 0,
+        "missing_app_title": 0,
         "empty_requirements": 1,
     }
-    assert report["release_problems"][0]["codes"] == ["missing_crdate"]
-    assert report["release_problems"][2]["codes"] == ["missing_crdate", "empty_requirements"]
+    assert report_2026["release_problems"][0]["codes"] == ["missing_crdate"]
+    assert report_2026["release_problems"][0]["tfs_url"] == "https://tfs.example/releases/1"
+    assert report_2026["release_problems"][1]["codes"] == ["missing_crdate", "empty_requirements"]
+    assert report_2027["releases"]["total"] == 1
+    assert report_2027["requirements"]["unique"] == 1
+    assert report_2027["release_problems"] == []
 
 
 def test_analyze_public_features_csv_maps_public_features_by_req_id():
     data = _csv_bytes([
-        ["Application", "Requirement", "ReqId", "IsPublished"],
-        ["Продукт А", "Есть в JSON", 10, True],
-        ["Продукт А", "Не замаплено", 30, "true"],
-        ["Продукт Б", "Не публично", 40, False],
-        ["Продукт Б", "Та же отсутствующая фича", 30, 1],
+        ["Application", "Requirement", "ReqId", "IsPublished", "ApplicableForProducts"],
+        ["Продукт А", "Есть в JSON", 10, True, "Product A"],
+        ["Продукт А", "Не замаплено", 30, "true", "Product A"],
+        ["Продукт Б", "Не публично", 40, False, "Product B"],
+        ["Продукт Б", "Та же отсутствующая фича", 30, 1, "Product B"],
     ])
 
     report = analyze_public_features_csv(data, _roadmap(), "features.csv")
@@ -105,12 +120,13 @@ def test_analyze_public_features_csv_maps_public_features_by_req_id():
     assert report["mapped_percent"] == 50.0
     assert [product["product"] for product in report["products"]] == ["Продукт А", "Продукт Б"]
     assert report["products"][0]["requirements"] == [{"req_id": "30", "title": "Не замаплено"}]
+    assert report["complete_products_by_year"] == {"2026": [], "2027": []}
 
 
 def test_analyze_public_features_csv_supports_semicolon_and_prefers_application():
     data = _csv_bytes([
-        ["Product", "Application", "Requirement", "ReqId", "IsPublished"],
-        ["Линейка", "Приложение", "Фича", 30, True],
+        ["Product", "Application", "Requirement", "ReqId", "IsPublished", "ApplicableForProducts"],
+        ["Линейка", "Приложение", "Фича", 30, True, "Product A"],
     ], delimiter=";", encoding="cp1251")
 
     report = analyze_public_features_csv(data, _roadmap(), "features.csv")
@@ -124,15 +140,30 @@ def test_analyze_public_features_csv_requires_columns():
         ["Product A", "Feature", 10],
     ])
 
-    with pytest.raises(ValueError, match="ReqId и IsPublished"):
+    with pytest.raises(ValueError, match="ApplicableForProducts"):
         analyze_public_features_csv(data, _roadmap())
+
+
+def test_complete_products_are_calculated_per_trdate_year():
+    data = _csv_bytes([
+        ["ReqId", "IsPublished", "ApplicableForProducts"],
+        [10, True, "Product A"],
+        [20, True, "Product A"],
+    ])
+
+    report = analyze_public_features_csv(data, _roadmap(), "features.csv")
+
+    assert report["complete_products_by_year"] == {
+        "2026": [],
+        "2027": ["Product A"],
+    }
 
 
 def test_public_features_report_endpoint():
     data = _csv_bytes([
-        ["Application", "Requirement", "ReqId", "IsPublished"],
-        ["Product A", "Mapped", 10, True],
-        ["Product A", "Not mapped", 30, True],
+        ["Application", "Requirement", "ReqId", "IsPublished", "ApplicableForProducts"],
+        ["Product A", "Mapped", 10, True, "Product A"],
+        ["Product A", "Not mapped", 30, True, "Product A"],
     ])
 
     with TestClient(app) as client:
@@ -160,8 +191,8 @@ def test_public_features_report_endpoint_accepts_json_larger_than_one_mb():
     roadmap = _roadmap()
     roadmap[0]["unused_large_field"] = "я" * 600_000
     data = _csv_bytes([
-        ["Application", "Requirement", "ReqId", "IsPublished"],
-        ["Product A", "Mapped", 10, True],
+        ["Application", "Requirement", "ReqId", "IsPublished", "ApplicableForProducts"],
+        ["Product A", "Mapped", 10, True, "Product A"],
     ])
 
     with TestClient(app) as client:

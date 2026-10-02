@@ -23,6 +23,18 @@ def test_health():
         assert isinstance(body["version"], str) and body["version"]
 
 
+def test_release_log_matches_health_version():
+    with TestClient(app) as c:
+        health = c.get("/api/health").json()
+        response = c.get("/api/release-log")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["version"] == health["version"]
+    assert body["implemented"]
+    assert body["remaining"]
+
+
 def test_profile_persists_language_specific_tier_names():
     original = "Kaspersky Next EDR Foundations"
     with TestClient(app) as c:
@@ -42,7 +54,7 @@ def test_plan_endpoint(load_fixture):
         assert r.status_code == 200
         body = r.json()
         assert body["errors"] == []
-        assert body["report"]["requirements"]["unique"] > 0
+        assert set(body["report"]["years"]) == {"2026", "2027"}
         slides = body["plan"]["slides"]
         assert slides
         # первый слайд — титульный (TitleSlide с полем year/version)

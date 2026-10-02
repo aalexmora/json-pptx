@@ -18,7 +18,7 @@
 #   product_slide_image            — PNG-фон Product-слайда-заглушки
 #   quarter_marker                 — декоративная точка квартала
 #   subject_to_change_footnote     — единая сноска Subject to Change
-#   tier_inheritance_note          — многострочная заметка наследования
+#   tier_inheritance_note          — legacy-плейсхолдер; всегда очищается
 #   slide_number                   — порядковый номер слайда
 #   col_separator_1..3 — вертикальные разделители адаптивной сетки; существующие
 #                        линии шаблона нужно переименовать в эти имена

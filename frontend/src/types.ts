@@ -95,7 +95,6 @@ export interface TreeStream {
 
 export interface TreeProduct {
   name: string
-  inheritance_flag: boolean
   streams: TreeStream[]
 }
 
@@ -121,10 +120,11 @@ export interface ReleaseProblem {
   tier: string
   trdate: string | null
   crdate: string | null
+  tfs_url: string | null
   codes: string[]
 }
 
-export interface JsonReport {
+export interface YearReport {
   requirements: {
     unique: number
     occurrences: number
@@ -141,6 +141,10 @@ export interface JsonReport {
     empty_requirements: number
   }
   release_problems: ReleaseProblem[]
+}
+
+export interface JsonReport {
+  years: Record<'2026' | '2027', YearReport>
 }
 
 export interface PublicFeatureRequirement {
@@ -165,6 +169,13 @@ export interface PublicFeaturesReport {
   unmapped_public_features: number
   mapped_percent: number
   products: PublicFeatureProduct[]
+  complete_products_by_year: Record<'2026' | '2027', string[]>
+}
+
+export interface ReleaseLog {
+  version: string
+  implemented: string[]
+  remaining: string[]
 }
 
 export interface Profile {

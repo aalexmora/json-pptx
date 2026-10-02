@@ -81,7 +81,7 @@ _SHAPE_HINTS = {
     "tier_logo": "картинка-логотип тира — билдер подставит лого тира из библиотеки",
     "quarter_marker": "точка квартала над col_header — один маркер на квартал в пределах слайда",
     "subject_to_change_footnote": "сноска Subject to Change — показывается один раз",
-    "tier_inheritance_note": "многострочная заметка со списком предыдущих Tier",
+    "tier_inheritance_note": "legacy-плейсхолдер отменённого наследования; builder всегда его очищает",
     "slide_number": "порядковый номер слайда",
 }
 

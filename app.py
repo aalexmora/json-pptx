@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, reports, static_slides, strings, template_registry, tier_names
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, release_log, reports, static_slides, strings, template_registry, tier_names
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.diffing import build_diff_details, compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
@@ -322,6 +322,11 @@ def delete_tier_logo(tier_name: str):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "version": APP_VERSION}
+
+
+@app.get("/api/release-log")
+def get_release_log():
+    return release_log.current_release_log()
 
 
 @app.get("/api/profile")
