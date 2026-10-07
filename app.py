@@ -231,6 +231,21 @@ async def upload_static_slide_pptx(file: UploadFile = File(...)):
     return {"filename": saved, "extracted_title": static_slides.extract_slide_title(saved)}
 
 
+@app.get("/api/static-slides/pptx/{filename}")
+def download_static_slide_pptx(filename: str):
+    safe_filename = Path(filename).name
+    if safe_filename != filename:
+        raise HTTPException(status_code=404, detail="static slide not found")
+    path = static_slides.static_slide_pptx_path(safe_filename)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="static slide not found")
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=safe_filename,
+    )
+
+
 @app.post("/api/product-logos/upload")
 async def upload_product_logo(product_name: str = Form(...), file: UploadFile = File(...)):
     data = await file.read()

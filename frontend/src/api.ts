@@ -99,6 +99,18 @@ export async function uploadStaticSlidePptx(file: File): Promise<{ filename: str
   return res.json()
 }
 
+export async function downloadStaticSlidePptx(filename: string): Promise<void> {
+  const res = await fetch(`/api/static-slides/pptx/${encodeURIComponent(filename)}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export async function setActiveTemplate(filename: string | null): Promise<void> {
   await fetch('/api/templates/active', {
     method: 'POST',

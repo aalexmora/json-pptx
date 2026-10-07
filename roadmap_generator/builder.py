@@ -10,12 +10,15 @@ from __future__ import annotations
 import copy
 import io
 from collections import Counter, defaultdict
+from datetime import date
+from pathlib import PurePosixPath
 
 from pptx import Presentation
 from pptx.enum.dml import MSO_FILL_TYPE
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.opc.packuri import PackURI
 from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
@@ -81,7 +84,17 @@ def build_presentation(plan: SlidePlan) -> Presentation:
     prs.slide_width = template.slide_width
     prs.slide_height = template.slide_height
 
-    blank = prs.slide_layouts[6]
+    # Все создаваемые слайды должны сохранять layout/master загруженного PPTX.
+    # Partname исходного пакета получает уникальный суффикс, чтобы его layout,
+    # master и theme не конфликтовали с одноимёнными частями нового пакета.
+    _namespace_source_package(template, prs, "roadmap_template")
+
+    roadmap_template_slide = template_slides.get("roadmap")
+    template_layout = (
+        roadmap_template_slide.slide_layout
+        if roadmap_template_slide is not None
+        else template.slide_layouts[0]
+    )
     w = prs.slide_width.inches
     h = prs.slide_height.inches
     roadmap_counts = Counter(
@@ -91,9 +104,9 @@ def build_presentation(plan: SlidePlan) -> Presentation:
     current_product = ""
     for item_index, item in enumerate(plan.slides):
         if isinstance(item, TitleSlide):
-            _render_title(prs, blank, item, w, h)
+            _render_title(prs, template_layout, item, w, h)
         elif isinstance(item, ThankYouSlide):
-            _render_thank_you(prs, blank, item, w, h)
+            _render_thank_you(prs, template_layout, item, w, h)
         elif isinstance(item, DividerSlide):
             if item.divider_type == "product":
                 current_product = item.title
@@ -101,18 +114,61 @@ def build_presentation(plan: SlidePlan) -> Presentation:
                 current_product = _next_roadmap_product(plan.slides, item_index) or current_product
             source = template_slides.get(item.divider_type)
             if source is None:
-                _render_divider(prs, blank, item, w, h)
+                _render_divider(prs, template_layout, item, w, h)
             else:
                 _render_divider_from_template(prs, source, item, current_product)
         elif isinstance(item, StaticSlide):
-            _render_static(prs, blank, item, w, h)
+            _render_static(prs, template_layout, item, w, h)
         elif isinstance(item, RoadmapSlide):
             column_count = _rendered_column_count(item, roadmap_counts[_roadmap_key(item)])
             _render_roadmap_from_template(
-                prs, template_slides.get("roadmap"), blank, item, w, h, column_count,
+                prs, roadmap_template_slide, template_layout, item, w, h, column_count,
             )
     _clear_retired_inheritance_placeholders(prs)
+    _fill_global_placeholders(prs)
     return prs
+
+
+def _namespace_source_package(source: Presentation, target: Presentation, token: str) -> None:
+    """Даёт частям внешнего PPTX уникальные имена перед подключением layout.
+
+    `slides.add_slide(source_slide.slide_layout)` — публичный API python-pptx,
+    который сохраняет relationship к исходным layout/master/theme. Без смены
+    partname стандартные имена вроде `slideLayout1.xml` конфликтуют с частями
+    целевого пакета. Relationships остаются объектными и при сохранении сами
+    получают корректные относительные Target.
+    """
+    used = {str(part.partname) for part in target.part.package.iter_parts()}
+    for part in list(source.part.package.iter_parts()):
+        original = PurePosixPath(str(part.partname))
+        candidate = original.with_name(f"{original.stem}_{token}{original.suffix}")
+        sequence = 2
+        while str(candidate) in used:
+            candidate = original.with_name(
+                f"{original.stem}_{token}_{sequence}{original.suffix}"
+            )
+            sequence += 1
+        part.partname = PackURI(str(candidate))
+        used.add(str(candidate))
+
+
+def _fill_global_placeholders(prs: Presentation, today: date | None = None) -> None:
+    """Заполняет общие плейсхолдеры даты и номера на каждом слайде."""
+    current = today or date.today()
+    values = {
+        "roadmap_year": f"{current:%Y}",
+        "roadmap_version": f"Version {current:%d.%m.%y}",
+    }
+    for ordinal, slide in enumerate(prs.slides, start=1):
+        text_shapes_by_name: dict[str, list] = defaultdict(list)
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                text_shapes_by_name[_normalize_name(shape.name)].append(shape)
+        for role, value in values.items():
+            for shape in _text_shapes_for_role(text_shapes_by_name, role):
+                _set_text(shape, value)
+        for shape in _text_shapes_for_role(text_shapes_by_name, "slide_number"):
+            _set_text(shape, str(ordinal))
 
 
 def _clear_retired_inheritance_placeholders(prs: Presentation) -> None:
@@ -305,7 +361,7 @@ def _replace_picture(new_slide, shape, path) -> bool:
 
 def _clone_slide(prs, source_slide):
     """Клонирует слайд шаблона в целевую презентацию (картинки — через add_picture)."""
-    new_slide = prs.slides.add_slide(prs.slide_layouts[6])
+    new_slide = prs.slides.add_slide(source_slide.slide_layout)
     for shape in source_slide.shapes:
         if _is_skipped(shape):
             continue
@@ -622,9 +678,9 @@ def _copy_slides_from(prs, source_path: str) -> None:
     было «битых» ссылок; остальные шейпы — `copy.deepcopy` + `_spTree`.
     """
     source = Presentation(source_path)
-    blank = prs.slide_layouts[6]
+    _namespace_source_package(source, prs, f"static_{len(prs.slides) + 1}")
     for source_slide in source.slides:
-        new_slide = prs.slides.add_slide(blank)
+        new_slide = prs.slides.add_slide(source_slide.slide_layout)
         _copy_slide_background(source_slide, new_slide)
         for shape in source_slide.shapes:
             _append_shape(new_slide, shape)

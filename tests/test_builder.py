@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+from datetime import date
 
 import pytest
 from pptx import Presentation
@@ -523,7 +524,8 @@ def test_title_and_thank_you_slides(load_fixture, synthetic_template_path):
 
 def test_static_slide_keeps_source_formatting(tmp_path, monkeypatch, synthetic_template_path):
     source = Presentation()
-    source_slide = source.slides.add_slide(source.slide_layouts[6])
+    source_slide = source.slides.add_slide(source.slide_layouts[5])
+    expected_layout_name = source_slide.slide_layout.name
     source_slide.background.fill.solid()
     source_slide.background.fill.fore_color.rgb = RGBColor(0x12, 0x34, 0x56)
     box = source_slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
@@ -548,6 +550,59 @@ def test_static_slide_keeps_source_formatting(tmp_path, monkeypatch, synthetic_t
     assert rendered_run.font.size == Pt(27)
     assert rendered_run.font.bold is True
     assert rendered_run.font.color.rgb == RGBColor(0xAA, 0x22, 0x33)
+    assert rendered_slide.slide_layout.name == expected_layout_name
+
+    output = tmp_path / "rendered-static.pptx"
+    rendered.save(output)
+    reopened = Presentation(output)
+    assert reopened.slides[0].slide_layout.name == expected_layout_name
+
+
+def test_all_generated_slides_use_uploaded_template_layout(load_fixture, tmp_path, monkeypatch):
+    template = Presentation()
+    template.slide_width = Inches(13.333)
+    template.slide_height = Inches(7.5)
+    source = template.slides.add_slide(template.slide_layouts[5])
+    expected_layout_name = source.slide_layout.name
+    header = source.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(3), Inches(0.4))
+    header.name = "col_header"
+    bullets = source.shapes.add_textbox(Inches(0.5), Inches(1), Inches(3), Inches(5))
+    bullets.name = "col_bullets"
+    template_path = tmp_path / "layout-template.pptx"
+    template.save(template_path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: str(template_path))
+
+    rendered = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+    output = tmp_path / "rendered-layouts.pptx"
+    rendered.save(output)
+    reopened = Presentation(output)
+
+    assert reopened.slides
+    assert {slide.slide_layout.name for slide in reopened.slides} == {expected_layout_name}
+
+
+def test_date_placeholders_use_current_system_date(load_fixture, tmp_path, monkeypatch):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2031, 2, 3)
+
+    template_path = _template_with_named_shapes(
+        tmp_path,
+        "date_placeholders.pptx",
+        [
+            {"name": "roadmap_year", "kind": "text", "text": "YEAR"},
+            {"name": "roadmap_version", "kind": "text", "text": "VERSION"},
+        ],
+    )
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: template_path)
+    monkeypatch.setattr("roadmap_generator.builder.date", FixedDate)
+
+    rendered = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+    roadmap_slide = _roadmap_slide(rendered)
+    assert roadmap_slide is not None
+    assert _shape_text_by_name(roadmap_slide, "roadmap_year") == "2031"
+    assert _shape_text_by_name(roadmap_slide, "roadmap_version") == "Version 03.02.31"
 
 
 def test_template_with_linked_picture_does_not_crash(load_fixture, tmp_path, monkeypatch):

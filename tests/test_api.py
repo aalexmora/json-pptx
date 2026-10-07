@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app import app
-from roadmap_generator import product_logos, tier_names
+from roadmap_generator import product_logos, static_slides, tier_names
 
 
 def _plan(client, data, language="ru", plugin_settings=None):
@@ -102,6 +102,30 @@ def test_pptx_endpoint_english_filename(load_fixture):
         r = c.post("/api/pptx", json={"json_data": data, "language": "en", "plugin_settings": {}})
         assert r.status_code == 200
         assert r.headers["content-disposition"] == 'attachment; filename="roadmap_ENG.pptx"'
+
+
+def test_static_slide_can_be_downloaded_after_upload(tmp_path, monkeypatch):
+    monkeypatch.setattr(static_slides, "STATIC_SLIDES_DIR", tmp_path / "static-slides")
+    content = b"PK\x03\x04static-pptx"
+
+    with TestClient(app) as c:
+        uploaded = c.post(
+            "/api/static-slides/pptx",
+            files={"file": ("example.pptx", content, "application/vnd.openxmlformats-officedocument.presentationml.presentation")},
+        )
+        downloaded = c.get("/api/static-slides/pptx/example.pptx")
+
+    assert uploaded.status_code == 200
+    assert downloaded.status_code == 200
+    assert downloaded.content == content
+    assert downloaded.headers["content-disposition"] == 'attachment; filename="example.pptx"'
+
+
+def test_static_slide_download_returns_404_for_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(static_slides, "STATIC_SLIDES_DIR", tmp_path / "static-slides")
+    with TestClient(app) as c:
+        response = c.get("/api/static-slides/pptx/missing.pptx")
+    assert response.status_code == 404
 
 
 def test_lint_issues_in_plan_response():

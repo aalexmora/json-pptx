@@ -34,6 +34,7 @@ import {
   deleteTemplate,
   deleteTierLogo,
   downloadPptx,
+  downloadStaticSlidePptx,
   fetchDiff,
   fetchHealth,
   fetchPlan,
@@ -898,6 +899,12 @@ export default function App() {
     ))
   }
 
+  function handleDownloadStaticSlide(filename: string) {
+    setError(null)
+    downloadStaticSlidePptx(filename)
+      .catch(() => setError('Не удалось скачать статичный слайд.'))
+  }
+
   function closeStaticSlideModal() {
     setStaticModal((m) => ({ ...m, open: false }))
   }
@@ -1335,6 +1342,7 @@ export default function App() {
               language={language}
               onPromptChange={handleStaticSlidePrompt}
               onEdit={(index) => openStaticSlideModal('end', index)}
+              onDownload={handleDownloadStaticSlide}
               onDelete={handleDeleteStaticSlide}
             />
           </details>
@@ -2270,12 +2278,14 @@ function StaticSlidesList({
   language,
   onPromptChange,
   onEdit,
+  onDownload,
   onDelete,
 }: {
   slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]
   language: 'ru' | 'en'
   onPromptChange: (index: number, prompt: string) => void
   onEdit: (index: number) => void
+  onDownload: (filename: string) => void
   onDelete: (index: number) => void
 }) {
   const visibleSlides = slides
@@ -2303,6 +2313,13 @@ function StaticSlidesList({
           <span className="static-list-pos">{positionLabel(s.position)}</span>
           <button title="Заменить файл или изменить позицию" onClick={() => onEdit(sourceIndex)}>
             Изменить
+          </button>
+          <button
+            title="Скачать текущий PPTX"
+            disabled={!s.pptx}
+            onClick={() => onDownload(s.pptx)}
+          >
+            Скачать
           </button>
           <button title="Удалить" onClick={() => onDelete(sourceIndex)}>
             ✕

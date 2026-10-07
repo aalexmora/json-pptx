@@ -20,6 +20,8 @@
 #   subject_to_change_footnote     — единая сноска Subject to Change
 #   tier_inheritance_note          — legacy-плейсхолдер; всегда очищается
 #   slide_number                   — порядковый номер слайда
+#   roadmap_year                   — текущий системный год (YYYY)
+#   roadmap_version                — текущая системная дата (Version DD.MM.YY)
 #   col_separator_1..3 — вертикальные разделители адаптивной сетки; существующие
 #                        линии шаблона нужно переименовать в эти имена
 #
@@ -49,6 +51,8 @@ roadmap:
     product_slide_image: [product_slide_image, product_slide_logo]
     tier_logo: [tier_logo, logo_tier]
     slide_number: [slide_number, number]
+    roadmap_year: [roadmap_year]
+    roadmap_version: [roadmap_version]
     subject_to_change_footnote: [subject_to_change_footnote, s2c]
     tier_inheritance_note: [tier_inheritance_note, inheritance_note]
   layout:
