@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import io
+import posixpath
+import zipfile
 from datetime import date
+from xml.etree import ElementTree as ET
 
 import pytest
 from pptx import Presentation
@@ -15,7 +18,14 @@ from pptx.util import Inches, Pt
 
 from roadmap_generator import ordering, static_slides, tier_names
 from roadmap_generator.builder import build_presentation
-from roadmap_generator.plugins_engine import RoadmapSlide, SlidePlan, StaticSlide, build_slide_plan
+from roadmap_generator.plugins_engine import (
+    RoadmapSlide,
+    SlidePlan,
+    StaticSlide,
+    ThankYouSlide,
+    TitleSlide,
+    build_slide_plan,
+)
 from roadmap_generator.schema import normalize_roadmap
 from roadmap_generator.template_registry import get_layout_shape_names
 
@@ -70,6 +80,34 @@ def _slide_text(slide) -> str:
 
 def _all_texts(prs) -> list:
     return [_slide_text(s) for s in prs.slides]
+
+
+def _assert_no_dangling_package_relationships(path) -> None:
+    """Каждая внутренняя OOXML relationship должна вести в существующий part."""
+    relationship_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    with zipfile.ZipFile(path) as archive:
+        names = set(archive.namelist())
+        for rels_name in (name for name in names if name.endswith(".rels")):
+            if rels_name == "_rels/.rels":
+                source_part = ""
+            else:
+                directory, rels_file = posixpath.split(rels_name)
+                source_directory = posixpath.dirname(directory)
+                source_part = posixpath.join(source_directory, rels_file[:-5])
+            relationships = ET.fromstring(archive.read(rels_name))
+            for relationship in relationships.findall(f"{{{relationship_ns}}}Relationship"):
+                if relationship.get("TargetMode") == "External":
+                    continue
+                target = relationship.get("Target")
+                assert target
+                resolved = (
+                    posixpath.normpath(target.lstrip("/"))
+                    if target.startswith("/")
+                    else posixpath.normpath(
+                        posixpath.join(posixpath.dirname(source_part), target)
+                    )
+                )
+                assert resolved in names, f"{rels_name}: missing {resolved}"
 
 
 def _sparse_quarters_data(quarter_count: int) -> list:
@@ -556,6 +594,9 @@ def test_static_slide_keeps_source_formatting(tmp_path, monkeypatch, synthetic_t
     rendered.save(output)
     reopened = Presentation(output)
     assert reopened.slides[0].slide_layout.name == expected_layout_name
+    assert len(reopened.slide_masters) == 2
+    assert reopened.slides[0].slide_layout.slide_master.part is reopened.slide_masters[1].part
+    _assert_no_dangling_package_relationships(output)
 
 
 def test_all_generated_slides_use_uploaded_template_layout(load_fixture, tmp_path, monkeypatch):
@@ -579,6 +620,47 @@ def test_all_generated_slides_use_uploaded_template_layout(load_fixture, tmp_pat
 
     assert reopened.slides
     assert {slide.slide_layout.name for slide in reopened.slides} == {expected_layout_name}
+    assert len(reopened.slide_masters) == 1
+    assert all(
+        slide.slide_layout.slide_master.part is reopened.slide_masters[0].part
+        for slide in reopened.slides
+    )
+    _assert_no_dangling_package_relationships(output)
+
+
+def test_static_slides_keep_source_layout_and_plan_position(
+    tmp_path, monkeypatch, synthetic_template_path,
+):
+    source = Presentation()
+    source_layout = source.slide_layouts[5]
+    for text in ("Static one", "Static two"):
+        source_slide = source.slides.add_slide(source_layout)
+        source_slide.shapes.add_textbox(
+            Inches(1), Inches(1), Inches(4), Inches(1),
+        ).text_frame.text = text
+    source_path = tmp_path / "two-static-slides.pptx"
+    source.save(source_path)
+    monkeypatch.setattr(static_slides, "STATIC_SLIDES_DIR", tmp_path)
+
+    rendered = build_presentation(SlidePlan(slides=[
+        TitleSlide(title="Before", year="", version=""),
+        StaticSlide(name="Static", pptx=source_path.name),
+        ThankYouSlide(text="After"),
+    ]))
+    output = tmp_path / "static-order.pptx"
+    rendered.save(output)
+    reopened = Presentation(output)
+
+    assert ["Before", "Static one", "Static two", "After"] == [
+        _slide_text(slide) for slide in reopened.slides
+    ]
+    assert len(reopened.slide_masters) == 2
+    assert all(
+        reopened.slides[index].slide_layout.slide_master.part
+        is reopened.slide_masters[1].part
+        for index in (1, 2)
+    )
+    _assert_no_dangling_package_relationships(output)
 
 
 def test_date_placeholders_use_current_system_date(load_fixture, tmp_path, monkeypatch):

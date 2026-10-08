@@ -11,20 +11,22 @@ import copy
 import io
 from collections import Counter, defaultdict
 from datetime import date
-from pathlib import PurePosixPath
 
 from pptx import Presentation
-from pptx.enum.dml import MSO_FILL_TYPE
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
-from pptx.opc.packuri import PackURI
 from pptx.opc.package import Part
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
 from roadmap_generator import product_logos, static_slides, tier_names
 from roadmap_generator.layout import fit_bullets_dynamic
+from roadmap_generator.pptx_package import (
+    import_static_slides,
+    open_template_shell,
+    source_slide_count,
+)
 from roadmap_generator.strings import get_service_string
 from roadmap_generator.plugins_engine import (
     DividerSlide,
@@ -77,24 +79,21 @@ def _rendered_column_count(slide: RoadmapSlide, tier_slide_count: int) -> int:
 
 def build_presentation(plan: SlidePlan) -> Presentation:
     """Рендерит план слайдов в объект `Presentation` (ещё не сохранённый)."""
-    template = Presentation(select_template("roadmap", 4, False))
+    template_path = select_template("roadmap", 4, False)
+    template = Presentation(template_path)
     template_slides = _find_template_slides(template)
-    prs = Presentation()
-    # размер слайда наследуется из шаблона (ТЗ v4 §10)
-    prs.slide_width = template.slide_width
-    prs.slide_height = template.slide_height
-
-    # Все создаваемые слайды должны сохранять layout/master загруженного PPTX.
-    # Partname исходного пакета получает уникальный суффикс, чтобы его layout,
-    # master и theme не конфликтовали с одноимёнными частями нового пакета.
-    _namespace_source_package(template, prs, "roadmap_template")
+    # Выходной файл строится на пустой оболочке самого шаблона. Так его master,
+    # layouts и theme уже зарегистрированы в presentation.xml, а PowerPoint не
+    # предлагает Repair при открытии скачанного файла.
+    prs = open_template_shell(template_path)
 
     roadmap_template_slide = template_slides.get("roadmap")
-    template_layout = (
+    source_template_layout = (
         roadmap_template_slide.slide_layout
         if roadmap_template_slide is not None
         else template.slide_layouts[0]
     )
+    template_layout = _matching_layout(template, prs, source_template_layout)
     w = prs.slide_width.inches
     h = prs.slide_height.inches
     roadmap_counts = Counter(
@@ -102,7 +101,10 @@ def build_presentation(plan: SlidePlan) -> Presentation:
     )
 
     current_product = ""
+    final_slide_index = 0
+    static_imports: list[tuple[int, str]] = []
     for item_index, item in enumerate(plan.slides):
+        before_count = len(prs.slides)
         if isinstance(item, TitleSlide):
             _render_title(prs, template_layout, item, w, h)
         elif isinstance(item, ThankYouSlide):
@@ -116,40 +118,48 @@ def build_presentation(plan: SlidePlan) -> Presentation:
             if source is None:
                 _render_divider(prs, template_layout, item, w, h)
             else:
-                _render_divider_from_template(prs, source, item, current_product)
+                source_layout = _matching_layout(template, prs, source.slide_layout)
+                _render_divider_from_template(
+                    prs, source, source_layout, item, current_product,
+                )
         elif isinstance(item, StaticSlide):
+            path = static_slides.static_slide_pptx_path(item.pptx) if item.pptx else None
+            if path is not None and path.exists():
+                static_imports.append((final_slide_index, str(path)))
+                final_slide_index += source_slide_count(path)
+                continue
             _render_static(prs, template_layout, item, w, h)
         elif isinstance(item, RoadmapSlide):
             column_count = _rendered_column_count(item, roadmap_counts[_roadmap_key(item)])
-            _render_roadmap_from_template(
-                prs, roadmap_template_slide, template_layout, item, w, h, column_count,
+            roadmap_layout = (
+                _matching_layout(template, prs, roadmap_template_slide.slide_layout)
+                if roadmap_template_slide is not None
+                else template_layout
             )
+            _render_roadmap_from_template(
+                prs,
+                roadmap_template_slide,
+                roadmap_layout,
+                item,
+                w,
+                h,
+                column_count,
+            )
+        final_slide_index += len(prs.slides) - before_count
+
+    prs = import_static_slides(prs, static_imports)
     _clear_retired_inheritance_placeholders(prs)
     _fill_global_placeholders(prs)
     return prs
 
 
-def _namespace_source_package(source: Presentation, target: Presentation, token: str) -> None:
-    """Даёт частям внешнего PPTX уникальные имена перед подключением layout.
-
-    `slides.add_slide(source_slide.slide_layout)` — публичный API python-pptx,
-    который сохраняет relationship к исходным layout/master/theme. Без смены
-    partname стандартные имена вроде `slideLayout1.xml` конфликтуют с частями
-    целевого пакета. Relationships остаются объектными и при сохранении сами
-    получают корректные относительные Target.
-    """
-    used = {str(part.partname) for part in target.part.package.iter_parts()}
-    for part in list(source.part.package.iter_parts()):
-        original = PurePosixPath(str(part.partname))
-        candidate = original.with_name(f"{original.stem}_{token}{original.suffix}")
-        sequence = 2
-        while str(candidate) in used:
-            candidate = original.with_name(
-                f"{original.stem}_{token}_{sequence}{original.suffix}"
-            )
-            sequence += 1
-        part.partname = PackURI(str(candidate))
-        used.add(str(candidate))
+def _matching_layout(source_prs: Presentation, target_prs: Presentation, source_layout):
+    """Находит тот же master/layout в оболочке, созданной из source PPTX."""
+    for master_index, source_master in enumerate(source_prs.slide_masters):
+        for layout_index, candidate in enumerate(source_master.slide_layouts):
+            if candidate is source_layout or candidate.part is source_layout.part:
+                return target_prs.slide_masters[master_index].slide_layouts[layout_index]
+    raise ValueError(f"Layout '{source_layout.name}' не найден в загруженном шаблоне")
 
 
 def _fill_global_placeholders(prs: Presentation, today: date | None = None) -> None:
@@ -359,9 +369,9 @@ def _replace_picture(new_slide, shape, path) -> bool:
     return True
 
 
-def _clone_slide(prs, source_slide):
+def _clone_slide(prs, source_slide, layout):
     """Клонирует слайд шаблона в целевую презентацию (картинки — через add_picture)."""
-    new_slide = prs.slides.add_slide(source_slide.slide_layout)
+    new_slide = prs.slides.add_slide(layout)
     for shape in source_slide.shapes:
         if _is_skipped(shape):
             continue
@@ -532,7 +542,7 @@ def _render_roadmap_from_template(
     if master_slide is None:
         _render_roadmap(prs, blank, slide, w, h, column_count)
         return
-    new_slide = _clone_slide(prs, master_slide)
+    new_slide = _clone_slide(prs, master_slide, blank)
 
     # Поиск плейсхолдеров без учёта префикса «_»: «_roadmap» == «roadmap».
     # setdefault — первый встреченный шейп (прототип), чтобы дубли не ломали вёрстку.
@@ -659,48 +669,11 @@ def _clone_shape(slide, source_shape):
 
 
 def _render_static(prs, layout, slide: StaticSlide, w: float, h: float) -> None:
-    if slide.pptx:
-        path = static_slides.static_slide_pptx_path(slide.pptx)
-        if path.exists():
-            _copy_slides_from(prs, str(path))
-            return
     s = prs.slides.add_slide(layout)
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(0.6), Inches(w - 2 * MARGIN), Inches(0.8)),
         slide.name, 28, bold=True,
     )
-
-
-def _copy_slides_from(prs, source_path: str) -> None:
-    """Копирует слайды `.pptx`-заготовки в целевую презентацию.
-
-    Картинки пересоздаются через публичный `add_picture` (с их blob'ом), чтобы не
-    было «битых» ссылок; остальные шейпы — `copy.deepcopy` + `_spTree`.
-    """
-    source = Presentation(source_path)
-    _namespace_source_package(source, prs, f"static_{len(prs.slides) + 1}")
-    for source_slide in source.slides:
-        new_slide = prs.slides.add_slide(source_slide.slide_layout)
-        _copy_slide_background(source_slide, new_slide)
-        for shape in source_slide.shapes:
-            _append_shape(new_slide, shape)
-
-
-def _copy_slide_background(source_slide, target_slide) -> None:
-    """Сохраняет явный одноцветный фон статичного слайда публичным API."""
-    if source_slide.follow_master_background:
-        return
-    source_fill = source_slide.background.fill
-    if source_fill.type != MSO_FILL_TYPE.SOLID:
-        return
-    target_fill = target_slide.background.fill
-    target_fill.solid()
-    if source_fill.fore_color.rgb is not None:
-        target_fill.fore_color.rgb = source_fill.fore_color.rgb
-    elif source_fill.fore_color.theme_color is not None:
-        target_fill.fore_color.theme_color = source_fill.fore_color.theme_color
-        target_fill.fore_color.brightness = source_fill.fore_color.brightness
-
 
 def _render_title(prs, layout, slide: TitleSlide, w: float, h: float) -> None:
     s = prs.slides.add_slide(layout)
@@ -735,9 +708,15 @@ def _render_divider(prs, layout, slide: DividerSlide, w: float, h: float) -> Non
     _set_paragraph(sub, label, 14, bold=False, align=PP_ALIGN.CENTER)
 
 
-def _render_divider_from_template(prs, source_slide, slide: DividerSlide, product: str) -> None:
+def _render_divider_from_template(
+    prs,
+    source_slide,
+    layout,
+    slide: DividerSlide,
+    product: str,
+) -> None:
     """Клонирует Product/Stream-слайд и заполняет его заголовки."""
-    new_slide = _clone_slide(prs, source_slide)
+    new_slide = _clone_slide(prs, source_slide, layout)
     text_by_name = {
         _normalize_name(shape.name): shape
         for shape in new_slide.shapes
