@@ -12,15 +12,15 @@ _labels: Dict[str, str] = {}
 
 def get_apptitle_label(original: str) -> str:
     """Возвращает кастомное имя, если задано, иначе `original` без изменений."""
-    return _labels.get(original, original)
+    custom_label = _labels.get(original)
+    if custom_label is None or str(custom_label).strip() == "":
+        return original
+    return str(custom_label)
 
 
 def save_apptitle_label(original: str, custom_label: str) -> None:
-    """Задаёт кастомный заголовок; пустое значение — удаляет синоним."""
-    if custom_label is None or str(custom_label).strip() == "":
-        _labels.pop(original, None)
-    else:
-        _labels[original] = str(custom_label)
+    """Задаёт кастомный заголовок; пустое значение сохраняет пустой override."""
+    _labels[original] = "" if custom_label is None else str(custom_label)
 
 
 def export_state() -> dict:

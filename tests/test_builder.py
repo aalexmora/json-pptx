@@ -557,6 +557,15 @@ def test_title_and_thank_you_slides(load_fixture, synthetic_template_path):
     texts = _all_texts(prs)
     # первый слайд — титульный (дефолтный заголовок «Roadmap»), последний — «Спасибо!»
     assert "Roadmap" in texts[0]
+    for slide in (prs.slides[0], prs.slides[-1]):
+        runs = [
+            run
+            for shape in slide.shapes if shape.has_text_frame
+            for paragraph in shape.text_frame.paragraphs
+            for run in paragraph.runs
+        ]
+        assert runs
+        assert all(run.font.color.rgb == RGBColor(255, 255, 255) for run in runs)
     assert "Спасибо!" in texts[-1]
 
 
@@ -625,6 +634,33 @@ def test_all_generated_slides_use_uploaded_template_layout(load_fixture, tmp_pat
         slide.slide_layout.slide_master.part is reopened.slide_masters[0].part
         for slide in reopened.slides
     )
+    _assert_no_dangling_package_relationships(output)
+
+
+def test_title_and_thank_you_use_layout_from_first_template_slide(
+    load_fixture, tmp_path, monkeypatch,
+):
+    template = Presentation()
+    first_slide = template.slides.add_slide(template.slide_layouts[0])
+    first_layout_name = first_slide.slide_layout.name
+    roadmap_slide = template.slides.add_slide(template.slide_layouts[5])
+    roadmap_layout_name = roadmap_slide.slide_layout.name
+    header = roadmap_slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(3), Inches(0.4))
+    header.name = "col_header"
+    bullets = roadmap_slide.shapes.add_textbox(Inches(0.5), Inches(1), Inches(3), Inches(5))
+    bullets.name = "col_bullets"
+    template_path = tmp_path / "separate-intro-layouts.pptx"
+    template.save(template_path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: str(template_path))
+
+    rendered = build_presentation(_plan(load_fixture, "non_next_product_flat.json"))
+    output = tmp_path / "separate-intro-layouts-rendered.pptx"
+    rendered.save(output)
+    reopened = Presentation(output)
+
+    assert reopened.slides[0].slide_layout.name == first_layout_name
+    assert reopened.slides[-1].slide_layout.name == first_layout_name
+    assert any(slide.slide_layout.name == roadmap_layout_name for slide in list(reopened.slides)[1:-1])
     _assert_no_dangling_package_relationships(output)
 
 

@@ -835,15 +835,23 @@ export default function App() {
     })
   }
 
-  function handleToggleProductSlide(productName: string, generate: boolean) {
+  function handleToggleProductSlide(productName: string, generate: boolean, selectedLanguage: 'ru' | 'en') {
     if (!profile) return
+    const legacyFlags = profile.ordering.product_slide_hidden_flags ?? {}
+    const flagsByLanguage = profile.ordering.product_slide_hidden_flags_by_language ?? {
+      ru: { ...legacyFlags },
+      en: { ...legacyFlags },
+    }
     persist({
       ...profile,
       ordering: {
         ...profile.ordering,
-        product_slide_hidden_flags: {
-          ...(profile.ordering.product_slide_hidden_flags ?? {}),
-          [productName]: !generate,
+        product_slide_hidden_flags_by_language: {
+          ...flagsByLanguage,
+          [selectedLanguage]: {
+            ...flagsByLanguage[selectedLanguage],
+            [productName]: !generate,
+          },
         },
       },
     })
@@ -930,6 +938,17 @@ export default function App() {
     persist({ ...profile, deck_meta: { ...profile.deck_meta, [field]: value } })
   }
 
+  function handleThankYouText(lang: 'ru' | 'en', value: string) {
+    if (!profile) return
+    persist({
+      ...profile,
+      deck_meta: {
+        ...profile.deck_meta,
+        thank_you_text: { ...profile.deck_meta.thank_you_text, [lang]: value },
+      },
+    })
+  }
+
   function handleDeckSlideToggle(
     field: 'include_title_slide' | 'include_thank_you_slide',
     value: boolean,
@@ -951,9 +970,13 @@ export default function App() {
 
   function handleLabel(original: string, custom: string) {
     if (!profile) return
+    persist({ ...profile, labels: { ...profile.labels, [original]: custom } })
+  }
+
+  function handleRemoveLabel(original: string) {
+    if (!profile) return
     const labels = { ...profile.labels }
-    if (custom.trim() === '') delete labels[original]
-    else labels[original] = custom
+    delete labels[original]
     persist({ ...profile, labels })
   }
 
@@ -1353,8 +1376,11 @@ export default function App() {
             <summary>Слайды продуктов</summary>
             <ProductSlideVisibilityPanel
               productNames={productNames}
-              hiddenFlags={profile.ordering.product_slide_hidden_flags ?? {}}
-              onChange={handleToggleProductSlide}
+              hiddenFlags={
+                profile.ordering.product_slide_hidden_flags_by_language?.[language] ??
+                profile.ordering.product_slide_hidden_flags ?? {}
+              }
+              onChange={(name, generate) => handleToggleProductSlide(name, generate, language)}
             />
           </details>
         )}
@@ -1416,7 +1442,12 @@ export default function App() {
         {profile && (
           <details className="section">
             <summary>App group mapping</summary>
-            <SynonymsPanel labels={profile.labels} appTitles={appTitles} onChange={handleLabel} />
+            <SynonymsPanel
+              labels={profile.labels}
+              appTitles={appTitles}
+              onChange={handleLabel}
+              onRemove={handleRemoveLabel}
+            />
           </details>
         )}
 
@@ -1443,7 +1474,12 @@ export default function App() {
               <option value="off">Выкл для всех</option>
             </select>
           </label>
-          <div className="deck-meta">
+        </div>
+
+        {profile && (
+          <details className="section">
+            <summary>{'\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 \u0442\u0438\u0442\u0443\u043b\u044c\u043d\u043e\u0433\u043e \u0438 \u0444\u0438\u043d\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u0441\u043b\u0430\u0439\u0434\u043e\u0432'}</summary>
+            <div className="deck-meta">
             <span className="deck-meta-title">Титульный слайд</span>
             <label className="deck-slide-toggle">
               <input
@@ -1481,9 +1517,25 @@ export default function App() {
               />
               Генерировать финальный слайд
             </label>
-          </div>
-        </div>
-
+            <div className="deck-meta-row">
+              <input
+                type="text"
+                aria-label="Final slide text, RU"
+                placeholder="RU"
+                value={profile.deck_meta.thank_you_text.ru}
+                onChange={(e) => handleThankYouText('ru', e.target.value)}
+              />
+              <input
+                type="text"
+                aria-label="Final slide text, EN"
+                placeholder="EN"
+                value={profile.deck_meta.thank_you_text.en}
+                onChange={(e) => handleThankYouText('en', e.target.value)}
+              />
+            </div>
+            </div>
+          </details>
+        )}
         {profile && profile.service_strings && (
           <details className="section">
             <summary>Служебные строки (RU/EN)</summary>
@@ -1878,7 +1930,7 @@ function ServiceStringsPanel({
 }) {
   return (
     <div className="service-strings">
-      {Object.entries(strings).map(([key, langs]) => (
+      {Object.entries(strings).filter(([key]) => key !== 'thank_you').map(([key, langs]) => (
         <div key={key} className="service-row">
           <div className="service-label">{SERVICE_STRING_LABELS[key] ?? key}</div>
           <input
@@ -1903,10 +1955,12 @@ function SynonymsPanel({
   labels,
   appTitles,
   onChange,
+  onRemove,
 }: {
   labels: Record<string, string>
   appTitles: string[]
   onChange: (original: string, custom: string) => void
+  onRemove: (original: string) => void
 }) {
   const [orig, setOrig] = useState('')
   const [custom, setCustom] = useState('')
@@ -1924,7 +1978,7 @@ function SynonymsPanel({
         <div key={o} className="synonym-row">
           <span className="synonym-orig">{o}</span>
           <input type="text" value={c} placeholder="Кастомное название" onChange={(e) => onChange(o, e.target.value)} />
-          <button onClick={() => onChange(o, '')}>✕</button>
+          <button onClick={() => onRemove(o)}>✕</button>
         </div>
       ))}
       <div className="synonym-row">

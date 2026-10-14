@@ -251,12 +251,24 @@ def test_product_tree_does_not_expose_inheritance_flag(load_fixture):
     assert all("inheritance_flag" not in tier for stream in product["streams"] for tier in stream["tiers"])
 
 
-def test_service_strings_override(load_fixture):
-    strings.save_service_strings({"thank_you": {"ru": "Пока!", "en": "Bye!"}})
+def test_thank_you_slide_text_comes_from_deck_meta(load_fixture):
+    from roadmap_generator import deck_meta
+
+    deck_meta.import_state({"thank_you_text": {"ru": "RU custom", "en": "EN custom"}})
     model = normalize_roadmap(load_fixture("pagination_5_quarters.json"), language="ru")
     plan = build_slide_plan(model, {})
     thank = next(s for s in plan.slides if isinstance(s, ThankYouSlide))
-    assert thank.text == "Пока!"
+    assert thank.text == "RU custom"
+
+
+def test_legacy_thank_you_text_migrates_to_deck_meta():
+    from roadmap_generator import deck_meta
+
+    deck_meta.import_state({}, {"ru": "RU legacy", "en": "EN legacy"})
+    assert deck_meta.get_deck_meta()["thank_you_text"] == {
+        "ru": "RU legacy",
+        "en": "EN legacy",
+    }
 
 
 def test_service_strings_default_when_no_override(load_fixture):
