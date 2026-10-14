@@ -1317,7 +1317,7 @@ export default function App() {
             const startX = e.clientX
             const startWidth = rightWidth
             const onMove = (ev: MouseEvent) =>
-              setRightWidth(Math.max(240, Math.min(600, startWidth + (startX - ev.clientX))))
+              setRightWidth(Math.max(240, startWidth + (startX - ev.clientX)))
             const onUp = () => {
               window.removeEventListener('mousemove', onMove)
               window.removeEventListener('mouseup', onUp)
