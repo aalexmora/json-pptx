@@ -14,6 +14,7 @@ _order_store: Dict[str, List[str]] = {}
 _apptitle_priority: List[str] = []
 _product_inheritance_flags: Dict[str, bool] = {}
 _product_slide_hidden_flags: Dict[str, bool] = {}
+_product_slide_hidden_flags_by_language: Dict[str, Dict[str, bool]] = {}
 
 
 def get_effective_order(parent_path: str, item_names: List[str]) -> List[str]:
@@ -67,13 +68,22 @@ def save_product_inheritance_flag(product_name: str, flag: bool) -> None:
     _product_inheritance_flags[product_name] = bool(flag)
 
 
-def get_product_slide_hidden_flag(product_name: str) -> bool:
+def get_product_slide_hidden_flag(product_name: str, language: str | None = None) -> bool:
     """Нужно ли пропустить автоматический Product-разделитель."""
+    if language is not None:
+        language_flags = _product_slide_hidden_flags_by_language.get(language, {})
+        if product_name in language_flags:
+            return language_flags[product_name]
     return _product_slide_hidden_flags.get(product_name, False)
 
 
-def save_product_slide_hidden_flag(product_name: str, flag: bool) -> None:
+def save_product_slide_hidden_flag(
+    product_name: str, flag: bool, language: str | None = None,
+) -> None:
     """Сохраняет флаг скрытия Product-разделителя."""
+    if language is not None:
+        _product_slide_hidden_flags_by_language.setdefault(language, {})[product_name] = bool(flag)
+        return
     _product_slide_hidden_flags[product_name] = bool(flag)
 
 
@@ -83,6 +93,10 @@ def export_state() -> dict:
         "apptitle_priority": list(_apptitle_priority),
         "product_inheritance_flags": dict(_product_inheritance_flags),
         "product_slide_hidden_flags": dict(_product_slide_hidden_flags),
+        "product_slide_hidden_flags_by_language": {
+            language: dict(flags)
+            for language, flags in _product_slide_hidden_flags_by_language.items()
+        },
     }
 
 
@@ -93,6 +107,21 @@ def import_state(state: dict) -> None:
     _product_inheritance_flags.clear()
     _product_slide_hidden_flags.clear()
     _product_slide_hidden_flags.update(state.get("product_slide_hidden_flags", {}))
+    _product_slide_hidden_flags_by_language.clear()
+    language_flags = state.get("product_slide_hidden_flags_by_language")
+    if isinstance(language_flags, dict):
+        for language in ("ru", "en"):
+            flags = language_flags.get(language, {})
+            if isinstance(flags, dict):
+                _product_slide_hidden_flags_by_language[language] = {
+                    str(name): bool(flag) for name, flag in flags.items()
+                }
+    else:
+        legacy_flags = dict(_product_slide_hidden_flags)
+        _product_slide_hidden_flags_by_language.update({
+            "ru": dict(legacy_flags),
+            "en": dict(legacy_flags),
+        })
     product_flags = state.get("product_inheritance_flags")
     if product_flags is not None:
         _product_inheritance_flags.update(product_flags)
@@ -112,3 +141,4 @@ def _reset_state() -> None:
     _apptitle_priority.clear()
     _product_inheritance_flags.clear()
     _product_slide_hidden_flags.clear()
+    _product_slide_hidden_flags_by_language.clear()

@@ -237,6 +237,25 @@ def test_product_divider_can_be_hidden_without_hiding_roadmap(load_fixture):
     assert _roadmap_slides(plan)
 
 
+def test_product_divider_visibility_is_independent_by_language(load_fixture):
+    ordering.save_product_slide_hidden_flag("Kaspersky Next", True, language="ru")
+    data = load_fixture("en_with_content.json")
+
+    ru_plan = build_slide_plan(normalize_roadmap(data, language="ru"), {})
+    en_plan = build_slide_plan(normalize_roadmap(data, language="en"), {})
+
+    ru_product_dividers = [
+        slide for slide in ru_plan.slides
+        if isinstance(slide, DividerSlide) and slide.divider_type == "product"
+    ]
+    en_product_dividers = [
+        slide for slide in en_plan.slides
+        if isinstance(slide, DividerSlide) and slide.divider_type == "product"
+    ]
+    assert ru_product_dividers == []
+    assert len(en_product_dividers) == 1
+
+
 def test_stream_dash_has_no_stream_divider():
     data = [{
         "Product": "Kaspersky Next",

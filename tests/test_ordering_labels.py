@@ -48,6 +48,25 @@ def test_product_slide_hidden_flag_roundtrip():
     assert ordering.get_product_slide_hidden_flag("Product B") is False
 
 
+def test_product_slide_hidden_flags_are_independent_by_language_roundtrip():
+    ordering.save_product_slide_hidden_flag("Product A", True, language="ru")
+    ordering.save_product_slide_hidden_flag("Product A", False, language="en")
+
+    state = ordering.export_state()
+    ordering._reset_state()
+    ordering.import_state(state)
+
+    assert ordering.get_product_slide_hidden_flag("Product A", "ru") is True
+    assert ordering.get_product_slide_hidden_flag("Product A", "en") is False
+
+
+def test_legacy_product_slide_hidden_flags_migrate_to_both_languages():
+    ordering.import_state({"product_slide_hidden_flags": {"Product A": True}})
+
+    assert ordering.get_product_slide_hidden_flag("Product A", "ru") is True
+    assert ordering.get_product_slide_hidden_flag("Product A", "en") is True
+
+
 def test_legacy_tier_inheritance_flags_migrate_to_product():
     ordering.import_state({
         "tier_inheritance_flags": {
@@ -89,9 +108,10 @@ def test_save_and_get_apptitle_label():
     assert labels.get_apptitle_label("Other") == "Other"
 
 
-def test_save_apptitle_label_blank_removes():
+def test_blank_apptitle_label_keeps_mapping_and_uses_original_name():
     labels.save_apptitle_label("Original", "Custom")
     labels.save_apptitle_label("Original", "")
+    assert labels.export_state() == {"Original": ""}
     assert labels.get_apptitle_label("Original") == "Original"
 
 

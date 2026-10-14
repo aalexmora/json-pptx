@@ -184,6 +184,7 @@ export interface Profile {
     apptitle_priority: string[]
     product_inheritance_flags: Record<string, boolean>
     product_slide_hidden_flags: Record<string, boolean>
+    product_slide_hidden_flags_by_language?: Record<'ru' | 'en', Record<string, boolean>>
   }
   labels: Record<string, string>
   linter_rules: { pattern: string; description: string }[]
@@ -194,6 +195,7 @@ export interface Profile {
     version: string
     include_title_slide: boolean
     include_thank_you_slide: boolean
+    thank_you_text: { ru: string; en: string }
   }
   service_strings: Record<string, { ru: string; en: string }>
   static_slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]

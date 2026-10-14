@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from datetime import date
 
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
@@ -94,6 +95,12 @@ def build_presentation(plan: SlidePlan) -> Presentation:
         else template.slide_layouts[0]
     )
     template_layout = _matching_layout(template, prs, source_template_layout)
+    first_template_slide = template.slides[0] if template.slides else None
+    title_and_thank_you_layout = (
+        _matching_layout(template, prs, first_template_slide.slide_layout)
+        if first_template_slide is not None
+        else template_layout
+    )
     w = prs.slide_width.inches
     h = prs.slide_height.inches
     roadmap_counts = Counter(
@@ -106,9 +113,9 @@ def build_presentation(plan: SlidePlan) -> Presentation:
     for item_index, item in enumerate(plan.slides):
         before_count = len(prs.slides)
         if isinstance(item, TitleSlide):
-            _render_title(prs, template_layout, item, w, h)
+            _render_title(prs, title_and_thank_you_layout, item, w, h)
         elif isinstance(item, ThankYouSlide):
-            _render_thank_you(prs, template_layout, item, w, h)
+            _render_thank_you(prs, title_and_thank_you_layout, item, w, h)
         elif isinstance(item, DividerSlide):
             if item.divider_type == "product":
                 current_product = item.title
@@ -680,12 +687,14 @@ def _render_title(prs, layout, slide: TitleSlide, w: float, h: float) -> None:
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(h / 2 - 0.9), Inches(w - 2 * MARGIN), Inches(1.2)),
         slide.title or "Roadmap", 40, bold=True, align=PP_ALIGN.CENTER,
+        color=RGBColor(255, 255, 255),
     )
     subtitle = " ".join(x for x in (slide.year, slide.version) if x)
     if subtitle:
         _set_paragraph(
             s.shapes.add_textbox(Inches(MARGIN), Inches(h / 2 + 0.4), Inches(w - 2 * MARGIN), Inches(0.5)),
             subtitle, 18, bold=False, align=PP_ALIGN.CENTER,
+            color=RGBColor(255, 255, 255),
         )
 
 
@@ -694,6 +703,7 @@ def _render_thank_you(prs, layout, slide: ThankYouSlide, w: float, h: float) -> 
     _set_paragraph(
         s.shapes.add_textbox(Inches(MARGIN), Inches(h / 2 - 0.6), Inches(w - 2 * MARGIN), Inches(1.2)),
         slide.text, 40, bold=True, align=PP_ALIGN.CENTER,
+        color=RGBColor(255, 255, 255),
     )
 
 
@@ -864,18 +874,29 @@ def _column_bullets(col):
     return col.bullets
 
 
-def _set_paragraph(box, text: str, size: int, bold: bool, align=None) -> None:
+def _set_paragraph(
+    box,
+    text: str,
+    size: int,
+    bold: bool,
+    align=None,
+    color: RGBColor | None = None,
+) -> None:
     tf = box.text_frame
     tf.word_wrap = True
     tf.text = text
     p = tf.paragraphs[0]
     if align is not None:
         p.alignment = align
-    _style_paragraph(p, text, size, bold)
+    _style_paragraph(p, text, size, bold, color)
 
 
-def _style_paragraph(p, text: str, size: int, bold: bool) -> None:
+def _style_paragraph(
+    p, text: str, size: int, bold: bool, color: RGBColor | None = None,
+) -> None:
     p.text = text
     for run in p.runs:
         run.font.size = Pt(size)
         run.font.bold = bold
+        if color is not None:
+            run.font.color.rgb = color

@@ -47,8 +47,11 @@ def _load_profile() -> None:
         labels.import_state(data.get("labels", {}))
         linter.import_state(data.get("linter_rules", []))
         approval.import_state(data.get("under_approval_ids", []))
-        deck_meta.import_state(data.get("deck_meta", {}))
         strings.import_state(data.get("service_strings", {}))
+        deck_meta.import_state(
+            data.get("deck_meta", {}),
+            data.get("service_strings", {}).get("thank_you"),
+        )
         static_slides.import_state(data.get("static_slides", []))
         product_languages.import_state(data.get("product_languages", {}))
         tier_names.import_state(data.get("tier_names", {}))
@@ -365,7 +368,10 @@ def save_profile(profile: dict):
     labels.import_state(profile.get("labels", {}))
     linter.import_state(profile.get("linter_rules", []))
     approval.import_state(profile.get("under_approval_ids", []))
-    deck_meta.import_state(profile.get("deck_meta", {}))
+    deck_meta.import_state(
+        profile.get("deck_meta", {}),
+        profile.get("service_strings", {}).get("thank_you"),
+    )
     strings.save_service_strings(profile.get("service_strings", {}))
     static_slides.import_state(profile.get("static_slides", []))
     product_languages.import_state(profile.get("product_languages", {}))

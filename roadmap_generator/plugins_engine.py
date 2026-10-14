@@ -164,7 +164,11 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
                 deck_items.extend(stream_slides)
 
         if deck_items:
-            product_intro = [] if get_product_slide_hidden_flag(pname) else [DividerSlide("product", pname)]
+            product_intro = (
+                []
+                if get_product_slide_hidden_flag(pname, model.language)
+                else [DividerSlide("product", pname)]
+            )
             product_decks.append((pname, product_intro + deck_items))
 
     configured_static = get_static_slides(model.language)
@@ -178,7 +182,8 @@ def build_slide_plan(model: RoadmapModel, plugin_settings: dict) -> SlidePlan:
         deck.append(TitleSlide(title=meta["title"], year=meta["year"], version=meta["version"]))
     deck.extend(slides)
     if meta.get("include_thank_you_slide", True):
-        deck.append(ThankYouSlide(text=get_service_string("thank_you", model.language)))
+        thank_you_text = meta.get("thank_you_text", {})
+        deck.append(ThankYouSlide(text=thank_you_text.get(model.language, "")))
     return SlidePlan(slides=deck, conflicts=conflicts)
 
 
