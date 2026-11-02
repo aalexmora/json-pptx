@@ -11,6 +11,7 @@ import pytest
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.enum.text import PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.package import Part
 from pptx.oxml.ns import qn
@@ -433,18 +434,22 @@ def test_template_geometry_markers_and_product_name(tmp_path, monkeypatch):
     headers = [shape for shape in slide.shapes if shape.name == "col_header"]
     bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
     markers = [shape for shape in slide.shapes if shape.name == "quarter_marker"]
-    slot_width = (prs.slide_width.inches - 1.0) / 3
-
     assert len(headers) == len(bodies) == len(markers) == 3
     assert [shape.width.inches for shape in headers] == pytest.approx([1.2] * 3)
     assert [shape.width.inches for shape in bodies] == pytest.approx([2.7] * 3)
     assert [shape.height.inches for shape in bodies] == pytest.approx([3.1] * 3)
-    assert [shape.left.inches for shape in headers] == pytest.approx([
-        1.0 + index * slot_width for index in range(3)
-    ])
     assert [marker.left.inches for marker in markers] == pytest.approx([
         body.left.inches for body in bodies
     ])
+    assert [
+        header.left.inches + header.text_frame.margin_left.inches
+        for header in headers
+    ] == pytest.approx([marker.left.inches for marker in markers])
+    assert all(
+        paragraph.alignment == PP_ALIGN.LEFT
+        for header in headers
+        for paragraph in header.text_frame.paragraphs
+    )
     assert all(
         marker_shape.top.inches < header_shape.top.inches
         for marker_shape, header_shape in zip(markers, headers)
