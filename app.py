@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +24,7 @@ from roadmap_generator.builder import build_presentation
 from roadmap_generator.diffing import build_diff_details, compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
 from roadmap_generator.plugins_engine import build_slide_plan, build_tree, list_releases
-from roadmap_generator.schema import normalize_roadmap, validate_roadmap
+from roadmap_generator.schema import RoadmapModel, normalize_roadmap, validate_roadmap
 from roadmap_generator.synthetic_template import ensure_synthetic_template
 from roadmap_generator.version import APP_VERSION
 
@@ -92,6 +92,7 @@ class PlanRequest(BaseModel):
     json_data: List[dict]
     language: Literal["ru", "en"] = "ru"
     plugin_settings: Dict[str, Any] = Field(default_factory=dict)
+    roadmap_year: Optional[int] = None
 
 
 class DiffRequest(BaseModel):
@@ -105,9 +106,22 @@ def _build(req: PlanRequest):
     if errors:
         return None, errors, [], [], [], None
     model = normalize_roadmap(req.json_data, language=req.language)
+    if req.roadmap_year is not None:
+        _filter_model_to_year(model, req.roadmap_year)
     plan = build_slide_plan(model, req.plugin_settings)
     lint_issues = lint_model(model)
     return plan, [], model.warnings, lint_issues, model.quality_issues, model
+
+
+def _filter_model_to_year(model: RoadmapModel, year: int) -> None:
+    """Keep only releases whose displayed quarter belongs to the requested year."""
+    for product in model.products:
+        for stream in product.streams:
+            for tier in stream.tiers:
+                tier.releases[:] = [
+                    release for release in tier.releases
+                    if release.quarter.rsplit(" ", 1)[-1] == str(year)
+                ]
 
 
 @app.post("/api/plan")

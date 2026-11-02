@@ -29,11 +29,17 @@ export async function downloadPptx(
   jsonData: unknown,
   language: string,
   pluginSettings: Record<string, unknown>,
+  roadmapYear?: number,
 ): Promise<void> {
   const res = await fetch('/api/pptx', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ json_data: jsonData, language, plugin_settings: pluginSettings }),
+    body: JSON.stringify({
+      json_data: jsonData,
+      language,
+      plugin_settings: pluginSettings,
+      roadmap_year: roadmapYear,
+    }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const blob = await res.blob()
