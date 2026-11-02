@@ -8,4 +8,4 @@
 """
 from __future__ import annotations
 
-APP_VERSION = "1.21.6"
+APP_VERSION = "1.22.0"

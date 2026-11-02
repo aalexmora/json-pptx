@@ -100,6 +100,48 @@ def test_build_json_report_counts_requirements_and_release_problems():
     assert report_2027["releases"]["total"] == 1
     assert report_2027["requirements"]["unique"] == 1
     assert report_2027["release_problems"] == []
+    assert report["english_name_issues"] == []
+
+
+def test_build_json_report_finds_english_name_terms_as_whole_words_everywhere():
+    roadmap = _roadmap()
+    requirements = roadmap[0]["Streams"][0]["Tiers"][0]["Releases"][0]["Requirements"]
+    requirements[0].update({
+        "MarketingTitle": "Яндекс ФСБ",
+        "MarketingTitleEn": "фстек ФСТЭК FSTEC fsb ФСБ СБЕР sber YANDEX Яндекс ASTRA Астра",
+    })
+    requirements[1]["MarketingTitleEn"] = "myYandexCloud Astraware"
+    # Same ReqId in a separate release occurrence remains a separate report row,
+    # even if its release date is outside the annual report tabs.
+    roadmap[0]["Streams"][0]["Tiers"][0]["Releases"].append({
+        "Id": 99,
+        "Title": "Unscheduled release",
+        "TrDate": "not-a-date",
+        "Requirements": [{"Id": 10, "MarketingTitleEn": "A Yandex.Cloud integration"}],
+    })
+
+    issues = build_json_report(roadmap)["english_name_issues"]
+
+    assert len(issues) == 2
+    assert issues[0]["requirement_id"] == "10"
+    assert issues[0]["matched_terms"] == [
+        "фстек", "ФСТЭК", "FSTEC", "fsb", "ФСБ", "СБЕР", "sber",
+        "YANDEX", "Яндекс", "ASTRA", "Астра",
+    ]
+    assert issues[0]["product"] == "Product A"
+    assert issues[0]["release_title"] == "Release one"
+    assert issues[1]["requirement_id"] == "10"
+    assert issues[1]["release_id"] == 99
+    assert issues[1]["matched_terms"] == ["Yandex"]
+
+
+def test_build_json_report_ignores_non_string_english_titles():
+    roadmap = _roadmap()
+    requirements = roadmap[0]["Streams"][0]["Tiers"][0]["Releases"][0]["Requirements"]
+    requirements[0]["MarketingTitleEn"] = None
+    requirements[1]["MarketingTitleEn"] = 123
+
+    assert build_json_report(roadmap)["english_name_issues"] == []
 
 
 def test_analyze_public_features_csv_maps_public_features_by_req_id():

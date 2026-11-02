@@ -143,8 +143,20 @@ export interface YearReport {
   release_problems: ReleaseProblem[]
 }
 
+export interface EnglishNameIssue {
+  product: string
+  stream: string
+  tier: string
+  release_id: number | string | null
+  release_title: string
+  requirement_id: string | null
+  marketing_title_en: string
+  matched_terms: string[]
+}
+
 export interface JsonReport {
   years: Record<'2026' | '2027', YearReport>
+  english_name_issues: EnglishNameIssue[]
 }
 
 export interface PublicFeatureRequirement {

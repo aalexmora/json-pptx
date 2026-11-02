@@ -1274,6 +1274,7 @@ export default function App() {
         ) : workspaceView === 'reports' ? (
           <ReportsDashboard
             report={result?.report ?? null}
+            language={language}
             publicFeatures={publicFeaturesReport}
             publicFeaturesLoading={publicFeaturesLoading}
             publicFeaturesError={publicFeaturesError}
@@ -1574,6 +1575,7 @@ const REPORT_YEARS = ['2026', '2027'] as const
 
 function ReportsDashboard({
   report,
+  language,
   publicFeatures,
   publicFeaturesLoading,
   publicFeaturesError,
@@ -1581,6 +1583,7 @@ function ReportsDashboard({
   onBack,
 }: {
   report: PlanResponse['report'] | null
+  language: 'ru' | 'en'
   publicFeatures: PublicFeaturesReport | null
   publicFeaturesLoading: boolean
   publicFeaturesError: string | null
@@ -1671,6 +1674,33 @@ function ReportsDashboard({
           </>
         )}
       </section>
+
+      {language === 'en' && (
+        <section className="english-name-report" aria-labelledby="english-name-report-title">
+          <div className="public-features-heading">
+            <div>
+              <h3 id="english-name-report-title">Brand names in English feature titles</h3>
+              <p>Review these matches in MarketingTitleEn. Matching is case-insensitive and checks whole words.</p>
+            </div>
+            <strong>{report?.english_name_issues.length ?? 0}</strong>
+          </div>
+          {report?.english_name_issues.length ? (
+            <div className="english-name-issues">
+              {report.english_name_issues.map((issue, index) => (
+                <article className="english-name-issue" key={`${issue.requirement_id ?? 'unknown'}-${issue.release_id ?? 'release'}-${index}`}>
+                  <div className="english-name-issue-heading">
+                    <strong>{issue.marketing_title_en}</strong>
+                    <span>{issue.matched_terms.join(', ')}</span>
+                  </div>
+                  <small>{issue.product} · {issue.stream} · {issue.tier} · {issue.release_title || `Release ${issue.release_id ?? '—'}`} · ReqId {issue.requirement_id ?? '—'}</small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="public-features-complete">No matching brand names found in English feature titles.</div>
+          )}
+        </section>
+      )}
 
       <div className="reports-year-tabs" role="tablist" aria-label="Год отчёта">
         {REPORT_YEARS.map((year) => (
