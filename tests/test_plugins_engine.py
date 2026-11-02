@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from roadmap_generator import ordering
+from roadmap_generator import labels, ordering
 from roadmap_generator.plugins_engine import (
     DividerSlide,
     RoadmapSlide,
@@ -107,6 +107,35 @@ def test_grouping_override_enable_and_order_by_count(load_fixture):
     assert col.grouped is True
     # 2 группы: Threat Data Feeds (2 фичи) и Sandbox (1) — по убыванию количества
     assert [g.app_title for g in col.groups] == ["Threat Data Feeds", "Sandbox"]
+
+
+def test_custom_labels_merge_distinct_apptitle_groups(load_fixture):
+    model = _model(load_fixture, "non_next_product_flat.json")
+    labels.save_apptitle_label("Threat Data Feeds", "Shared Application")
+    labels.save_apptitle_label("Sandbox", "Shared Application")
+    settings = {"products": {"Kaspersky Threat Intelligence": {
+        "apptitle_grouping": {"enabled": True},
+    }}}
+
+    slide = _roadmap_slides(build_slide_plan(model, settings))[0]
+    column = slide.columns[0]
+
+    assert [group.app_title for group in column.groups] == ["Shared Application"]
+    assert [bullet.requirement_id for bullet in column.groups[0].bullets] == [6001, 6002, 6003]
+
+
+def test_custom_label_merges_with_an_unmapped_apptitle_of_same_name(load_fixture):
+    model = _model(load_fixture, "non_next_product_flat.json")
+    labels.save_apptitle_label("Threat Data Feeds", "Sandbox")
+    settings = {"products": {"Kaspersky Threat Intelligence": {
+        "apptitle_grouping": {"enabled": True},
+    }}}
+
+    slide = _roadmap_slides(build_slide_plan(model, settings))[0]
+    column = slide.columns[0]
+
+    assert [group.app_title for group in column.groups] == ["Sandbox"]
+    assert len(column.groups[0].bullets) == 3
 
 
 # ---------------------------------------------------------------------------
