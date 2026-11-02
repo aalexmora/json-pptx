@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import copy
 import io
-import re
 from collections import Counter, defaultdict
 from datetime import date
 
@@ -45,19 +44,6 @@ from roadmap_generator.template_registry import (
     placeholder_names,
     select_template,
 )
-
-
-_TERMINAL_VERSION_RE = re.compile(r"\s+(?P<version>v?\d+(?:\.\d+)*)$", re.IGNORECASE)
-
-
-def _feature_display_text(text: str, is_subject_to_change: bool = False) -> str:
-    """Не даёт последнему слову отрываться от номера версии или маркера S2C."""
-    match = _TERMINAL_VERSION_RE.search(text)
-    if match:
-        text = f"{text[:match.start()]}\u00a0{match.group('version')}"
-    if is_subject_to_change:
-        text += "\u00a0*"
-    return text
 
 MARGIN = 0.5
 GAP = 0.25
@@ -533,7 +519,8 @@ def _template_feature_text(bullet, feature_prototype) -> str:
     """Текст фичи без двойного маркера, если bullet уже задан в шаблоне."""
     _, _, native_bullet = feature_prototype
     prefix = "" if native_bullet else "• "
-    return f"{prefix}{_feature_display_text(bullet.text, bullet.is_subject_to_change)}"
+    suffix = " *" if bullet.is_subject_to_change else ""
+    return f"{prefix}{bullet.text}{suffix}"
 
 
 def _tier_display_name(tier: str, language: str) -> str:
@@ -854,7 +841,10 @@ def _fill_column_body(box, col, body_h_in: float, col_w_in: float) -> list:
 
 
 def _bullet_text(bullet) -> str:
-    return f"• {_feature_display_text(bullet.text, bullet.is_subject_to_change)}"
+    text = f"• {bullet.text}"
+    if bullet.is_subject_to_change:
+        text += " *"
+    return text
 
 
 def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float, h: float) -> None:
@@ -872,7 +862,7 @@ def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float,
     tf.word_wrap = True
     for i, text in enumerate(overflow):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        _style_paragraph(p, f"• {_feature_display_text(text)}", BASE_FONT_PT, bold=False)
+        _style_paragraph(p, f"• {text}", BASE_FONT_PT, bold=False)
 
 
 def _column_bullets(col):

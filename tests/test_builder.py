@@ -17,12 +17,7 @@ from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
 from roadmap_generator import ordering, static_slides, tier_names
-from roadmap_generator.builder import (
-    _bullet_text,
-    _template_feature_text,
-    build_presentation,
-)
-from plugins._base import Bullet
+from roadmap_generator.builder import build_presentation
 from roadmap_generator.plugins_engine import (
     RoadmapSlide,
     SlidePlan,
@@ -253,32 +248,6 @@ def test_flat_column_bullets(load_fixture, synthetic_template_path):
     assert "Sandbox Z" in joined
 
 
-@pytest.mark.parametrize(
-    ("text", "is_subject_to_change", "expected"),
-    [
-        ("Поддержка Android 17", True, "Поддержка Android\u00a017\u00a0*"),
-        ("Новый коррелятор 2.0", False, "Новый коррелятор\u00a02.0"),
-        ("Feature v1.2.3", True, "Feature\u00a0v1.2.3\u00a0*"),
-        ("Текст без номера", True, "Текст без номера\u00a0*"),
-    ],
-)
-def test_terminal_version_and_subject_marker_stay_with_feature_word(
-    text, is_subject_to_change, expected,
-):
-    bullet = Bullet(
-        requirement_id=1,
-        text=text,
-        kbr=None,
-        app_title="App",
-        quarter="Q1 2026",
-        is_subject_to_change=is_subject_to_change,
-    )
-
-    assert _bullet_text(bullet) == f"• {expected}"
-    assert _template_feature_text(bullet, (None, None, False)) == f"• {expected}"
-    assert _template_feature_text(bullet, (None, None, True)) == expected
-
-
 def test_group_headers_rendered(load_fixture, synthetic_template_path):
     prs = build_presentation(_plan(load_fixture, "pagination_5_quarters.json"))
     assert any("Managed Detection and Response" in t for t in _all_texts(prs))
@@ -330,7 +299,7 @@ def test_single_quarter_60_features(load_fixture, synthetic_template_path):
     slide = _roadmap_slide(prs)
     bodies = [shape for shape in slide.shapes if shape.name == "col_bullets"]
     assert [shape.width.inches for shape in bodies] == pytest.approx([2.9] * 3)
-    texts = "\n".join(_all_texts(build_presentation(plan))).replace("\u00a0", " ")
+    texts = "\n".join(_all_texts(build_presentation(plan)))
     for i in range(1, 61):
         assert f"Feature {i}" in texts
 
