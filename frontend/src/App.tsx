@@ -387,6 +387,7 @@ export default function App() {
   const [releaseLogError, setReleaseLogError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [roadmapYear, setRoadmapYear] = useState<number | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
@@ -432,11 +433,29 @@ export default function App() {
     () => [...new Set((result?.releases ?? []).map((r) => r.app_title).filter(Boolean))],
     [result],
   )
+  const availableRoadmapYears = useMemo(() => {
+    const years = new Set<number>()
+    for (const slide of result?.plan?.slides ?? []) {
+      if (!('columns' in slide)) continue
+      for (const column of slide.columns) {
+        const parts = column.quarter.split(' ')
+        const year = Number(parts[parts.length - 1])
+        if (Number.isInteger(year)) years.add(year)
+      }
+    }
+    return [...years].sort((a, b) => a - b)
+  }, [result])
+  const selectedRoadmapYear = availableRoadmapYears.includes(roadmapYear ?? Number.NaN)
+    ? roadmapYear
+    : availableRoadmapYears[availableRoadmapYears.length - 1] ?? null
   const productNames = useMemo(() => (result?.tree?.products ?? []).map((p) => p.name), [result])
   const tierNames = useMemo(
     () => (result?.tree?.products ?? []).flatMap((p) => p.streams.flatMap((s) => s.tiers.map((t) => t.name))),
     [result],
   )
+  useEffect(() => {
+    if (roadmapYear !== selectedRoadmapYear) setRoadmapYear(selectedRoadmapYear)
+  }, [roadmapYear, selectedRoadmapYear])
   const tierLogoNames = useMemo(() => [...new Set(
     (result?.tree?.products ?? []).flatMap((product) => {
       const useTiers = usesTierLogoNames(product.name)
@@ -752,7 +771,7 @@ export default function App() {
     setNotice(null)
     try {
       await flushPendingProfile()
-      await downloadPptx(jsonData, language, buildSettings())
+      await downloadPptx(jsonData, language, buildSettings(), selectedRoadmapYear ?? undefined)
       setNotice('Презентация готова и скачана.')
     } catch (e) {
       setError('Ошибка генерации: ' + e)
@@ -1191,6 +1210,19 @@ export default function App() {
           >
             {rightCollapsed ? '⚙' : '›'}
           </button>
+          {availableRoadmapYears.length > 0 && (
+            <label className="roadmap-year-selector">
+              <span>Год</span>
+              <select
+                value={selectedRoadmapYear ?? ''}
+                onChange={(event) => setRoadmapYear(Number(event.currentTarget.value))}
+                aria-label="Год для выгрузки роадмапа"
+                disabled={generating}
+              >
+                {availableRoadmapYears.map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+            </label>
+          )}
           <button className="primary-button" onClick={handleGenerate} disabled={!canGenerate}>
             {generating ? 'Генерация…' : 'Скачать PPTX'}
           </button>

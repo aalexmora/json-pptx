@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app import app
+from app import PlanRequest, _build, app
 from roadmap_generator import product_logos, static_slides, tier_names
 
 
@@ -62,6 +62,27 @@ def test_plan_endpoint(load_fixture):
         # product-divider присутствует
         products = [s for s in slides if s.get("divider_type") == "product"]
         assert products and products[0]["title"] == "Kaspersky Next"
+
+
+def test_plan_request_filters_releases_to_requested_display_year(load_fixture):
+    data = load_fixture("pagination_5_quarters.json")
+    for year in (2025, 2026):
+        plan, errors, *_ = _build(PlanRequest(
+            json_data=data,
+            language="ru",
+            plugin_settings={},
+            roadmap_year=year,
+        ))
+
+        assert errors == []
+        quarters = {
+            column.quarter
+            for slide in plan.slides
+            if hasattr(slide, "columns")
+            for column in slide.columns
+        }
+        assert quarters
+        assert {quarter.rsplit(" ", 1)[-1] for quarter in quarters} == {str(year)}
 
 
 def test_plan_endpoint_invalid_json():
