@@ -442,8 +442,8 @@ def test_template_geometry_markers_and_product_name(tmp_path, monkeypatch):
     assert [shape.left.inches for shape in headers] == pytest.approx([
         1.0 + index * slot_width for index in range(3)
     ])
-    assert [shape.left.inches for shape in markers] == pytest.approx([
-        shape.left.inches - 0.04 for shape in headers
+    assert [marker.left.inches for marker in markers] == pytest.approx([
+        body.left.inches for body in bodies
     ])
     assert all(
         marker_shape.top.inches < header_shape.top.inches

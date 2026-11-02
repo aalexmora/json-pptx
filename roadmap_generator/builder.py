@@ -615,7 +615,6 @@ def _render_roadmap_from_template(
     header_left = header_proto.left
     bullets_left = bullets_proto.left
     marker_proto = _first_shape_for_role(all_by_name, "quarter_marker")
-    marker_header_offset = marker_proto.left - header_left if marker_proto is not None else 0
     _position_column_separators(all_by_name, column_count, w)
 
     for i, col in enumerate(slide.columns):
@@ -634,7 +633,7 @@ def _render_roadmap_from_template(
         first_column_for_quarter = i == 0 or slide.columns[i - 1].quarter != col.quarter
         if marker_proto is not None and first_column_for_quarter:
             marker = marker_proto if i == 0 else _clone_shape(new_slide, marker_proto)
-            marker.left = header.left + marker_header_offset
+            marker.left = bullets.left
         # Подколонки одного квартала не дублируют его заголовок.
         header_text = (
             col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
