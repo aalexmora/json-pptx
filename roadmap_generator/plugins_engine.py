@@ -25,7 +25,11 @@ from roadmap_generator.schema import RoadmapModel
 from roadmap_generator.deck_meta import get_deck_meta
 from roadmap_generator.static_slides import get_static_slides
 from roadmap_generator.strings import get_service_string
-from roadmap_generator.layout import estimate_bullet_height_pt, estimate_group_height_pt
+from roadmap_generator.layout import (
+    LINE_HEIGHT_FACTOR,
+    estimate_bullet_height_pt,
+    estimate_group_height_pt,
+)
 
 PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
 
@@ -229,6 +233,7 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
                 quarter=release.quarter,
                 is_subject_to_change=req.is_subject_to_change,
                 release_id=release.id,
+                console_type=req.console_type if "Next" in product else None,
             ))
 
     context = SlideBuildContext(
@@ -246,12 +251,19 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
     for plugin in groupers:
         plugin.apply(context, _resolve_plugin_settings(plugin, plugin_settings, product, parent_path))
     _apply_group_order_and_labels(context.columns)
+    has_console_subblocks = "Next" in product and any(
+        bullet.console_type in {"Expert View", "Pro View"}
+        for column in context.columns
+        for bullet in _column_all_bullets(column)
+    )
+    if has_console_subblocks:
+        _order_console_type_bullets(context.columns)
 
     # 2) атомарная упаковка групп/фич в слоты по высоте (TOR v2 §4 шаг 1).
     columns = _pack_quarters(context.columns)
 
     _apply_under_approval(columns, language)
-    _sort_column_bullets(columns)
+    _sort_column_bullets(columns, preserve_console_subblocks=has_console_subblocks)
 
     return _paginate(product, stream, tier, columns, language)
 
@@ -318,7 +330,17 @@ def _pack_groups(groups: List[Group], slot_height_pt: float) -> List[List[Group]
     current: List[Group] = []
     current_height = 0.0
     for group in groups:
-        gh = estimate_group_height_pt([b.text for b in group.bullets], SLOT_WIDTH_IN, BASE_FONT_PT)
+        header_count = len({
+            bullet.console_type
+            for bullet in group.bullets
+            if bullet.console_type in {"Expert View", "Pro View"}
+        })
+        gh = estimate_group_height_pt(
+            [b.text for b in group.bullets],
+            SLOT_WIDTH_IN,
+            BASE_FONT_PT,
+            extra_headers=header_count,
+        )
         if gh > slot_height_pt:
             # группа выше целого слота → принудительный разрыв (fallback)
             if current:
@@ -343,17 +365,28 @@ def _split_oversized_group(group: Group, slot_height_pt: float) -> List[List[Gro
     result: List[List[Group]] = []
     current: List[Group] = []
     current_height = 0.0
+    current_sections: set[str] = set()
     for bullet in group.bullets:
         bh = estimate_bullet_height_pt(bullet.text, SLOT_WIDTH_IN, BASE_FONT_PT)
-        if current and current_height + bh > slot_height_pt:
+        section = bullet.console_type if bullet.console_type in {"Expert View", "Pro View"} else None
+        header_height = (
+            BASE_FONT_PT * LINE_HEIGHT_FACTOR
+            if section is not None and section not in current_sections
+            else 0.0
+        )
+        if current and current_height + bh + header_height > slot_height_pt:
             result.append(current)
             current = []
             current_height = 0.0
+            current_sections = set()
+            header_height = BASE_FONT_PT * LINE_HEIGHT_FACTOR if section is not None else 0.0
         if current and current[-1].app_title == group.app_title:
             current[-1].bullets.append(bullet)
         else:
             current.append(Group(app_title=group.app_title, bullets=[bullet]))
-        current_height += bh
+        current_height += bh + header_height
+        if section is not None:
+            current_sections.add(section)
     if current:
         result.append(current)
     return result
@@ -364,14 +397,25 @@ def _pack_bullets(bullets: List[Bullet], slot_height_pt: float) -> List[List[Bul
     slots: List[List[Bullet]] = []
     current: List[Bullet] = []
     current_height = 0.0
+    current_sections: set[str] = set()
     for bullet in bullets:
         bh = estimate_bullet_height_pt(bullet.text, SLOT_WIDTH_IN, BASE_FONT_PT)
-        if current and current_height + bh > slot_height_pt:
+        section = bullet.console_type if bullet.console_type in {"Expert View", "Pro View"} else None
+        header_height = (
+            BASE_FONT_PT * LINE_HEIGHT_FACTOR
+            if section is not None and section not in current_sections
+            else 0.0
+        )
+        if current and current_height + bh + header_height > slot_height_pt:
             slots.append(current)
             current = []
             current_height = 0.0
+            current_sections = set()
+            header_height = BASE_FONT_PT * LINE_HEIGHT_FACTOR if section is not None else 0.0
         current.append(bullet)
-        current_height += bh
+        current_height += bh + header_height
+        if section is not None:
+            current_sections.add(section)
     if current:
         slots.append(current)
     return slots
@@ -417,14 +461,44 @@ def _apply_group_order_and_labels(columns: List[Column]) -> None:
         column.groups = merged_groups
 
 
-def _sort_column_bullets(columns: List[Column]) -> None:
+def _console_type_rank(value: str | None) -> int:
+    if value == "Expert View":
+        return 1
+    if value == "Pro View":
+        return 2
+    return 0
+
+
+def _order_console_type_bullets(columns: List[Column]) -> None:
+    for column in columns:
+        bullet_lists = (
+            [group.bullets for group in column.groups]
+            if column.grouped
+            else [column.bullets]
+        )
+        for bullets in bullet_lists:
+            bullets.sort(key=lambda bullet: (
+                _console_type_rank(bullet.console_type),
+                bullet.is_subject_to_change,
+            ))
+
+
+def _sort_column_bullets(
+    columns: List[Column],
+    *,
+    preserve_console_subblocks: bool = False,
+) -> None:
     """Keep the established within-group and flat-column bullet ordering."""
+    def sort_key(bullet: Bullet) -> tuple[int, bool]:
+        rank = _console_type_rank(bullet.console_type) if preserve_console_subblocks else 0
+        return rank, bullet.is_subject_to_change
+
     for column in columns:
         if column.grouped:
             for group in column.groups:
-                group.bullets.sort(key=lambda bullet: bullet.is_subject_to_change)
+                group.bullets.sort(key=sort_key)
         else:
-            column.bullets.sort(key=lambda bullet: bullet.is_subject_to_change)
+            column.bullets.sort(key=sort_key)
 
 
 def _column_all_bullets(column: Column) -> List[Bullet]:

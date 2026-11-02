@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 from roadmap_generator import labels, ordering
 from roadmap_generator.plugins_engine import (
     DividerSlide,
@@ -136,6 +138,44 @@ def test_custom_label_merges_with_an_unmapped_apptitle_of_same_name(load_fixture
 
     assert [group.app_title for group in column.groups] == ["Sandbox"]
     assert len(column.groups[0].bullets) == 3
+
+
+@pytest.mark.parametrize("grouping_enabled", [True, False])
+def test_next_console_type_subblocks_order_and_scope(grouping_enabled):
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [
+                {"Id": 1, "MarketingTitle": "Pro", "ConsoleType": "Pro View"},
+                {"Id": 2, "MarketingTitle": "Both", "ConsoleType": "Both"},
+                {"Id": 3, "MarketingTitle": "Expert", "ConsoleType": "Expert View"},
+                {"Id": 4, "MarketingTitle": "Unknown", "ConsoleType": "legacy"},
+            ],
+        }]}]}],
+    }]
+    settings = {"products": {"Kaspersky Next": {
+        "apptitle_grouping": {"enabled": grouping_enabled},
+    }}}
+
+    slide = _roadmap_slides(build_slide_plan(normalize_roadmap(data, language="ru"), settings))[0]
+    column = slide.columns[0]
+    bullets = column.groups[0].bullets if grouping_enabled else column.bullets
+    assert [bullet.requirement_id for bullet in bullets] == [2, 4, 3, 1]
+    assert [bullet.console_type for bullet in bullets] == ["Both", "legacy", "Expert View", "Pro View"]
+    assert column.grouped is grouping_enabled
+
+
+def test_console_type_is_ignored_for_non_next_products():
+    data = [{
+        "Product": "Kaspersky Endpoint",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [{"Id": 1, "MarketingTitle": "Feature", "ConsoleType": "Expert View"}],
+        }]}]}],
+    }]
+    slide = _roadmap_slides(build_slide_plan(normalize_roadmap(data, language="ru"), {}))[0]
+    assert slide.columns[0].bullets[0].console_type is None
 
 
 # ---------------------------------------------------------------------------

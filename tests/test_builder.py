@@ -285,6 +285,27 @@ def test_group_headers_rendered(load_fixture, synthetic_template_path):
     assert any("Managed Detection and Response" in t for t in _all_texts(prs))
 
 
+def test_next_console_type_subheaders_render_with_app_title_style(synthetic_template_path):
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "Application", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [
+                {"Id": 1, "MarketingTitle": "Pro feature", "ConsoleType": "Pro View"},
+                {"Id": 2, "MarketingTitle": "Both feature", "ConsoleType": "Both"},
+                {"Id": 3, "MarketingTitle": "Expert feature", "ConsoleType": "Expert View"},
+            ],
+        }]}]}],
+    }]
+    prs = build_presentation(build_slide_plan(normalize_roadmap(data, language="ru"), {}))
+    body = next(shape for shape in _roadmap_slide(prs).shapes if shape.name == "col_bullets")
+    texts = [paragraph.text for paragraph in body.text_frame.paragraphs]
+    assert texts == [
+        "Application", "• Both feature", "\tExpert View", "• Expert feature",
+        "\tPro View", "• Pro feature",
+    ]
+
+
 @pytest.mark.parametrize("quarter_count", [1, 2, 3, 4])
 def test_sparse_single_slide_columns_keep_template_geometry(quarter_count, synthetic_template_path):
     """Размер шейпа берётся из шаблона, а его слот зависит от числа колонок."""

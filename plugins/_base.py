@@ -23,6 +23,7 @@ class Bullet:
     quarter: str                       # "Qx YYYY", для группировки в колонки
     is_subject_to_change: bool
     release_id: int = 0                # из Release, для under_approval
+    console_type: Optional[str] = None  # из Requirement для Next ConsoleType-подблоков
 
 
 @dataclass
