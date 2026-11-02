@@ -1668,6 +1668,53 @@ button.status-pill:disabled {
   border-bottom: 1px solid var(--border);
 }
 
+.english-name-report {
+  margin-bottom: 22px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.english-name-report .public-features-heading > strong {
+  min-width: 36px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  text-align: center;
+}
+
+.english-name-issues {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.english-name-issue {
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.english-name-issue-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 14px;
+}
+
+.english-name-issue-heading > span {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.english-name-issue small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+}
+
 .public-features-heading {
   display: flex;
   align-items: flex-start;

@@ -86,6 +86,7 @@ Backend-тесты и frontend-сборка запускаются только 
 CSV-блок и отдельные вкладки 2026/2027: год определяется только по `TrDate`,
 проблемные релизы открываются по `TfsUrl`, а заполненные продукты проверяются по
 `CrDate` и полю CSV `ApplicableForProducts`.
+When ENG is selected, Reports also scans every MarketingTitleEn for the configured whole-word brand terms (case-insensitive).
 
 Текущий JSON, язык, режим группировки и состояние интерфейса автоматически
 сохраняются в браузере и восстанавливаются после обновления страницы. Кнопка

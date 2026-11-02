@@ -21,6 +21,14 @@ _DATE_FORMATS = (
 )
 _TRUE_VALUES = {"1", "true", "yes", "y", "да"}
 REPORT_YEARS = (2026, 2027)
+ENGLISH_NAME_TERMS = (
+    "ФСТЕК", "ФСТЭК", "FSTEC", "FSB", "ФСБ", "СБЕР", "SBER",
+    "Yandex", "Яндекс", "Astra", "Астра",
+)
+_ENGLISH_NAME_PATTERN = re.compile(
+    r"(?<!\w)(?:" + "|".join(re.escape(term) for term in ENGLISH_NAME_TERMS) + r")(?!\w)",
+    re.IGNORECASE,
+)
 
 
 def _iter_releases(data: list[dict]):
@@ -130,11 +138,43 @@ def build_json_report(data: list[dict]) -> dict[str, Any]:
             releases_by_year[trdate.year].append((product, stream, tier, release))
 
     return {
+        "english_name_issues": _find_english_name_issues(data),
         "years": {
             str(year): _build_year_report(releases_by_year[year])
             for year in REPORT_YEARS
         },
     }
+
+
+def _find_english_name_issues(data: list[dict]) -> list[dict[str, Any]]:
+    """Find branded terms in every MarketingTitleEn occurrence in the source JSON."""
+    issues: list[dict[str, Any]] = []
+    for product, stream, tier, release in _iter_releases(data):
+        requirements = release.get("Requirements")
+        if not isinstance(requirements, list):
+            continue
+        release_title = str(
+            release.get("RppTitle") or release.get("RPPTitle") or release.get("Title") or ""
+        )
+        for requirement in requirements:
+            if not isinstance(requirement, dict):
+                continue
+            title = requirement.get("MarketingTitleEn")
+            if not isinstance(title, str) or not title:
+                continue
+            matches = list(dict.fromkeys(match.group(0) for match in _ENGLISH_NAME_PATTERN.finditer(title)))
+            if matches:
+                issues.append({
+                    "product": product,
+                    "stream": stream,
+                    "tier": tier,
+                    "release_id": release.get("Id"),
+                    "release_title": release_title,
+                    "requirement_id": _normalize_req_id(requirement.get("Id")),
+                    "marketing_title_en": title,
+                    "matched_terms": matches,
+                })
+    return issues
 
 
 def _build_year_report(
