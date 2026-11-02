@@ -245,12 +245,13 @@ def _build_tier_slides(language, product, stream, tier, tier_obj, filters, group
     context.columns = quarter_columns
     for plugin in groupers:
         plugin.apply(context, _resolve_plugin_settings(plugin, plugin_settings, product, parent_path))
+    _apply_group_order_and_labels(context.columns)
 
     # 2) атомарная упаковка групп/фич в слоты по высоте (TOR v2 §4 шаг 1).
     columns = _pack_quarters(context.columns)
 
     _apply_under_approval(columns, language)
-    _apply_group_order_and_labels(columns)
+    _sort_column_bullets(columns)
 
     return _paginate(product, stream, tier, columns, language)
 
@@ -388,21 +389,42 @@ def _apply_under_approval(columns: List[Column], language: str) -> None:
 
 
 def _apply_group_order_and_labels(columns: List[Column]) -> None:
+    """Order source AppTitles, apply aliases, and merge equal display labels."""
+    for column in columns:
+        if not column.grouped:
+            continue
+
+        titles = list(dict.fromkeys(group.app_title for group in column.groups))
+        counts = {
+            title: sum(len(group.bullets) for group in column.groups if group.app_title == title)
+            for title in titles
+        }
+        ordered = resolve_apptitle_order([(title, counts[title]) for title in titles])
+        rank = {title: index for index, title in enumerate(ordered)}
+        column.groups.sort(key=lambda group: rank[group.app_title])
+
+        merged: dict[str, Group] = {}
+        merged_groups: List[Group] = []
+        for group in column.groups:
+            label = get_apptitle_label(group.app_title)
+            target = merged.get(label)
+            if target is None:
+                target = Group(app_title=label, bullets=[])
+                merged[label] = target
+                merged_groups.append(target)
+            target.bullets.extend(group.bullets)
+
+        column.groups = merged_groups
+
+
+def _sort_column_bullets(columns: List[Column]) -> None:
+    """Keep the established within-group and flat-column bullet ordering."""
     for column in columns:
         if column.grouped:
-            # уникальные заголовки в порядке первого появления; счёт = сумма по дублям
-            titles = list(dict.fromkeys(g.app_title for g in column.groups))
-            counts = {t: sum(len(g.bullets) for g in column.groups if g.app_title == t) for t in titles}
-            ordered = resolve_apptitle_order([(t, counts[t]) for t in titles])
-            rank = {t: i for i, t in enumerate(ordered)}
-            # стабильная сортировка: неконсекутивные группы одного заголовка идут подряд
-            column.groups.sort(key=lambda g: rank[g.app_title])
             for group in column.groups:
-                group.app_title = get_apptitle_label(group.app_title)
-                # сначала подтверждённые (false), затем «под вопросом» (true)
-                group.bullets.sort(key=lambda b: b.is_subject_to_change)
+                group.bullets.sort(key=lambda bullet: bullet.is_subject_to_change)
         else:
-            column.bullets.sort(key=lambda b: b.is_subject_to_change)
+            column.bullets.sort(key=lambda bullet: bullet.is_subject_to_change)
 
 
 def _column_all_bullets(column: Column) -> List[Bullet]:

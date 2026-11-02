@@ -10,6 +10,7 @@ IMPLEMENTED = (
     "Статичные слайды сохраняют собственные layout, master, theme и исходное содержимое PPTX.",
     "Плейсхолдеры roadmap_year и roadmap_version заполняются текущей системной датой.",
     "Reports now flag configured brand terms in English feature titles.",
+    "AppTitle aliases with the same custom label are grouped together.",
 )
 
 REMAINING = (
