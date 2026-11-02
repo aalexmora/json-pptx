@@ -634,6 +634,7 @@ def _render_roadmap_from_template(
         if marker_proto is not None and first_column_for_quarter:
             marker = marker_proto if i == 0 else _clone_shape(new_slide, marker_proto)
             marker.left = bullets.left
+            header.left = marker.left - header.text_frame.margin_left
         # Подколонки одного квартала не дублируют его заголовок.
         header_text = (
             col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
@@ -641,6 +642,9 @@ def _render_roadmap_from_template(
             else ""
         )
         _set_text(header, header_text)
+        if marker_proto is not None and first_column_for_quarter:
+            for paragraph in header.text_frame.paragraphs:
+                paragraph.alignment = PP_ALIGN.LEFT
         _fill_bullets_shape(bullets, col)
 
     # Наследование Tier выведено из использования. Очищаем legacy-плейсхолдеры,
