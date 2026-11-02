@@ -609,8 +609,7 @@ def _render_roadmap_from_template(
         return
 
     # Логические слоты распределяются по ширине слайда. Одиночная колонка
-    # получает colspan на всю доступную ширину; остальные сохраняют размеры
-    # прототипов шаблона и меняют только точки привязки.
+    # продолжения получает всю доступную ширину; обычная — половину для фич.
     slot_width_in = (w - 2 * MARGIN) / column_count
     header_left = header_proto.left
     bullets_left = bullets_proto.left
@@ -628,7 +627,10 @@ def _render_roadmap_from_template(
         bullets.left = bullets_left + offset
         if column_count == 1:
             header.width = Inches(w - MARGIN) - header.left
-            bullets.width = Inches(w - MARGIN) - bullets.left
+            available_bullets_width = Inches(w - MARGIN) - bullets.left
+            bullets.width = int(
+                available_bullets_width * (0.5 if not slide.continuation else 1.0)
+            )
 
         first_column_for_quarter = i == 0 or slide.columns[i - 1].quarter != col.quarter
         if marker_proto is not None and first_column_for_quarter:
@@ -791,6 +793,7 @@ def _render_roadmap(
     top = 1.0
 
     col_w = (w - 2 * MARGIN - (column_count - 1) * GAP) / column_count
+    single_regular_column = len(slide.columns) == 1 and not slide.continuation
     body_h = h - top - MARGIN
     x = MARGIN
 
@@ -807,8 +810,11 @@ def _render_roadmap(
             header, HEADER_FONT_PT, bold=True,
         )
         body_top = top + 0.55
-        box = s.shapes.add_textbox(Inches(x), Inches(body_top), Inches(col_w), Inches(body_h - 0.55))
-        overflow.extend(_fill_column_body(box, col, body_h - 0.55, col_w))
+        body_col_w = col_w * 0.5 if single_regular_column else col_w
+        box = s.shapes.add_textbox(
+            Inches(x), Inches(body_top), Inches(body_col_w), Inches(body_h - 0.55),
+        )
+        overflow.extend(_fill_column_body(box, col, body_h - 0.55, body_col_w))
         x += col_w + GAP
 
     if slide.footnote:

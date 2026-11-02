@@ -297,7 +297,7 @@ def test_sparse_single_slide_columns_keep_template_geometry(quarter_count, synth
     slot_width = (prs.slide_width.inches - 1.0) / quarter_count
     assert len(bodies) == quarter_count
     expected_widths = (
-        [prs.slide_width.inches - bodies[0].left.inches - 0.5]
+        [(prs.slide_width.inches - bodies[0].left.inches - 0.5) * 0.5]
         if quarter_count == 1 else [2.9] * quarter_count
     )
     assert [shape.width.inches for shape in bodies] == pytest.approx(expected_widths)
@@ -313,6 +313,42 @@ def test_sparse_single_slide_columns_keep_template_geometry(quarter_count, synth
     assert all(
         separators[name].left.inches > prs.slide_width.inches
         for name in separator_names[quarter_count - 1:]
+    )
+
+
+@pytest.mark.parametrize(
+    ("continuation", "expected_width_factor"),
+    [(False, 0.5), (True, 1.0)],
+)
+def test_fallback_single_column_width(
+    tmp_path, monkeypatch, continuation, expected_width_factor,
+):
+    template_path = tmp_path / "empty-template.pptx"
+    Presentation().save(template_path)
+    monkeypatch.setattr("roadmap_generator.builder.select_template", lambda *a, **k: str(template_path))
+
+    plan = build_slide_plan(
+        normalize_roadmap(_sparse_quarters_data(1), language="ru"),
+        {},
+    )
+    roadmap_plan = next(item for item in plan.slides if isinstance(item, RoadmapSlide))
+    roadmap_plan.continuation = continuation
+    prs = build_presentation(plan)
+
+    slide = next(
+        slide for slide in prs.slides
+        if any(
+            shape.has_text_frame and shape.text_frame.text == "Q1 2026"
+            for shape in slide.shapes
+        )
+    )
+    body = next(
+        shape for shape in slide.shapes
+        if shape.has_text_frame and shape.top == Inches(1.55)
+    )
+    assert body.left.inches == pytest.approx(0.5)
+    assert body.width.inches == pytest.approx(
+        (prs.slide_width.inches - 1.0) * expected_width_factor
     )
 
 
