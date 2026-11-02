@@ -50,6 +50,7 @@ class Requirement:
     marketing_title: str            # RU, обязательное
     marketing_title_en: Optional[str]
     is_subject_to_change: bool
+    console_type: Optional[str] = None
 
 
 @dataclass
@@ -329,6 +330,11 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                             marketing_title=raw_req.get("MarketingTitle") or "",
                             marketing_title_en=marketing_title_en,
                             is_subject_to_change=is_subject_to_change,
+                            console_type=(
+                                raw_req.get("ConsoleType").strip()
+                                if isinstance(raw_req.get("ConsoleType"), str)
+                                else None
+                            ),
                         ))
 
                     releases.append(Release(

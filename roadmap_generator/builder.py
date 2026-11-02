@@ -501,11 +501,21 @@ def _fill_bullets_shape(shape, col) -> None:
     if col.grouped:
         for group in col.groups:
             paragraphs.append((group.app_title, "header"))
-            for b in group.bullets:
-                paragraphs.append((_template_feature_text(b, prototypes["feature"]), "feature"))
+            paragraphs.extend(
+                (text, "header" if kind == "console_header" else "feature")
+                for text, kind in _console_type_entries(
+                    group.bullets,
+                    lambda bullet: _template_feature_text(bullet, prototypes["feature"]),
+                )
+            )
     else:
-        for b in col.bullets:
-            paragraphs.append((_template_feature_text(b, prototypes["feature"]), "feature"))
+        paragraphs.extend(
+            (text, "header" if kind == "console_header" else "feature")
+            for text, kind in _console_type_entries(
+                col.bullets,
+                lambda bullet: _template_feature_text(bullet, prototypes["feature"]),
+            )
+        )
 
     if not paragraphs:
         tf.text = ""
@@ -527,6 +537,16 @@ def _fill_bullets_shape(shape, col) -> None:
         size, name, bold, color = prototypes[kind][1]
         for run in paragraph.runs:
             _apply_format(run, size, name, bold, color)
+
+
+def _console_type_entries(bullets, feature_text):
+    previous_section = None
+    for bullet in bullets:
+        section = bullet.console_type if bullet.console_type in {"Expert View", "Pro View"} else None
+        if section is not None and section != previous_section:
+            yield f"\t{section}", "console_header"
+        yield feature_text(bullet), "feature"
+        previous_section = section
 
 
 def _template_feature_text(bullet, feature_prototype) -> str:
@@ -829,9 +849,29 @@ def _render_roadmap(
 
 def _fill_column_body(box, col, body_h_in: float, col_w_in: float) -> list:
     bullets = _column_bullets(col)
-    texts = [b.text for b in bullets]
-    font_pt, fitting, overflow = fit_bullets_dynamic(texts, body_h_in, col_w_in, BASE_FONT_PT)
+    items: list[tuple[str, str]] = []
+    if col.grouped:
+        for group in col.groups:
+            items.append((group.app_title, "header"))
+            items.extend(
+                (text, kind)
+                for text, kind in _console_type_entries(group.bullets, _bullet_text)
+            )
+    else:
+        items.extend(
+            (text, kind)
+            for text, kind in _console_type_entries(col.bullets, _bullet_text)
+        )
+
+    font_pt, fitting, _ = fit_bullets_dynamic(
+        [text for text, _ in items], body_h_in, col_w_in, BASE_FONT_PT,
+    )
     fit_count = len(fitting)
+    if (
+        0 < fit_count < len(items)
+        and items[fit_count - 1][1] in {"header", "console_header"}
+    ):
+        fit_count -= 1
 
     tf = box.text_frame
     tf.word_wrap = True
@@ -843,23 +883,10 @@ def _fill_column_body(box, col, body_h_in: float, col_w_in: float) -> list:
         _style_paragraph(p, text, font_pt, bold=bold)
         written += 1
 
-    remaining = fit_count
-    if col.grouped:
-        for group in col.groups:
-            if remaining <= 0:
-                break
-            take = min(len(group.bullets), remaining)
-            if take == 0:
-                continue
-            add(group.app_title, True)
-            for bullet in group.bullets[:take]:
-                add(_bullet_text(bullet), False)
-            remaining -= take
-    else:
-        for bullet in bullets[:fit_count]:
-            add(_bullet_text(bullet), False)
+    for text, kind in items[:fit_count]:
+        add(text, kind in {"header", "console_header"})
 
-    return overflow
+    return items[fit_count:]
 
 
 def _bullet_text(bullet) -> str:
@@ -879,9 +906,9 @@ def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float,
     box = s.shapes.add_textbox(Inches(MARGIN), Inches(1.0), Inches(w - 2 * MARGIN), Inches(h - 1.5))
     tf = box.text_frame
     tf.word_wrap = True
-    for i, text in enumerate(overflow):
+    for i, (text, kind) in enumerate(overflow):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        _style_paragraph(p, f"• {_feature_display_text(text)}", BASE_FONT_PT, bold=False)
+        _style_paragraph(p, text, BASE_FONT_PT, bold=kind in {"header", "console_header"})
 
 
 def _column_bullets(col):

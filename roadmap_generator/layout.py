@@ -31,10 +31,19 @@ def estimate_bullet_height_pt(text: str, slot_width_in: float, font_pt: int) -> 
     return estimate_text_lines(text, slot_width_in, font_pt) * font_pt * LINE_HEIGHT_FACTOR
 
 
-def estimate_group_height_pt(bullet_texts: List[str], slot_width_in: float, font_pt: int) -> float:
+def estimate_group_height_pt(
+    bullet_texts: List[str],
+    slot_width_in: float,
+    font_pt: int,
+    *,
+    extra_headers: int = 0,
+) -> float:
     """Высота группы AppTitle: строка-заголовок + сумма высот фич."""
     header_pt = font_pt * LINE_HEIGHT_FACTOR
-    return header_pt + sum(estimate_bullet_height_pt(t, slot_width_in, font_pt) for t in bullet_texts)
+    return (1 + extra_headers) * header_pt + sum(
+        estimate_bullet_height_pt(text, slot_width_in, font_pt)
+        for text in bullet_texts
+    )
 
 
 def fit_bullets_dynamic(

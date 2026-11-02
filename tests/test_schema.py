@@ -35,6 +35,23 @@ def test_validate_all_fixtures_pass(load_fixture):
         assert errors == [], f"фикстура {name} должна быть валидна, ошибки: {errors}"
 
 
+def test_console_type_is_optional_and_normalized():
+    data = [{
+        "Product": "Kaspersky Next",
+        "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [
+                {"Id": 10, "MarketingTitle": "Expert", "ConsoleType": " Expert View "},
+                {"Id": 11, "MarketingTitle": "Legacy"},
+            ],
+        }]}]}],
+    }]
+
+    assert validate_roadmap(data) == []
+    requirements = normalize_roadmap(data, language="ru").products[0].streams[0].tiers[0].releases[0].requirements
+    assert [requirement.console_type for requirement in requirements] == ["Expert View", None]
+
+
 def test_validate_rejects_non_list():
     assert validate_roadmap({"Product": "X"}) != []
 
