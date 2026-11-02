@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import io
+import re
 from collections import Counter, defaultdict
 from datetime import date
 
@@ -44,6 +45,19 @@ from roadmap_generator.template_registry import (
     placeholder_names,
     select_template,
 )
+
+
+_TERMINAL_VERSION_RE = re.compile(r"\s+(?P<version>v?\d+(?:\.\d+)*)$", re.IGNORECASE)
+
+
+def _feature_display_text(text: str, is_subject_to_change: bool = False) -> str:
+    """Не даёт последнему слову отрываться от номера версии или маркера S2C."""
+    match = _TERMINAL_VERSION_RE.search(text)
+    if match:
+        text = f"{text[:match.start()]}\u00a0{match.group('version')}"
+    if is_subject_to_change:
+        text += "\u00a0*"
+    return text
 
 MARGIN = 0.5
 GAP = 0.25
@@ -519,8 +533,7 @@ def _template_feature_text(bullet, feature_prototype) -> str:
     """Текст фичи без двойного маркера, если bullet уже задан в шаблоне."""
     _, _, native_bullet = feature_prototype
     prefix = "" if native_bullet else "• "
-    suffix = " *" if bullet.is_subject_to_change else ""
-    return f"{prefix}{bullet.text}{suffix}"
+    return f"{prefix}{_feature_display_text(bullet.text, bullet.is_subject_to_change)}"
 
 
 def _tier_display_name(tier: str, language: str) -> str:
@@ -602,7 +615,6 @@ def _render_roadmap_from_template(
     header_left = header_proto.left
     bullets_left = bullets_proto.left
     marker_proto = _first_shape_for_role(all_by_name, "quarter_marker")
-    marker_header_offset = marker_proto.left - header_left if marker_proto is not None else 0
     _position_column_separators(all_by_name, column_count, w)
 
     for i, col in enumerate(slide.columns):
@@ -621,7 +633,7 @@ def _render_roadmap_from_template(
         first_column_for_quarter = i == 0 or slide.columns[i - 1].quarter != col.quarter
         if marker_proto is not None and first_column_for_quarter:
             marker = marker_proto if i == 0 else _clone_shape(new_slide, marker_proto)
-            marker.left = header.left + marker_header_offset
+            marker.left = bullets.left
         # Подколонки одного квартала не дублируют его заголовок.
         header_text = (
             col.quarter + (f"\n{col.under_approval_badge}" if col.under_approval_badge else "")
@@ -841,10 +853,7 @@ def _fill_column_body(box, col, body_h_in: float, col_w_in: float) -> list:
 
 
 def _bullet_text(bullet) -> str:
-    text = f"• {bullet.text}"
-    if bullet.is_subject_to_change:
-        text += " *"
-    return text
+    return f"• {_feature_display_text(bullet.text, bullet.is_subject_to_change)}"
 
 
 def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float, h: float) -> None:
@@ -862,7 +871,7 @@ def _render_overflow(prs, layout, slide: RoadmapSlide, overflow: list, w: float,
     tf.word_wrap = True
     for i, text in enumerate(overflow):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        _style_paragraph(p, f"• {text}", BASE_FONT_PT, bold=False)
+        _style_paragraph(p, f"• {_feature_display_text(text)}", BASE_FONT_PT, bold=False)
 
 
 def _column_bullets(col):
