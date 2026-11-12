@@ -40,8 +40,34 @@ cd frontend && npm install && npm run dev   # проксирует /api на :80
 Один контейнер: FastAPI + собранный фронтенд. Без LibreOffice — PNG-превью
 шаблонов в контейнере не генерируются (валидация и сами шаблоны работают).
 
+На машине запуска нужны работающий Docker Engine или Docker Desktop и
+Docker Compose v2 с поддержкой `--wait`. Python и Node.js на хосте не нужны:
+зависимости устанавливаются при сборке образа.
+
+Из каталога проекта:
+
 ```bash
-docker compose up -d --build
+cd /путь/к/json-pptx
+docker compose up -d --build --wait --wait-timeout 120
+```
+
+Команда собирает образ, запускает сервис в фоне и ожидает успешный healthcheck.
+Откройте http://localhost:8000 (при запуске на сервере — `http://<адрес-сервера>:8000`).
+Опции ожидания описаны в [документации Docker Compose](https://docs.docker.com/reference/cli/docker/compose/up/).
+
+Проверить состояние и посмотреть логи:
+
+```bash
+docker compose ps
+curl --fail http://localhost:8000/api/health
+docker compose logs --tail=100 -f roadmap
+```
+
+Для обновления после получения новых исходников повторите команду запуска.
+Остановить сервис с сохранением данных:
+
+```bash
+docker compose down
 ```
 
 - Образ собран multi-stage (Node → Python), без dev-зависимостей.
