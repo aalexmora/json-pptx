@@ -1,6 +1,9 @@
 """Delivery boundaries: local Git snapshot, package integrity and local Docker."""
 import hashlib
+import gzip
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import shutil
@@ -97,6 +100,48 @@ class MacDeploymentTests(unittest.TestCase):
                 module.package(repo, output)
             self.assertEqual(list(output.iterdir()), [])
 
+    def image(self, repo, architecture="arm64", revision=None):
+        revision = revision or subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        config = json.dumps({"os": "linux", "architecture": architecture,
+            "config": {"Labels": {"org.opencontainers.image.revision": revision,
+                                   "org.opencontainers.image.version": "1.24.1"}},
+            "rootfs": {"type": "layers", "diff_ids": []}}).encode()
+        name = hashlib.sha256(config).hexdigest() + ".json"
+        image = self.work / (architecture + "-image.tar")
+        with tarfile.open(image, "w") as tar:
+            for filename, content in [(name, config), ("manifest.json", json.dumps(
+                    [{"Config": name, "RepoTags": ["json-pptx:test-arm64"], "Layers": []}]).encode())]:
+                member = tarfile.TarInfo(filename)
+                member.size = len(content)
+                tar.addfile(member, io.BytesIO(content))
+        return image
+
+    def test_ready_package_contains_loadable_image_instead_of_application_sources(self):
+        module = self.packager()
+        self.assertTrue(callable(getattr(module, "package_image", None)), "Ready image packaging is missing")
+        repo = self.repository()
+        image = self.image(repo)
+        result = module.package_image(repo, self.work / "releases", image)
+        with tarfile.open(result["archive"]) as tar:
+            files = {m.name.split("/", 1)[1]: tar.extractfile(m).read()
+                     for m in tar.getmembers() if m.isfile()}
+        self.assertEqual(gzip.decompress(files["image.tar.gz"]), image.read_bytes())
+        self.assertEqual(files["image.txt"], b"json-pptx:test-arm64\n")
+        self.assertIn("scripts/run-mac.sh", files)
+        self.assertIn("docker-compose.mac.yml", files)
+        self.assertNotIn("app.py", files)
+        self.assertNotIn("frontend/src/main.tsx", files)
+
+    def test_ready_package_rejects_unrelated_architecture_or_revision(self):
+        module = self.packager()
+        self.assertTrue(callable(getattr(module, "package_image", None)), "Ready image packaging is missing")
+        repo = self.repository()
+        for architecture, revision in [("amd64", None), ("arm64", "0" * 40)]:
+            with self.subTest(architecture=architecture, revision=revision):
+                with self.assertRaises(RuntimeError):
+                    module.package_image(repo, self.work / "releases", self.image(repo, architecture, revision))
+
     def launcher(self):
         script = ROOT / "scripts/run-mac.sh"
         self.assertTrue(script.is_file(), "Mac Docker launcher is missing")
@@ -106,6 +151,8 @@ class MacDeploymentTests(unittest.TestCase):
         (folder / "docker-compose.mac.yml").write_text("services: {}\n")
         (folder / "SOURCE_REVISION").write_text("a" * 40 + "\n")
         (folder / "VERSION").write_text("1.24.1\n")
+        (folder / "image.txt").write_text("json-pptx:fixture-arm64\n")
+        (folder / "image.tar.gz").write_bytes(b"image fixture")
         files = [p for p in folder.rglob("*") if p.is_file()]
         (folder / "SHA256SUMS").write_text("".join(
             hashlib.sha256(p.read_bytes()).hexdigest() + "  " + str(p.relative_to(folder)) + "\n"
@@ -113,6 +160,7 @@ class MacDeploymentTests(unittest.TestCase):
         docker = self.work / "docker fixture"
         docker.write_text('''#!/bin/bash
 set -e
+printf '%s\\n' "$*" >> "$TEST_DOCKER_CALLS"
 if [[ "$1 $2 $3" == "context inspect desktop-linux" ]]; then
   echo "${TEST_ENDPOINT:-unix:///local/docker.sock}"; exit 0
 fi
@@ -120,14 +168,34 @@ fi
 shift 2
 case "$1" in
   info) echo linux/arm64 ;;
+  load) ;;
+  image)
+    if [[ "$*" == *'{{.Id}}'* ]]; then echo sha256:new;
+    else printf 'linux/arm64|%040d|1.24.1\\n' 0 | sed 's/0000000000000000000000000000000000000000/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/'; fi ;;
+  container)
+    case "$*" in
+      *'{{.Image}}'*) echo sha256:old ;;
+      *'{{.State.Running}}'*) echo true ;;
+      *'/app/data'*) echo 'volume|json-pptx-mac_roadmap-data|true' ;;
+      *'/app/templates_library'*) echo 'volume|json-pptx-mac_roadmap-templates|true' ;;
+      *) exit 92 ;;
+    esac ;;
+  run) [[ "${TEST_BACKUP_FAIL:-0}" == 0 ]] || { echo fixture-backup-failed >&2; exit 43; } ;;
   compose)
-    if [[ " $* " == *" up "* ]]; then echo 'fixture-startup-failed' >&2; exit 42; fi
+    if [[ " $* " == *" ps "* && "${TEST_EXISTING:-0}" == 1 ]]; then echo existing-container; fi
+    if [[ " $* " == *" up "* ]]; then
+      [[ "${TEST_COMPOSE_FAIL:-42}" == 0 ]] || { echo fixture-startup-failed >&2; exit 42; }
+    fi
     ;;
   *) exit 91 ;;
 esac
 ''')
         docker.chmod(0o755)
-        env = dict(os.environ, JSON_PPTX_DOCKER=str(docker), DOCKER_HOST="tcp://wrong-host:2375")
+        curl = self.work / "curl"
+        curl.write_text('#!/bin/bash\necho \'{"status":"ok","version":"1.24.1"}\'\n')
+        curl.chmod(0o755)
+        env = dict(os.environ, JSON_PPTX_DOCKER=str(docker), DOCKER_HOST="tcp://wrong-host:2375",
+                   TEST_DOCKER_CALLS=str(self.work / "docker-calls"), JSON_PPTX_BACKUP_DIR=str(self.work / "backups"))
         return folder, env
 
     def run_launcher(self, folder, env, action):
@@ -158,6 +226,29 @@ esac
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("fixture-startup-failed", result.stdout + result.stderr)
         self.assertNotIn("Приложение готово", result.stdout + result.stderr)
+
+    def test_start_loads_prebuilt_image_without_building_or_pulling(self):
+        folder, env = self.launcher()
+        env["TEST_COMPOSE_FAIL"] = "0"
+        result = self.run_launcher(folder, env, "start")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Приложение готово", result.stdout)
+        calls = Path(env["TEST_DOCKER_CALLS"]).read_text()
+        self.assertIn(" load --input ", calls)
+        self.assertIn("--no-build", calls)
+        self.assertIn("--pull never", calls)
+        self.assertNotIn(" --build ", calls)
+
+    def test_failed_backup_prevents_recreation_and_resumes_previous_container(self):
+        folder, env = self.launcher()
+        env.update(TEST_EXISTING="1", TEST_BACKUP_FAIL="1", TEST_COMPOSE_FAIL="0")
+        result = self.run_launcher(folder, env, "start")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("fixture-backup-failed", result.stdout + result.stderr)
+        calls = Path(env["TEST_DOCKER_CALLS"]).read_text()
+        self.assertNotIn(" up ", calls)
+        self.assertIn(" stop", calls)
+        self.assertIn(" start", calls)
 
 
 if __name__ == "__main__":

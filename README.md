@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.24.1
+> **Версия:** 1.24.2
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
@@ -37,17 +37,28 @@ cd frontend && npm install && npm run dev   # проксирует /api на :80
 
 ## Docker Desktop на основном Mac
 
-Исходники и история хранятся в локальном Git внутри VM. Для запуска на основном
-Mac подготовьте пакет из чистого коммита:
+Исходники и история хранятся в локальном Git внутри VM. Основной Mac получает
+готовый Linux ARM64 образ: скрипт выполняет `docker load` и запускает Compose
+с `--no-build --pull never`. Пересборка и загрузка зависимостей на Mac не нужны.
+
+Для подготовки поставки из чистого коммита в VM нужны Python 3.14, Node.js
+и `crane` (Google go-containerregistry). Пути можно передать через `--node`
+и `--crane`, если команды отсутствуют в PATH:
 
 ```bash
-python3 scripts/package-mac.py
+python3 scripts/build-mac-image.py
 ```
 
-Архив создаётся в `../releases/`. Он содержит исходники, Dockerfile, Mac Compose
-и контрольные суммы; пользовательские данные, `Requirements/`, `node_modules`
-и готовый `frontend/dist` исключены. Пакет можно передать из VM временной ссылкой,
-как в соседних проектах.
+Архив создаётся в `../releases/`. В нём находятся `image.tar.gz`, Mac Compose,
+скрипт запуска, SHA-256, версия и полный Git revision. Образ включает собранный
+фронтенд и Linux-зависимости Python. Закреплённый официальный Python base из
+`docker/base-mac-image.txt` содержит Cairo. Пользовательские данные, `Requirements/`
+и зависимости macOS в образ не входят. Отдельный пакет исходников для входа
+сборщика создаётся только через `python3 scripts/package-mac.py --source`.
+
+Сборщик проверяет ARM64 ELF-модули и целостность Docker-архива; проверки здесь
+не подтверждают запуск Linux-контейнера на основном Mac. Этот этап завершается
+пользователем через Docker Desktop после передачи пакета временной ссылкой из VM.
 
 В **Terminal основного Mac, вне окна VM**, распакуйте скачанный пакет и из его
 папки выполните:
@@ -57,9 +68,9 @@ bash scripts/run-mac.sh start
 ```
 
 Скрипт проверяет SHA-256, находит Docker Desktop и использует локальный context
-`desktop-linux`. Первая сборка требует доступа Docker к реестрам образов, npm,
-PyPI и Debian. Python, Node.js и Git на основном Mac не нужны. После healthcheck
-откройте http://127.0.0.1:8000/.
+`desktop-linux` с Linux ARM64 движком. После загрузки он сверяет архитектуру,
+версию и Git revision образа. Python, Node.js и Git на основном Mac не нужны.
+После healthcheck откройте http://127.0.0.1:8000/.
 
 Повторный запуск выполняется той же командой из той же папки; данные остаются
 в постоянных томах Compose-проекта `json-pptx-mac`.
@@ -69,9 +80,23 @@ bash scripts/run-mac.sh check    # Docker Desktop готов к работе
 bash scripts/run-mac.sh status
 bash scripts/run-mac.sh logs
 bash scripts/run-mac.sh stop     # остановка с сохранением данных
+bash scripts/run-mac.sh backup   # холодная копия данных и прежнего образа
 ```
 
 Другой порт: `JSON_PPTX_PORT=8001 bash scripts/run-mac.sh start`.
+
+При смене образа скрипт останавливает существующий контейнер и сохраняет оба
+тома вместе с прежним образом в `~/Library/Application Support/json-pptx/backups`.
+Путь копии печатается в Terminal. При ошибке резервирования прежний контейнер
+возобновляется, если он работал. Ошибка нового healthcheck сохраняет копию и
+диагностику; успешный запуск при этом не объявляется.
+
+Для восстановления загрузите `image.tar.gz` из нужной копии, создайте два новых
+Docker volume и распакуйте `state.tar.gz` в них: каталог `data` соответствует
+`/app/data`, `templates` — `/app/templates_library`. Прежний image ID записан в
+`image-id.txt`. Запустите этот образ с восстановленными томами на другом порту,
+например `127.0.0.1:8001:8000`, и проверьте данные. Исходные тома и текущий
+контейнер сохраняйте до проверки восстановления.
 
 ## Docker (деплой на сервер)
 

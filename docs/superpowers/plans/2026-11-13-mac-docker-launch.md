@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver one command that downloads the local Git snapshot from the VM and starts json-pptx in Docker Desktop on the main Mac.
+**Goal:** Deliver one command that downloads a ready ARM64 image from the VM and starts json-pptx in Docker Desktop on the main Mac.
 
-**Architecture:** Package only committed application sources, with SHA-256 and revision metadata. A Mac launcher selects the local `desktop-linux` context, builds through the existing Dockerfile and waits for health. Transfer uses the existing narrow package server from the neighboring Teploshema project.
+**Architecture:** Assemble the image from committed application sources, Linux ARM64 wheels, the built frontend and the pinned official Python base with Cairo. The ready package includes SHA-256 and revision metadata. The Mac launcher selects local `desktop-linux`, loads the image, backs up existing data on image changes and waits for health. It does not build or pull images on the receiving Mac. Transfer uses the existing narrow package server from the neighboring Teploshema project.
 
 **Tech Stack:** Python standard library, Bash, Docker Compose v2, existing FastAPI/React Dockerfile.
 
@@ -40,4 +40,13 @@
 
 Rollback: stop the Mac Compose project with the supplied launcher; named volumes remain. Revert the local commit to remove source changes. No remote deployment is performed by the VM.
 
-Delivery evidence is generated after the clean commit in `../releases/`: package metadata, transfer metadata, checksums and the exact main Mac command. The source package builds the image on the main Mac; it does not claim an already verified Docker image.
+Delivery evidence is generated after the clean commit in `../releases/`: package metadata, transfer metadata, checksums and the exact main Mac command.
+
+## ProductFrame alignment requested after the first delivery
+
+The original source-only delivery was insufficient for the requested ProductFrame workflow. Reference: `/Users/alexander/Projects/productframe/AGENTS.md` sections on container delivery and main Mac reliability, `docker/run-mac.sh` and `tools/package-docker.py`.
+
+- [x] Add ready-image export, architecture/provenance checks, local image loading and backup failure compensation; observe the new boundary tests fail then pass.
+- Verification before image assembly: 200 backend/deployment tests passed on Python 3.14.10; shell/Python/YAML checks passed. Fresh review found no important issues. One upstream Starlette deprecation warning remains. Frontend source is unchanged and its typecheck/build will also run inside the image builder.
+- [ ] Assemble and validate the ready ARM64 image from a clean local commit, package and download-verify it.
+- [ ] Replace the initial source-package transfer with the ready-image command. Keep main Mac runtime verification separate from archive validation.

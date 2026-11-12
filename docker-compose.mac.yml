@@ -1,9 +1,8 @@
 services:
   roadmap:
-    image: json-pptx:${JSON_PPTX_REVISION:-local}
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${JSON_PPTX_IMAGE:?Use scripts/run-mac.sh from the prepared Mac package}
+    platform: linux/arm64
+    pull_policy: never
     restart: unless-stopped
     ports:
       - "127.0.0.1:${JSON_PPTX_PORT:-8000}:8000"
@@ -12,6 +11,12 @@ services:
       - roadmap-templates:/app/templates_library
     labels:
       org.opencontainers.image.revision: ${JSON_PPTX_REVISION:-local}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 12
 
 volumes:
   roadmap-data:
