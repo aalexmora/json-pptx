@@ -1,0 +1,18 @@
+services:
+  roadmap:
+    image: json-pptx:${JSON_PPTX_REVISION:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${JSON_PPTX_PORT:-8000}:8000"
+    volumes:
+      - roadmap-data:/app/data
+      - roadmap-templates:/app/templates_library
+    labels:
+      org.opencontainers.image.revision: ${JSON_PPTX_REVISION:-local}
+
+volumes:
+  roadmap-data:
+  roadmap-templates:

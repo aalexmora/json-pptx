@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.19.0
+> **Версия:** 1.24.1
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
@@ -34,6 +34,44 @@ cd frontend && npm install && npm run dev   # проксирует /api на :80
 
 Собрать фронтенд для продакшна: `cd frontend && npm run build` (после этого
 `uvicorn` раздаёт `frontend/dist`).
+
+## Docker Desktop на основном Mac
+
+Исходники и история хранятся в локальном Git внутри VM. Для запуска на основном
+Mac подготовьте пакет из чистого коммита:
+
+```bash
+python3 scripts/package-mac.py
+```
+
+Архив создаётся в `../releases/`. Он содержит исходники, Dockerfile, Mac Compose
+и контрольные суммы; пользовательские данные, `Requirements/`, `node_modules`
+и готовый `frontend/dist` исключены. Пакет можно передать из VM временной ссылкой,
+как в соседних проектах.
+
+В **Terminal основного Mac, вне окна VM**, распакуйте скачанный пакет и из его
+папки выполните:
+
+```bash
+bash scripts/run-mac.sh start
+```
+
+Скрипт проверяет SHA-256, находит Docker Desktop и использует локальный context
+`desktop-linux`. Первая сборка требует доступа Docker к реестрам образов, npm,
+PyPI и Debian. Python, Node.js и Git на основном Mac не нужны. После healthcheck
+откройте http://127.0.0.1:8000/.
+
+Повторный запуск выполняется той же командой из той же папки; данные остаются
+в постоянных томах Compose-проекта `json-pptx-mac`.
+
+```bash
+bash scripts/run-mac.sh check    # Docker Desktop готов к работе
+bash scripts/run-mac.sh status
+bash scripts/run-mac.sh logs
+bash scripts/run-mac.sh stop     # остановка с сохранением данных
+```
+
+Другой порт: `JSON_PPTX_PORT=8001 bash scripts/run-mac.sh start`.
 
 ## Docker (деплой на сервер)
 
