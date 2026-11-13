@@ -17,7 +17,6 @@ import type {
   LintIssue,
   PlanResponse,
   Profile,
-  PublicFeaturesReport,
   QualityIssue,
   ReleaseInfo,
   ReleaseLog,
@@ -46,7 +45,6 @@ import {
   saveProfile,
   setActiveTemplate,
   uploadProductSlideImage,
-  uploadPublicFeaturesReport,
   uploadStaticSlidePptx,
   uploadTemplate,
   uploadTierLogo,
@@ -409,11 +407,6 @@ export default function App() {
   const [workspaceSessionReady, setWorkspaceSessionReady] = useState(false)
   const [recentlyReorderedNodes, setRecentlyReorderedNodes] = useState<Set<string>>(new Set())
   const [workspaceView, setWorkspaceView] = useState<'preview' | 'quality' | 'reports'>('preview')
-  const [publicFeaturesReport, setPublicFeaturesReport] = useState<PublicFeaturesReport | null>(null)
-  const [publicFeaturesFile, setPublicFeaturesFile] = useState<File | null>(null)
-  const [publicFeaturesLoading, setPublicFeaturesLoading] = useState(false)
-  const [publicFeaturesError, setPublicFeaturesError] = useState<string | null>(null)
-  const publicFeaturesRequestRef = useRef(0)
   const [staticModal, setStaticModal] = useState({ open: false, editIndex: null as number | null, name: '', position: 'end', pptx: '', prompt: '' })
   const [productSlideStatus, setProductSlideStatus] = useState<Record<string, ProductLogoStatus>>({})
   const [productSlideRefresh, setProductSlideRefresh] = useState(0)
@@ -662,7 +655,6 @@ export default function App() {
       setDiff(null)
     }
     setJsonData(data)
-    if (publicFeaturesFile) void refreshPublicFeatures(data, publicFeaturesFile)
   }
 
   function handleLoad() {
@@ -730,7 +722,6 @@ export default function App() {
           setProfile(await getProfile())
         }
         setJsonData(data)
-        if (publicFeaturesFile) void refreshPublicFeatures(data, publicFeaturesFile)
       } catch {
         setError('Файл не является корректным проектом')
       }
@@ -750,8 +741,6 @@ export default function App() {
     setJsonData(null)
     setResult(null)
     setDiff(null)
-    publicFeaturesRequestRef.current += 1
-    setPublicFeaturesLoading(false)
     setWorkspaceView('preview')
     setError(null)
     setNotice(null)
@@ -778,30 +767,6 @@ export default function App() {
     } finally {
       setGenerating(false)
     }
-  }
-
-  async function refreshPublicFeatures(data: unknown, file: File, rememberFile = false) {
-    const requestId = publicFeaturesRequestRef.current + 1
-    publicFeaturesRequestRef.current = requestId
-    setPublicFeaturesLoading(true)
-    setPublicFeaturesError(null)
-    try {
-      const uploadedReport = await uploadPublicFeaturesReport(data, file)
-      if (publicFeaturesRequestRef.current === requestId) {
-        setPublicFeaturesReport(uploadedReport)
-        if (rememberFile) setPublicFeaturesFile(file)
-      }
-    } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : String(uploadError)
-      if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesError(message)
-    } finally {
-      if (publicFeaturesRequestRef.current === requestId) setPublicFeaturesLoading(false)
-    }
-  }
-
-  async function handlePublicFeaturesUpload(file: File) {
-    if (!jsonData) return
-    await refreshPublicFeatures(jsonData, file, true)
   }
 
   const saveQueue = useRef<Promise<void>>(Promise.resolve())
@@ -1308,10 +1273,6 @@ export default function App() {
           <ReportsDashboard
             report={result?.report ?? null}
             language={language}
-            publicFeatures={publicFeaturesReport}
-            publicFeaturesLoading={publicFeaturesLoading}
-            publicFeaturesError={publicFeaturesError}
-            onUpload={handlePublicFeaturesUpload}
             onBack={() => setWorkspaceView('preview')}
           />
         ) : (
@@ -1609,24 +1570,14 @@ const REPORT_YEARS = ['2026', '2027'] as const
 function ReportsDashboard({
   report,
   language,
-  publicFeatures,
-  publicFeaturesLoading,
-  publicFeaturesError,
-  onUpload,
   onBack,
 }: {
   report: PlanResponse['report'] | null
   language: 'ru' | 'en'
-  publicFeatures: PublicFeaturesReport | null
-  publicFeaturesLoading: boolean
-  publicFeaturesError: string | null
-  onUpload: (file: File) => void
   onBack: () => void
 }) {
   const [selectedYear, setSelectedYear] = useState<(typeof REPORT_YEARS)[number]>('2026')
-  const maxUnmapped = Math.max(1, ...(publicFeatures?.products.map((product) => product.unmapped) ?? []))
   const yearReport = report?.years[selectedYear] ?? null
-  const completeProducts = publicFeatures?.complete_products_by_year[selectedYear] ?? []
 
   return (
     <section className="reports-workspace">
@@ -1639,78 +1590,9 @@ function ReportsDashboard({
         <button type="button" onClick={onBack}>← К презентации</button>
       </div>
 
-      <section className="public-features-report">
-        <div className="public-features-heading">
-          <div>
-            <h3>Публичные фичи без маппинга</h3>
-            <p>CSV сопоставляется с текущим JSON по ReqId. Файл не сохраняется.</p>
-          </div>
-          <label className={'csv-upload-button' + (publicFeaturesLoading ? ' disabled' : '')}>
-            {publicFeaturesLoading ? 'Проверяем…' : publicFeatures ? 'Заменить CSV' : 'Загрузить CSV'}
-            <input
-              type="file"
-              accept=".csv,text/csv,text/tab-separated-values"
-              disabled={publicFeaturesLoading}
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) onUpload(file)
-                event.target.value = ''
-              }}
-            />
-          </label>
-        </div>
-        <p className="public-features-hint">
-          CSV с разделителем TAB (также распознаются «;» и «,»). Обязательные колонки: <code>ReqId</code>, <code>IsPublished</code> и <code>ApplicableForProducts</code>. Для группировки используются <code>Application</code> и <code>Requirement</code>.
-        </p>
-
-        {publicFeaturesError && <div className="message error-message" role="alert">{publicFeaturesError}</div>}
-
-        {publicFeatures && (
-          <>
-            <div className="public-features-summary">
-              <div><span>Публичных фичей</span><strong>{publicFeatures.public_features}</strong></div>
-              <div><span>Есть в JSON</span><strong>{publicFeatures.mapped_public_features}</strong></div>
-              <div className={publicFeatures.unmapped_public_features ? 'warning' : 'success'}>
-                <span>Не замаплено</span><strong>{publicFeatures.unmapped_public_features}</strong>
-              </div>
-            </div>
-            <div className="public-features-file">
-              {publicFeatures.filename} · найдено в JSON {publicFeatures.mapped_percent}%
-              {publicFeatures.invalid_req_id_rows > 0 && ` · пропущено строк без ReqId: ${publicFeatures.invalid_req_id_rows}`}
-            </div>
-
-            {publicFeatures.products.length > 0 ? (
-              <div className="public-features-chart" aria-label="Незамапленные публичные фичи по продуктам">
-                {publicFeatures.products.map((product) => (
-                  <details className="public-feature-product" key={product.product}>
-                    <summary>
-                      <span className="public-feature-product-name">{product.product}</span>
-                      <span className="public-feature-bar" aria-hidden="true">
-                        <span style={{ width: `${product.unmapped * 100 / maxUnmapped}%` }} />
-                      </span>
-                      <strong>{product.unmapped}</strong>
-                    </summary>
-                    <div className="public-feature-requirements">
-                      {product.requirements.map((requirement) => (
-                        <div key={requirement.req_id}>
-                          <code>{requirement.req_id}</code>
-                          <span>{requirement.title || 'Без названия'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            ) : (
-              <div className="public-features-complete">Все публичные фичи из CSV найдены в текущем JSON.</div>
-            )}
-          </>
-        )}
-      </section>
-
       {language === 'en' && (
         <section className="english-name-report" aria-labelledby="english-name-report-title">
-          <div className="public-features-heading">
+          <div className="report-block-heading">
             <div>
               <h3 id="english-name-report-title">Brand names in English feature titles</h3>
               <p>Review these matches in MarketingTitleEn. Matching is case-insensitive and checks whole words.</p>
@@ -1730,7 +1612,7 @@ function ReportsDashboard({
               ))}
             </div>
           ) : (
-            <div className="public-features-complete">No matching brand names found in English feature titles.</div>
+            <div className="report-empty-success">No matching brand names found in English feature titles.</div>
           )}
         </section>
       )}
@@ -1804,17 +1686,6 @@ function ReportsDashboard({
             ) : (
               <p className="quality-empty">Проблемных релизов за {selectedYear} год нет.</p>
             )}
-
-            <section className="complete-products-report">
-              <h3>Заполненные продукты</h3>
-              {!publicFeatures ? (
-                <p>Загрузите CSV выше, чтобы проверить ApplicableForProducts для всех Requirements.</p>
-              ) : completeProducts.length > 0 ? (
-                <ul>{completeProducts.map((product) => <li key={product}>{product}</li>)}</ul>
-              ) : (
-                <p>За {selectedYear} год нет продуктов, полностью заполненных по CrDate и ApplicableForProducts.</p>
-              )}
-            </section>
           </>
         ) : (
           <p className="quality-empty">Отчёт рассчитывается…</p>

@@ -163,31 +163,6 @@ export interface JsonReport {
   english_name_issues: EnglishNameIssue[]
 }
 
-export interface PublicFeatureRequirement {
-  req_id: string
-  title: string
-}
-
-export interface PublicFeatureProduct {
-  product: string
-  public: number
-  mapped: number
-  unmapped: number
-  requirements: PublicFeatureRequirement[]
-}
-
-export interface PublicFeaturesReport {
-  filename: string
-  data_rows: number
-  invalid_req_id_rows: number
-  public_features: number
-  mapped_public_features: number
-  unmapped_public_features: number
-  mapped_percent: number
-  products: PublicFeatureProduct[]
-  complete_products_by_year: Record<'2026' | '2027', string[]>
-}
-
 export interface ReleaseLog {
   version: string
   implemented: string[]
