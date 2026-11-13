@@ -338,15 +338,16 @@ def test_pagination_fixture_yields_5_distinct_quarters(load_fixture):
 # Нормализация: EN-фильтр
 # ---------------------------------------------------------------------------
 
-def test_normalize_en_drops_null_marketing_title_en(load_fixture):
+def test_normalize_en_keeps_title_when_marketing_title_en_is_null(load_fixture):
     ru = normalize_roadmap(load_fixture("en_with_content.json"), language="ru")
     en = normalize_roadmap(load_fixture("en_with_content.json"), language="en")
     ru_req_count = sum(len(r.requirements) for r in ru.products[0].streams[0].tiers[0].releases)
     en_req_count = sum(len(r.requirements) for r in en.products[0].streams[0].tiers[0].releases)
-    # фикстура: 3 требования, у одного MarketingTitleEn == null
+    # У требования без EN-заголовка используется Title.
     assert ru_req_count == 3
-    assert en_req_count == 2
-    assert en_req_count <= ru_req_count
+    assert en_req_count == 3
+    fallback = next(req for req in en.products[0].streams[0].tiers[0].releases[0].requirements if req.id == 8002)
+    assert fallback.marketing_title_en == "[BRQ] Null EN text"
 
 
 def test_normalize_ru_keeps_null_marketing_title_en(load_fixture):
@@ -366,7 +367,7 @@ def _visibility_data() -> list:
         {"Id": 5, "Kbr": "Yes", "MarketingTitle": "Both RU", "MarketingTitleEn": "Both EN", "Visibility": "RU and ENG"},
         {"Id": 6, "Kbr": "Yes", "MarketingTitle": "Null RU", "MarketingTitleEn": "Null EN", "Visibility": None},
         {"Id": 7, "Kbr": "Yes", "MarketingTitle": "Missing visibility RU", "MarketingTitleEn": "Missing visibility EN"},
-        {"Id": 8, "Kbr": "Yes", "MarketingTitle": "No EN title", "MarketingTitleEn": None, "Visibility": "RU and ENG"},
+        {"Id": 8, "Title": "Technical visible title", "Kbr": "Yes", "MarketingTitle": "No EN title", "MarketingTitleEn": None, "Visibility": "RU and ENG"},
     ]
     return [{
         "Product": "P",
@@ -387,7 +388,7 @@ def test_visibility_filters_requirements_for_ru_and_en():
     en_ids = {req.id for req in en.products[0].streams[0].tiers[0].releases[0].requirements}
 
     assert ru_ids == {1, 2, 5, 6, 7, 8}
-    assert en_ids == {3, 4, 5, 6, 7}
+    assert en_ids == {3, 4, 5, 6, 7, 8}
 
 
 def test_unknown_visibility_is_hidden_with_warning():

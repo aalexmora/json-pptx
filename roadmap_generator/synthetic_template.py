@@ -45,6 +45,9 @@ def make_synthetic_template(path) -> None:
     bullets.name = "col_bullets"
     bullets.text_frame.text = "• feature"
     bullets.text_frame.word_wrap = True
+    bullets.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
+    bullets.text_frame.margin_left = bullets.text_frame.margin_right = 0
+    bullets.text_frame.margin_top = bullets.text_frame.margin_bottom = 0
 
     inheritance = slide.shapes.add_textbox(Inches(margin), Inches(5.4), Inches(12.333), Inches(1.3))
     inheritance.name = "tier_inheritance_note"

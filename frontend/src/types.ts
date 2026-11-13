@@ -82,6 +82,10 @@ export interface QualityIssue {
   product: string
   stream: string
   tier: string
+  requirement_id?: number
+  requirement_title?: string
+  language?: 'ru' | 'en'
+  field?: 'MarketingTitle' | 'MarketingTitleEn'
 }
 
 export interface TreeTier {

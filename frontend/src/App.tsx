@@ -1120,6 +1120,7 @@ export default function App() {
   const planConflicts = result?.plan?.conflicts ?? []
   const lintIssues = result?.lint_issues ?? []
   const dataQualityIssues = result?.quality_issues ?? []
+  const hasDataErrors = dataQualityIssues.some((issue) => issue.severity === 'error')
   const qualityCount = planErrors.length + planWarnings.length + planConflicts.length + lintIssues.length + dataQualityIssues.length
   const slideCount = result?.plan?.slides.length ?? 0
   const canGenerate = Boolean(jsonData && result?.plan && planErrors.length === 0 && !loading && !generating)
@@ -1166,12 +1167,12 @@ export default function App() {
           {Boolean(jsonData) && (
             <button
               type="button"
-              className={'status-pill ' + (planErrors.length ? 'error' : qualityCount ? 'warning' : 'success')}
+              className={'status-pill ' + (planErrors.length || hasDataErrors ? 'error' : qualityCount ? 'warning' : 'success')}
               onClick={() => qualityCount > 0 && setWorkspaceView('quality')}
               disabled={qualityCount === 0 || loading}
               title={qualityCount > 0 ? 'Открыть контроль качества данных' : 'Замечаний нет'}
             >
-              {loading ? 'Проверяем…' : planErrors.length ? 'Есть ошибки' : qualityCount ? `${qualityCount} замеч.` : 'Готово'}
+              {loading ? 'Проверяем…' : planErrors.length || hasDataErrors ? 'Есть ошибки' : qualityCount ? `${qualityCount} замеч.` : 'Готово'}
             </button>
           )}
           {Boolean(jsonData) && (
@@ -1894,7 +1895,8 @@ function QualityDashboard({
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLocaleLowerCase('ru')
   const filtered = normalizedQuery
-    ? issues.filter((issue) => [issue.rpp_title, issue.trdate, issue.quarter, issue.product, issue.stream, issue.tier]
+    ? issues.filter((issue) => [issue.message, issue.requirement_title ?? '', String(issue.requirement_id ?? ''),
+        issue.language ?? '', issue.field ?? '', issue.rpp_title, issue.trdate, issue.quarter, issue.product, issue.stream, issue.tier]
         .some((value) => value.toLocaleLowerCase('ru').includes(normalizedQuery)))
     : issues
 
@@ -1903,14 +1905,14 @@ function QualityDashboard({
       <div className="quality-workspace-header">
         <div>
           <span className="eyebrow">Контроль качества</span>
-          <h2>Замечания к данным</h2>
-          <p>Исправьте источник JSON и загрузите выгрузку повторно. Роадмап пока строится с указанным fallback.</p>
+          <h2>Ошибки и замечания к данным</h2>
+          <p>Если маркетинговое название не заполнено, используется Title. Эти ошибки не блокируют генерацию. Исправьте источник JSON и загрузите выгрузку повторно.</p>
         </div>
         <button type="button" onClick={onBack}>← К презентации</button>
       </div>
 
       <div className="quality-summary-cards">
-        <div><strong>{issues.length}</strong><span>структурированных замечаний</span></div>
+        <div><strong>{issues.length}</strong><span>ошибок и замечаний к данным</span></div>
         <div><strong>{warnings.length + conflicts.length}</strong><span>системных предупреждений</span></div>
         <div><strong>{lintIssues.length}</strong><span>ошибок текстов</span></div>
       </div>
@@ -1918,22 +1920,31 @@ function QualityDashboard({
       {issues.length > 0 && (
         <>
           <div className="quality-table-toolbar">
-            <h3>Даты релизов</h3>
+            <h3>Данные релизов и требований</h3>
             <input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Поиск по RPP title, дате, кварталу…"
+              placeholder="Поиск по ID, названию, языку, дате…"
             />
           </div>
           <div className="quality-table-wrap">
             <table className="quality-table">
-              <thead><tr><th>Проверка</th><th>RPP title</th><th>TrDate</th><th>Квартал</th></tr></thead>
+              <thead><tr><th>Проверка</th><th>Требование / релиз</th><th>TrDate</th><th>Квартал</th></tr></thead>
               <tbody>
-                {filtered.map((issue) => (
-                  <tr key={`${issue.code}-${issue.release_id}-${issue.product}-${issue.tier}`}>
+                {filtered.map((issue, index) => (
+                  <tr key={`${issue.code}-${issue.release_id}-${issue.requirement_id ?? ''}-${issue.product}-${issue.stream}-${issue.tier}-${index}`}>
                     <td><span className={`quality-severity ${issue.severity}`}>{issue.message}</span></td>
-                    <td><strong>{issue.rpp_title || `Release ${issue.release_id}`}</strong><small>{issue.product} · {issue.stream} · {issue.tier}</small></td>
+                    <td>
+                      {issue.requirement_id !== undefined ? (
+                        <>
+                          <strong>{issue.requirement_title || `Requirement ${issue.requirement_id}`}</strong>
+                          <small>ReqId {issue.requirement_id} · {issue.language?.toUpperCase()}</small>
+                          <small>{issue.rpp_title || `Release ${issue.release_id}`}</small>
+                        </>
+                      ) : <strong>{issue.rpp_title || `Release ${issue.release_id}`}</strong>}
+                      <small>{issue.product} · {issue.stream} · {issue.tier}</small>
+                    </td>
                     <td>{issue.trdate}</td>
                     <td>{issue.quarter}</td>
                   </tr>

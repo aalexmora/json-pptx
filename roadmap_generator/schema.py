@@ -45,9 +45,9 @@ def _parse_date(value) -> datetime:
 @dataclass
 class Requirement:
     id: int
-    title: str                      # техническое имя (Title), НЕ выводится на слайд
+    title: str                      # исходный Title; fallback для маркетингового названия
     kbr: Optional[str]              # "Yes" | "No" | None (None = поле отсутствовало)
-    marketing_title: str            # RU, обязательное
+    marketing_title: str            # RU: MarketingTitle или Title
     marketing_title_en: Optional[str]
     is_subject_to_change: bool
     console_type: Optional[str] = None
@@ -126,12 +126,16 @@ def _visibility_languages(value) -> Optional[frozenset[str]]:
     return _VISIBILITY_LANGUAGES.get(normalized)
 
 
+def _has_text(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 def validate_roadmap(data) -> List[str]:
     """Собирает все ошибки валидации за один проход.
 
     Возвращает список строк-описаний ошибок; пустой список = данные валидны.
-    Отсутствие опциональных полей (`Kbr`, `MarketingTitleEn`, `Visibility`) ошибкой НЕ является —
-    это мягкий fallback + warning в `normalize_roadmap`.
+    При отсутствии маркетингового названия используется Title. Ошибка названия
+    возвращается через quality_issues; RU без обоих текстов остаётся невалидным.
     """
     errors: List[str] = []
 
@@ -232,9 +236,8 @@ def validate_roadmap(data) -> List[str]:
                         if not isinstance(qid, int):
                             errors.append(f"{qprefix}: поле 'Id' должно быть int")
 
-                        mtitle = req.get("MarketingTitle")
-                        if not isinstance(mtitle, str) or not mtitle.strip():
-                            errors.append(f"{qprefix}: отсутствует непустое поле 'MarketingTitle'")
+                        if not _has_text(req.get("MarketingTitle")) and not _has_text(req.get("Title")):
+                            errors.append(f"{qprefix}: отсутствуют непустые поля 'MarketingTitle' и 'Title'")
 
     return errors
 
@@ -245,7 +248,8 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     - вычисляет календарный квартал для каждого Release из `CrDate`;
       если `CrDate` отсутствует/null, использует `TrDate` и создаёт замечание качества;
     - фильтрует Requirements по `Visibility` для выбранного языка;
-    - при `language == "en"` дополнительно отбрасывает Requirements без `MarketingTitleEn`;
+    - заменяет отсутствующее маркетинговое название выбранного языка на Title
+      и добавляет неблокирующую ошибку качества данных;
     - `Kbr == "Subject to Change"` (без учёта регистра) — признак S2C.
 
     Плагины здесь НЕ применяются.
@@ -271,23 +275,26 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                     cr_date = _parse_date(raw_cr_date) if raw_cr_date is not None else None
                     display_date = cr_date or tr_date
                     quarter = _quarter(display_date)
+                    release_context = {
+                        "release_id": raw_release["Id"],
+                        "rpp_title": (
+                            raw_release.get("RppTitle")
+                            or raw_release.get("RPPTitle")
+                            or raw_release.get("Title")
+                            or ""
+                        ),
+                        "trdate": raw_release["TrDate"],
+                        "quarter": quarter,
+                        "product": _normalize_name(raw_product.get("Product")),
+                        "stream": _normalize_name(raw_stream.get("Stream")),
+                        "tier": _normalize_name(raw_tier.get("Tier")),
+                    }
                     if cr_date is None:
                         quality_issues.append({
                             "code": "missing_crdate",
                             "severity": "warning",
                             "message": "CrDate не заполнена — квартал рассчитан по TrDate",
-                            "release_id": raw_release["Id"],
-                            "rpp_title": (
-                                raw_release.get("RppTitle")
-                                or raw_release.get("RPPTitle")
-                                or raw_release.get("Title")
-                                or ""
-                            ),
-                            "trdate": raw_release["TrDate"],
-                            "quarter": quarter,
-                            "product": _normalize_name(raw_product.get("Product")),
-                            "stream": _normalize_name(raw_stream.get("Stream")),
-                            "tier": _normalize_name(raw_tier.get("Tier")),
+                            **release_context,
                         })
                     rid = raw_release["Id"]
                     if rid in seen_release_ids:
@@ -317,17 +324,32 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
                         if language not in visible_in:
                             continue
 
-                        marketing_title_en = raw_req.get("MarketingTitleEn")
-                        if language == "en" and (
-                            not isinstance(marketing_title_en, str) or not marketing_title_en.strip()
-                        ):
-                            continue
+                        title = raw_req.get("Title") if _has_text(raw_req.get("Title")) else ""
+                        field = "MarketingTitleEn" if language == "en" else "MarketingTitle"
+                        if not _has_text(raw_req.get(field)):
+                            fallback_message = "подставлен Title" if title else "Title также не заполнен"
+                            quality_issues.append({
+                                "code": "missing_marketing_title",
+                                "severity": "error",
+                                "message": f"Отсутствует маркетинговое название {language.upper()} ({field}) — {fallback_message}",
+                                "requirement_id": qid,
+                                "requirement_title": title,
+                                "language": language,
+                                "field": field,
+                                **release_context,
+                            })
+                            if language == "en" and not title:
+                                continue
+                        marketing_title = raw_req.get("MarketingTitle") if _has_text(raw_req.get("MarketingTitle")) else title
+                        marketing_title_en = raw_req.get("MarketingTitleEn") if _has_text(raw_req.get("MarketingTitleEn")) else None
+                        if language == "en" and marketing_title_en is None:
+                            marketing_title_en = title
 
                         requirements.append(Requirement(
                             id=raw_req["Id"],
-                            title=raw_req.get("Title") or "",
+                            title=title,
                             kbr=kbr,
-                            marketing_title=raw_req.get("MarketingTitle") or "",
+                            marketing_title=marketing_title,
                             marketing_title_en=marketing_title_en,
                             is_subject_to_change=is_subject_to_change,
                             console_type=(
