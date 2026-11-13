@@ -42,4 +42,14 @@
 - [x] **Step 4:** Remove positive CSV requirements from README.md and AGENTS.md, update APP_VERSION to 1.24.4 and add a release-log entry.
 - [x] **Step 5:** Run pytest -q, npm run typecheck and npm run build. Render the actual ReportsDashboard for RU/EN and check retained reports, ENG matches/empty state and absence of upload controls. Run a real-input JSON/PPTX smoke test for RU/EN.
   Expected: all checks pass; no CSV upload controls or active CSV implementation remains.
-- [ ] **Step 6:** Review the diff, commit, obtain an independent whole-branch review and hand off the checked branch. Rollback is git revert of the removal commit.
+- [x] **Step 6:** Review the diff, commit, obtain an independent whole-branch review and hand off the checked branch. Rollback is git revert of the removal commit.
+
+## Verification
+
+- CSV removal regression first failed against the original endpoint (HTTP 200), then passed after route removal.
+- Full pytest suite: 214 passed, including RU/EN LibreOffice rendering regressions; one existing upstream Starlette deprecation warning.
+- Frontend typecheck and production build passed using macOS dependencies with a package-lock identical to the source checkout.
+- The actual ReportsDashboard rendered for RU, ENG with matches, ENG empty and loading; no CSV controls remain.
+- The supplied 3.3 MB roadmap JSON produced successful plan/PPTX responses for RU and EN (30/29 slides); Title fallback remains.
+- Independent read-only review of 3106e63..15919e5: no Critical, Important or Minor findings.
+- Existing ENG empty text while reports load is preserved; removing CSV adds no new behavior there.
