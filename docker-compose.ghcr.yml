@@ -1,0 +1,24 @@
+services:
+  roadmap:
+    container_name: ${JSON_PPTX_CONTAINER_NAME:-roadmap-pptx}
+    image: ${JSON_PPTX_IMAGE:-ghcr.io/aalexmora/json-pptx:1.24.6}
+    init: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "${JSON_PPTX_BIND:-127.0.0.1}:${JSON_PPTX_PORT:-8000}:8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - roadmap-data:/app/data
+      - roadmap-templates:/app/templates_library
+
+volumes:
+  roadmap-data:
+  roadmap-templates:

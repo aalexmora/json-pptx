@@ -28,3 +28,10 @@ checks. Tests use disposable Compose projects and synthetic data only.
 Rollback: return to the prior Git revision and rebuild; keep both data volumes.
 Take a cold backup before updates. Changing the Compose project directory/name
 changes volume names, so upgrades must retain that identity.
+
+Follow-up: the user expects the built image in GitHub Packages. Publish the
+exact native images that pass smoke checks to GHCR, then combine amd64/arm64
+manifests. Keep package visibility private. Add standalone registry Compose
+with identical volumes/service settings so switching in the same directory
+retains data. Verify registry digests, architectures, API version and package
+visibility; no deployment to the user's Mac is performed by this workflow.

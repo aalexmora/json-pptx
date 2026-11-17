@@ -50,4 +50,7 @@ check() {
 check fresh
 "${COMPOSE[@]}" up --detach --force-recreate --no-build --wait --wait-timeout 120
 check persist
+if [[ -n "${JSON_PPTX_SMOKE_IMAGE_FILE:-}" ]]; then
+  docker inspect --format '{{.Image}}' "$JSON_PPTX_CONTAINER_NAME" > "$JSON_PPTX_SMOKE_IMAGE_FILE"
+fi
 echo "Container smoke passed: frontend, RU/EN PPTX, validation, persistent state ($VERSION)."

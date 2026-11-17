@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.24.5
+> **Версия:** 1.24.6
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
@@ -112,7 +112,52 @@ Docker volume и распакуйте `state.tar.gz` в них: каталог `
 LibreOffice в образ не входит: PNG-превью загруженных шаблонов недоступны,
 валидация шаблонов и экспорт PPTX работают.
 
-### Установка
+### Готовый образ из GitHub Packages
+
+Образ: **`ghcr.io/aalexmora/json-pptx:1.24.6`**.
+[Страница пакета](https://github.com/users/aalexmora/packages/container/package/json-pptx).
+Один тег содержит Linux `amd64` и `arm64`; Docker выбирает нужную архитектуру.
+Каждый образ проверяется на своей архитектуре до отправки в registry.
+Образы содержат только приложение, без пользовательских JSON, профилей и шаблонов.
+
+Пакет приватный. Для скачивания нужен GitHub-аккаунт с доступом и **personal
+access token (classic)** с `read:packages`. Fine-grained токен для клонирования
+Git-репозитория не подходит для GitHub Packages. Введите classic-токен в запросе
+Password команды `docker login` (не пароль GitHub):
+
+```bash
+docker login ghcr.io -u aalexmora
+```
+
+В существующем каталоге установки, например `~/json-pptx-server`:
+
+```bash
+git pull --ff-only
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d --no-build --wait --wait-timeout 120
+```
+
+При смене способа запуска сохраняйте тот же каталог и Compose project name:
+тогда используются прежние тома данных. Для дальнейших `logs`, `stop`, `down`
+и резервного копирования также передавайте `-f docker-compose.ghcr.yml`.
+Перед обновлением сохраните резервную копию по инструкции ниже.
+
+Для новой установки достаточно скачать `docker-compose.ghcr.yml` из этой ветки
+в отдельный каталог и выполнить две команды Compose выше. Git, Python, Node.js
+и локальная сборка образа не нужны. Настройки адреса и порта общие для обоих
+вариантов. Другой тег или digest задаётся через `JSON_PPTX_IMAGE`.
+
+Публикация выполняется workflow `Publish container`: native-сборка → проверка
+UI/API/PPTX и сохранения данных → отправка того же образа → общий manifest.
+Версионный тег создаётся только после успешной проверки обеих архитектур.
+Доступ к registry в Actions использует встроенный `GITHUB_TOKEN`; личные токены
+в репозитории не сохраняются. Включение workflow также предусмотрено шаблоном
+`docker/publish-container-workflow.yml`.
+
+Правила авторизации описаны в
+[документации GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+### Установка со сборкой из исходников
 
 Репозиторий приватный: на сервере должен быть настроен доступ к GitHub.
 
@@ -192,9 +237,9 @@ bash scripts/smoke-container.sh
 собственными временными томами. Проверяются интерфейс, версия API, план и PPTX
 на RU/EN, затем сохранение данных после пересоздания контейнера. В конце
 удаляются только ресурсы тестового проекта. Рабочий `.env` не используется.
-Шаблон `docker/container-workflow.yml` запускает ту же проверку в GitHub Actions
-на native Linux amd64 и arm64. Для включения сохраните его как
-`.github/workflows/container.yml` (нужен GitHub-доступ с правом `workflow`).
+Workflow `.github/workflows/container.yml` запускает ту же проверку в GitHub
+Actions на native Linux amd64 и arm64; его копия сохранена в
+`docker/container-workflow.yml`.
 Статус конкретного запуска смотрите во вкладке Actions репозитория.
 
 Семантика запуска и ожидания описана в
