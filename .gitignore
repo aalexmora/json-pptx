@@ -21,3 +21,8 @@ tests/fixtures/synthetic_template.pptx
 
 # macOS
 .DS_Store
+
+# Local server settings
+.env
+.env.*
+!.env.example

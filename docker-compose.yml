@@ -1,10 +1,23 @@
 services:
   roadmap:
-    build: .
-    container_name: roadmap-pptx
+    container_name: ${JSON_PPTX_CONTAINER_NAME:-roadmap-pptx}
+    build:
+      context: .
+      args:
+        VCS_REF: ${JSON_PPTX_REVISION:-unknown}
+    init: true
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
-      - "8000:8000"
+      - "${JSON_PPTX_BIND:-127.0.0.1}:${JSON_PPTX_PORT:-8000}:8000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       # Персистентное состояние: профиль, активный шаблон, загруженные шаблоны,
       # превью, статичные слайды — переживают пересборку контейнера.

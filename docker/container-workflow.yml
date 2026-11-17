@@ -1,0 +1,25 @@
+name: Linux container
+
+on:
+  push:
+    branches: [main, feature/unix-server-container]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build, check API and verify persistent volumes
+        run: bash scripts/smoke-container.sh

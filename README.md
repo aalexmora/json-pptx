@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.24.4
+> **Версия:** 1.24.5
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
@@ -98,48 +98,107 @@ Docker volume и распакуйте `state.tar.gz` в них: каталог `
 например `127.0.0.1:8001:8000`, и проверьте данные. Исходные тома и текущий
 контейнер сохраняйте до проверки восстановления.
 
-## Docker (деплой на сервер)
+## Docker на Linux / Unix-сервере
 
-Один контейнер: FastAPI + собранный фронтенд. Без LibreOffice — PNG-превью
-шаблонов в контейнере не генерируются (валидация и сами шаблоны работают).
+Поставка для обычного Linux-сервера (Debian/Ubuntu и другие дистрибутивы)
+с Docker Engine и Docker Compose v2, поддерживающим `--wait`.
+На BSD и других Unix нужен Linux Docker-host/VM. Python и Node.js на хосте
+не требуются. Образ собирается под архитектуру сервера: `amd64` или `arm64`.
+Первая сборка требует доступа к Docker Hub, npm и PyPI.
 
-На машине запуска нужны работающий Docker Engine или Docker Desktop и
-Docker Compose v2 с поддержкой `--wait`. Python и Node.js на хосте не нужны:
-зависимости устанавливаются при сборке образа.
+Один контейнер содержит FastAPI и собранный React-интерфейс. Используется один
+воркер, непривилегированный пользователь, healthcheck и автозапуск после
+перезагрузки при включённой службе Docker. Логи ограничены тремя файлами по 10 МБ.
+LibreOffice в образ не входит: PNG-превью загруженных шаблонов недоступны,
+валидация шаблонов и экспорт PPTX работают.
 
-Из каталога проекта:
+### Установка
+
+Репозиторий приватный: на сервере должен быть настроен доступ к GitHub.
 
 ```bash
-cd /путь/к/json-pptx
-docker compose up -d --build --wait --wait-timeout 120
+git clone --branch feature/unix-server-container --single-branch https://github.com/aalexmora/json-pptx.git
+cd json-pptx
+cp .env.example .env
+JSON_PPTX_REVISION="$(git rev-parse HEAD)" docker compose up -d --build --wait --wait-timeout 120
+curl --fail http://127.0.0.1:8000/api/health
 ```
 
-Команда собирает образ, запускает сервис в фоне и ожидает успешный healthcheck.
-Откройте http://localhost:8000 (при запуске на сервере — `http://<адрес-сервера>:8000`).
-Опции ожидания описаны в [документации Docker Compose](https://docs.docker.com/reference/cli/docker/compose/up/).
+Настройки в `.env`:
 
-Проверить состояние и посмотреть логи:
+| Переменная | По умолчанию | Назначение |
+|---|---|---|
+| `JSON_PPTX_BIND` | `127.0.0.1` | Адрес, на котором сервер принимает подключения |
+| `JSON_PPTX_PORT` | `8000` | Порт приложения на сервере |
+| `JSON_PPTX_CONTAINER_NAME` | `roadmap-pptx` | Имя контейнера; для нескольких установок задайте разные имена и порты |
+| `JSON_PPTX_REVISION` | `unknown` | Git revision в метке собранного образа; команда выше передаёт автоматически |
+
+По умолчанию интерфейс доступен на самом сервере по `http://127.0.0.1:8000/`.
+Для доступа со своего компьютера можно открыть SSH-туннель
+`ssh -L 8000:127.0.0.1:8000 user@server`, затем открыть этот адрес в браузере.
+Для доверенной локальной сети задайте `JSON_PPTX_BIND=0.0.0.0` в `.env`,
+повторите команду запуска и откройте `http://<адрес-сервера>:8000/`.
+В приложении нет авторизации. Для доступа из интернета используйте reverse proxy
+с HTTPS и аутентификацией, сохранив привязку приложения к localhost.
+Для nginx задайте `client_max_body_size 50m` и проксируйте на `127.0.0.1:8000`.
+
+### Состояние и обновление
 
 ```bash
 docker compose ps
-curl --fail http://localhost:8000/api/health
 docker compose logs --tail=100 -f roadmap
-```
-
-Для обновления после получения новых исходников повторите команду запуска.
-Остановить сервис с сохранением данных:
-
-```bash
+# Остановить, сохранив данные:
 docker compose down
 ```
 
-- Образ собран multi-stage (Node → Python), без dev-зависимостей.
-- Состояние (профиль `data/`, шаблоны `templates_library/`) — в named volumes,
-  переживает пересборку.
-- Порт `8000`, healthcheck на `/api/health`.
-- За reverse-proxy (nginx) достаточно проксировать на `127.0.0.1:8000`;
-  для загрузки `.pptx`/JSON поднимите `client_max_body_size` (напр. `50m`).
-- Один воркер: состояние хранится in-memory + файлы, реплицировать нельзя.
+Профиль, логотипы, активный шаблон и остальные настройки хранятся в
+`roadmap-data:/app/data`; шаблоны и статичные слайды — в
+`roadmap-templates:/app/templates_library`. Оба named volume переживают
+пересборку и обычный `docker compose down`. Не используйте `down -v`, если
+данные нужны. Сохраняйте имя каталога/Compose-проекта при обновлениях:
+смена имени создаёт отдельные тома. При обновлении прежней серверной установки
+из того же каталога существующие тома используются повторно.
+
+Холодная резервная копия перед обновлением (из каталога проекта):
+
+```bash
+backup="roadmap-state-$(date +%Y%m%d-%H%M%S).tar.gz"
+docker compose stop
+docker compose run --rm --no-deps -T roadmap tar -czf - data templates_library > "$backup"
+docker compose up -d --no-build --wait --wait-timeout 120
+tar -tzf "$backup"
+```
+
+Убедитесь, что архив создан без ошибок, затем обновляйте из того же каталога:
+
+```bash
+git pull --ff-only
+JSON_PPTX_REVISION="$(git rev-parse HEAD)" docker compose up -d --build --wait --wait-timeout 120
+```
+
+Для отката выберите предыдущий commit командой `git switch --detach <commit>`
+и повторите сборку/запуск. Для восстановления данных остановите сервис и
+распакуйте проверенный архив в соответствующие тома через одноразовый контейнер
+`docker compose run --rm --no-deps -T roadmap tar -xzf - < "$backup"`, затем
+запустите сервис. Перед восстановлением сохраните текущую копию данных.
+
+### Проверка контейнера
+
+```bash
+bash scripts/smoke-container.sh
+```
+
+Проверка создаёт отдельный Compose-проект со случайным свободным портом и
+собственными временными томами. Проверяются интерфейс, версия API, план и PPTX
+на RU/EN, затем сохранение данных после пересоздания контейнера. В конце
+удаляются только ресурсы тестового проекта. Рабочий `.env` не используется.
+Шаблон `docker/container-workflow.yml` запускает ту же проверку в GitHub Actions
+на native Linux amd64 и arm64. Для включения сохраните его как
+`.github/workflows/container.yml` (нужен GitHub-доступ с правом `workflow`).
+Статус конкретного запуска смотрите во вкладке Actions репозитория.
+
+Семантика запуска и ожидания описана в
+[документации Docker Compose](https://docs.docker.com/reference/cli/docker/compose/up/).
 
 ### Быстрый production-деплой
 

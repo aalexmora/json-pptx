@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: сборка фронтенда (React + Vite + TypeScript)
 # =============================================================================
-FROM node:20-alpine AS frontend
+FROM node:22-alpine AS frontend
 
 WORKDIR /build
 
@@ -10,12 +10,17 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
-RUN npm run build
+RUN npm run typecheck && npm run build
 
 # =============================================================================
 # Stage 2: рантайм (FastAPI, раздаёт API + собранный фронтенд)
 # =============================================================================
 FROM python:3.14-slim
+
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.title="Roadmap → PPTX" \
+    org.opencontainers.image.source="https://github.com/aalexmora/json-pptx" \
+    org.opencontainers.image.revision="${VCS_REF}"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

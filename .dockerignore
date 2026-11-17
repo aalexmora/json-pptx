@@ -1,32 +1,26 @@
-# Python
-.venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-*.egg-info/
-
-# Node
-node_modules/
-frontend/node_modules/
-frontend/dist/
-
-# Git
-.git/
-.gitignore
-
-# Рантайм-данные (монтируются как volumes, не копируются в образ)
-data/
-templates_library/
-output/
-
-# Тесты и артефакты QA — в образ не нужны
-tests/
-qa/
-*.jpg
-*.jpeg
-*.png
-
-# macOS / прочее
-.DS_Store
-README.md
-AGENTS.md
+# Only application sources enter the build context.
+**
+!Dockerfile
+!requirements.txt
+!app.py
+!roadmap_generator/
+!roadmap_generator/**
+!plugins/
+!plugins/**
+!config/
+!config/**
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/tsconfig.json
+!frontend/vite.config.ts
+!frontend/src/
+!frontend/src/**
+!frontend/public/
+!frontend/public/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*
+**/node_modules/
