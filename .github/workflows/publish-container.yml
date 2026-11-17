@@ -1,0 +1,108 @@
+name: Publish container
+
+on:
+  push:
+    branches: [feature/unix-server-container]
+    paths: [.github/workflows/publish-container.yml]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-json-pptx
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/aalexmora/json-pptx
+
+jobs:
+  native:
+    if: github.repository == 'aalexmora/json-pptx' && github.ref == 'refs/heads/feature/unix-server-container'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build and smoke-test the exact image to publish
+        env:
+          JSON_PPTX_SMOKE_IMAGE_FILE: ${{ runner.temp }}/tested-image.txt
+        run: bash scripts/smoke-container.sh
+      - name: Sign in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Publish tested native image
+        env:
+          ARCH: ${{ matrix.arch }}
+          IMAGE_FILE: ${{ runner.temp }}/tested-image.txt
+        run: |
+          set -euo pipefail
+          image_id="$(cat "$IMAGE_FILE")"
+          test "$(docker image inspect "$image_id" --format '{{.Os}}/{{.Architecture}}')" = "linux/$ARCH"
+          test "$(docker image inspect "$image_id" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$GITHUB_SHA"
+          tag="$IMAGE:sha-$GITHUB_SHA-$ARCH"
+          docker tag "$image_id" "$tag"
+          docker push "$tag"
+          docker pull "$tag"
+          test "$(docker image inspect "$tag" --format '{{.Id}}')" = "$image_id"
+      - name: Sign out
+        if: always()
+        run: docker logout ghcr.io
+
+  manifest:
+    needs: native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Sign in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Publish and verify multi-platform tags
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^APP_VERSION = "\([^"]*\)"/\1/p' roadmap_generator/version.py)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          sha_tag="$IMAGE:sha-$GITHUB_SHA"
+          docker buildx imagetools create --tag "$sha_tag" \
+            "$IMAGE:sha-$GITHUB_SHA-amd64" "$IMAGE:sha-$GITHUB_SHA-arm64"
+          docker buildx imagetools inspect "$sha_tag" --raw > "$RUNNER_TEMP/manifest.json"
+          python3 - "$RUNNER_TEMP/manifest.json" <<'PY'
+          import json, sys
+          with open(sys.argv[1]) as stream:
+              manifest = json.load(stream)
+          platforms = {(m['platform']['os'], m['platform']['architecture'])
+                       for m in manifest['manifests'] if m['platform']['os'] != 'unknown'}
+          assert platforms == {('linux', 'amd64'), ('linux', 'arm64')}, platforms
+          print('Registry manifest verified: linux/amd64 + linux/arm64')
+          PY
+          docker buildx imagetools create --tag "$IMAGE:$version" --tag "$IMAGE:latest" "$sha_tag"
+          docker buildx imagetools inspect "$IMAGE:$version"
+          {
+            echo "Published: $IMAGE:$version"
+            echo "Platforms: linux/amd64, linux/arm64"
+            echo "Source revision: $GITHUB_SHA"
+            echo "Package: https://github.com/users/aalexmora/packages/container/package/json-pptx"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Sign out
+        if: always()
+        run: docker logout ghcr.io
