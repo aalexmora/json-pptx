@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, release_log, reports, static_slides, strings, template_registry, tier_names
+from roadmap_generator import approval, deck_meta, labels, linter, ordering, product_languages, product_logos, release_log, report_terms, reports, static_slides, strings, template_registry, tier_names
 from roadmap_generator.builder import build_presentation
 from roadmap_generator.diffing import build_diff_details, compute_diff, match_previous_project
 from roadmap_generator.linter import lint_model
@@ -55,6 +55,7 @@ def _load_profile() -> None:
         static_slides.import_state(data.get("static_slides", []))
         product_languages.import_state(data.get("product_languages", {}))
         tier_names.import_state(data.get("tier_names", {}))
+        report_terms.import_state(data.get("report_terms"))
     except (json.JSONDecodeError, OSError):
         pass
 
@@ -72,6 +73,7 @@ def _save_profile() -> None:
         "static_slides": static_slides.export_state(),
         "product_languages": product_languages.export_state(),
         "tier_names": tier_names.export_state(),
+        "report_terms": report_terms.export_state(),
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -127,7 +129,7 @@ def _filter_model_to_year(model: RoadmapModel, year: int) -> None:
 @app.post("/api/plan")
 def api_plan(req: PlanRequest):
     plan, errors, warnings, lint_issues, quality_issues, model = _build(req)
-    report = reports.build_json_report(req.json_data)
+    report = reports.build_json_report(req.json_data, report_terms.get_terms())
     if plan is None:
         return {"errors": errors, "plan": None, "warnings": [], "lint_issues": [], "quality_issues": [], "tree": None, "releases": [], "report": report}
     return {
@@ -342,6 +344,7 @@ def get_profile():
         "static_slides": static_slides.export_state(),
         "product_languages": product_languages.export_state(),
         "tier_names": tier_names.export_state(),
+        "report_terms": report_terms.export_state(),
     }
 
 
@@ -359,6 +362,9 @@ def save_profile(profile: dict):
     static_slides.import_state(profile.get("static_slides", []))
     product_languages.import_state(profile.get("product_languages", {}))
     tier_names.import_state(profile.get("tier_names", {}))
+    # Старые проекты и клиенты без ключа не сбрасывают текущий словарь.
+    if "report_terms" in profile:
+        report_terms.import_state(profile["report_terms"])
     _save_profile()
     return {"status": "ok"}
 
