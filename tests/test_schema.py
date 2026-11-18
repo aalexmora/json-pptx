@@ -7,10 +7,24 @@
 from __future__ import annotations
 
 from roadmap_generator.schema import (
+    SERVICE_PRODUCT_NAME,
     _normalize_name,
+    is_service_product,
     normalize_roadmap,
     validate_roadmap,
 )
+
+
+def _service_product_node() -> dict:
+    """Служебный узел экспортёра в том виде, в котором он приходит последним в массиве."""
+    return {
+        "Product": SERVICE_PRODUCT_NAME,
+        "Streams": [{"Stream": "-", "Tiers": [{"Tier": "-", "Releases": [{
+            "Id": 900, "Title": "Release without product", "AppId": 9, "AppTitle": "App X",
+            "TrDate": "2/26/2026 12:00:00 AM", "CrDate": None,
+            "Requirements": [{"Id": 9001, "Title": "Orphan", "ApplicableForProduct": None}],
+        }]}]}],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +72,35 @@ def test_validate_rejects_non_list():
 
 def test_validate_rejects_empty_list():
     assert validate_roadmap([]) != []
+
+
+def test_service_product_node_is_recognized_by_exact_name():
+    assert is_service_product(_service_product_node())
+    assert is_service_product({"Product": f"  {SERVICE_PRODUCT_NAME} "})
+    assert not is_service_product({"Product": "Kaspersky Next"})
+    assert not is_service_product("not a product")
+
+
+def test_service_product_node_is_skipped_by_validation_and_normalization(load_fixture):
+    data = load_fixture("pagination_5_quarters.json")
+    broken_service_node = _service_product_node()
+    # Служебный узел не проверяется: даже без обязательных полей ошибок нет.
+    del broken_service_node["Streams"][0]["Tiers"][0]["Releases"][0]["AppTitle"]
+    with_node = data + [broken_service_node]
+
+    assert validate_roadmap(with_node) == []
+    plain = normalize_roadmap(data, language="ru")
+    model = normalize_roadmap(with_node, language="ru")
+    assert [product.name for product in model.products] == [product.name for product in plain.products]
+    assert model.quality_issues == plain.quality_issues
+    assert model.warnings == plain.warnings
+
+
+def test_json_with_only_service_product_node_is_rejected():
+    errors = validate_roadmap([_service_product_node()])
+
+    assert len(errors) == 1
+    assert SERVICE_PRODUCT_NAME in errors[0]
 
 
 def test_validate_missing_product_name():

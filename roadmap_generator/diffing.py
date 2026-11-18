@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, List
 
 from roadmap_generator.ordering import SEPARATOR
-from roadmap_generator.schema import RoadmapModel, _normalize_name
+from roadmap_generator.schema import RoadmapModel, _normalize_name, is_service_product
 
 
 @dataclass
@@ -42,6 +42,8 @@ def _tier_paths_from_model(model: RoadmapModel) -> List[str]:
 def _tier_paths_from_raw(raw) -> List[str]:
     paths: List[str] = []
     for product in raw:
+        if is_service_product(product):
+            continue
         pname = _normalize_name(product.get("Product"))
         for stream in product.get("Streams", []):
             sname = _normalize_name(stream.get("Stream"))

@@ -3,8 +3,32 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from io import BytesIO
+
+from pptx import Presentation
+
 from app import PlanRequest, _build, app
 from roadmap_generator import product_logos, static_slides, tier_names
+from roadmap_generator.schema import SERVICE_PRODUCT_NAME
+
+
+def _service_product_node() -> dict:
+    return {
+        "Product": SERVICE_PRODUCT_NAME,
+        "Streams": [{"Stream": "-", "Tiers": [{"Tier": "-", "Releases": [{
+            "Id": 900, "Title": "Release without product", "AppId": 9, "AppTitle": "App X",
+            "TrDate": "2/26/2026 12:00:00 AM", "CrDate": None,
+            "Requirements": [{"Id": 9001, "Title": "Orphan", "ApplicableForProduct": None}],
+        }]}]}],
+    }
+
+
+def _slide_texts(content: bytes) -> list[list[str]]:
+    deck = Presentation(BytesIO(content))
+    return [
+        [shape.text_frame.text for shape in slide.shapes if shape.has_text_frame]
+        for slide in deck.slides
+    ]
 
 
 def _plan(client, data, language="ru", plugin_settings=None):
@@ -190,6 +214,59 @@ def test_plan_returns_structured_quality_issue_for_missing_crdate():
         "stream": "S",
         "tier": "T",
     }
+
+
+def test_service_product_node_does_not_change_plan_tree_or_quality(load_fixture):
+    data = load_fixture("pagination_5_quarters.json")
+    with TestClient(app) as c:
+        for language in ("ru", "en"):
+            plain = _plan(c, data, language=language).json()
+            with_node = _plan(c, data + [_service_product_node()], language=language).json()
+
+            assert with_node["errors"] == []
+            for key in ("plan", "tree", "releases", "warnings", "lint_issues", "quality_issues"):
+                assert with_node[key] == plain[key], key
+            assert SERVICE_PRODUCT_NAME not in str(with_node["tree"])
+
+
+def test_service_product_node_does_not_change_pptx(load_fixture):
+    data = load_fixture("pagination_5_quarters.json")
+    with TestClient(app) as c:
+        for language in ("ru", "en"):
+            payload = {"language": language, "plugin_settings": {}}
+            plain = c.post("/api/pptx", json={**payload, "json_data": data})
+            with_node = c.post("/api/pptx", json={**payload, "json_data": data + [_service_product_node()]})
+
+            assert plain.status_code == with_node.status_code == 200
+            assert _slide_texts(with_node.content) == _slide_texts(plain.content)
+
+
+def test_only_service_product_node_is_reported_as_error():
+    with TestClient(app) as c:
+        body = _plan(c, [_service_product_node()]).json()
+        pptx = c.post("/api/pptx", json={"json_data": [_service_product_node()], "language": "ru"})
+
+    assert body["plan"] is None
+    assert body["errors"] and SERVICE_PRODUCT_NAME in body["errors"][0]
+    assert pptx.status_code == 422
+
+
+def test_diff_ignores_service_product_node():
+    old = [{
+        "Product": "P", "Streams": [{"Stream": "S", "Tiers": [{"Tier": "T", "Releases": [{
+            "Id": 1, "AppTitle": "A", "TrDate": "15.01.2025 21:00:00",
+            "Requirements": [{"Id": 10, "Kbr": "Yes", "MarketingTitle": "old"}],
+        }]}]}],
+    }]
+    with TestClient(app) as c:
+        body = c.post(
+            "/api/diff",
+            json={"old_json": old, "new_json": old + [_service_product_node()], "language": "ru"},
+        ).json()
+
+    assert all(not ids for ids in body["diff"].values())
+    assert body["new_tier_paths"] == []
+    assert body["removed_tier_paths"] == []
 
 
 def test_diff_endpoint():

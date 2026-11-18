@@ -21,6 +21,10 @@ DATE_FORMATS = (
 )
 Language = Literal["ru", "en"]
 
+# Служебный продукт, который экспортёр добавляет последним элементом массива:
+# релизы с требованиями, у которых не заполнено Applicable for products.
+SERVICE_PRODUCT_NAME = "[Без Applicable for products]"
+
 _VISIBILITY_LANGUAGES = {
     "only ru": frozenset({"ru"}),
     "ru": frozenset({"ru"}),
@@ -130,6 +134,18 @@ def _has_text(value) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def is_service_product(raw_product) -> bool:
+    """True для служебного узла экспортёра с требованиями без Applicable for products.
+
+    Узел нужен только разделу «Отчёты»: в проверку, превью, PPTX, проверки качества
+    и сравнение загрузок он не попадает.
+    """
+    return (
+        isinstance(raw_product, dict)
+        and _normalize_name(raw_product.get("Product")) == SERVICE_PRODUCT_NAME
+    )
+
+
 def validate_roadmap(data) -> List[str]:
     """Собирает все ошибки валидации за один проход.
 
@@ -142,8 +158,15 @@ def validate_roadmap(data) -> List[str]:
     if not isinstance(data, list) or len(data) == 0:
         return ["входные данные должны быть непустым списком (array)"]
 
+    if all(is_service_product(product) for product in data):
+        return [
+            f"в JSON нет продуктов для roadmap: есть только служебный узел «{SERVICE_PRODUCT_NAME}»"
+        ]
+
     for pi, product in enumerate(data):
         prefix = f"Product[{pi}]"
+        if is_service_product(product):
+            continue
         if not isinstance(product, dict):
             errors.append(f"{prefix}: ожидался объект, получен {type(product).__name__}")
             continue
@@ -264,6 +287,8 @@ def normalize_roadmap(data: list, language: Language) -> RoadmapModel:
     quality_issues: List[dict] = []
 
     for raw_product in data:
+        if is_service_product(raw_product):
+            continue
         streams: List[Stream] = []
         for raw_stream in raw_product.get("Streams", []):
             tiers: List[Tier] = []
