@@ -116,35 +116,40 @@ export interface ReleaseInfo {
   tier: string
 }
 
-export interface ReleaseProblem {
-  release_id: number | null
+export interface ReportItem {
+  id: string | null
   title: string
-  product: string
-  stream: string
-  tier: string
-  trdate: string | null
-  crdate: string | null
   tfs_url: string | null
-  codes: string[]
+}
+
+export interface ReleaseReportItem extends ReportItem {
+  trdate: string
+}
+
+export interface OnlyRuReportItem extends ReportItem {
+  marketing_title: string
+  matched_terms: string[]
+}
+
+export interface ReportGroup<Item extends ReportItem = ReportItem> {
+  name: string
+  count: number
+  items: Item[]
+}
+
+export interface ReportSection<Item extends ReportItem = ReportItem> {
+  count: number
+  groups: ReportGroup<Item>[]
 }
 
 export interface YearReport {
-  requirements: {
-    unique: number
-    occurrences: number
-    reused: number
-    duplicate_occurrences: number
+  totals: {
+    requirements: number
+    releases: number
   }
-  releases: {
-    total: number
-    with_problems: number
-    missing_crdate: number
-    invalid_crdate: number
-    invalid_trdate: number
-    missing_app_title: number
-    empty_requirements: number
-  }
-  release_problems: ReleaseProblem[]
+  missing_applicable: ReportSection
+  missing_crdate: ReportSection<ReleaseReportItem>
+  only_ru: ReportSection<OnlyRuReportItem>
 }
 
 export interface EnglishNameIssue {
@@ -161,6 +166,7 @@ export interface EnglishNameIssue {
 export interface JsonReport {
   years: Record<'2026' | '2027', YearReport>
   english_name_issues: EnglishNameIssue[]
+  terms: string[]
 }
 
 export interface ReleaseLog {
@@ -192,6 +198,7 @@ export interface Profile {
   static_slides: { name: string; position: string; pptx: string; prompt: string; language: 'ru' | 'en' }[]
   product_languages: Record<string, { ru: boolean; en: boolean }>
   tier_names: Record<string, { ru: string; en: string }>
+  report_terms: string[]
 }
 
 export interface PlanResponse {

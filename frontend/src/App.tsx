@@ -20,6 +20,8 @@ import type {
   QualityIssue,
   ReleaseInfo,
   ReleaseLog,
+  ReportItem,
+  ReportSection,
   RoadmapSlide,
   Slide,
   StaticSlide,
@@ -1273,6 +1275,8 @@ export default function App() {
           <ReportsDashboard
             report={result?.report ?? null}
             language={language}
+            terms={profile?.report_terms ?? result?.report?.terms ?? []}
+            onTermsChange={profile ? (next) => persist({ ...profile, report_terms: next }) : null}
             onBack={() => setWorkspaceView('preview')}
           />
         ) : (
@@ -1558,26 +1562,161 @@ export default function App() {
   )
 }
 
-const RELEASE_PROBLEM_LABELS: Record<string, string> = {
-  missing_crdate: 'CrDate не заполнена',
-  invalid_crdate: 'CrDate не распознана',
-  invalid_trdate: 'TrDate не распознана',
-  missing_app_title: 'AppTitle не заполнен',
-  empty_requirements: 'Нет Requirements',
-}
 const REPORT_YEARS = ['2026', '2027'] as const
+
+function ruCount(count: number, one: string, few: string, many: string) {
+  const mod100 = count % 100
+  const mod10 = count % 10
+  const word = mod100 >= 11 && mod100 <= 14 ? many : mod10 === 1 ? one : mod10 >= 2 && mod10 <= 4 ? few : many
+  return `${count} ${word}`
+}
+
+const requirementsCount = (count: number) => ruCount(count, 'требование', 'требования', 'требований')
+const releasesCount = (count: number) => ruCount(count, 'релиз', 'релиза', 'релизов')
+
+function normalizeReportTerm(value: string) {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function sameTerms(left: string[], right: string[]) {
+  return left.length === right.length && left.every((term, index) => term === right[index])
+}
+
+function ReportItemLink({ item }: { item: ReportItem }) {
+  return item.tfs_url ? (
+    <a href={item.tfs_url} target="_blank" rel="noreferrer noopener">{item.title}</a>
+  ) : (
+    <span>{item.title}</span>
+  )
+}
+
+function ReportSectionView<Item extends ReportItem>({
+  title,
+  section,
+  year,
+  countLabel,
+  description,
+  renderItem,
+}: {
+  title: string
+  section: ReportSection<Item>
+  year: string
+  countLabel: (count: number) => string
+  description: string
+  renderItem: (item: Item) => ReactNode
+}) {
+  return (
+    <details className="report-section">
+      <summary>
+        <span className="report-section-title">{title} — {section.count}</span>
+        <small>{description}</small>
+      </summary>
+      {section.groups.length ? (
+        <div className="report-groups">
+          {section.groups.map((group) => (
+            <details className="report-group" key={group.name}>
+              <summary>{group.name} — {countLabel(group.count)}</summary>
+              <ul className="report-items">
+                {group.items.map((item, index) => (
+                  <li key={item.id ?? `item-${index}`}>{renderItem(item)}</li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </div>
+      ) : (
+        <p className="quality-empty">За {year} год таких записей нет.</p>
+      )}
+    </details>
+  )
+}
+
+function ReportTermsEditor({
+  terms,
+  pending,
+  onChange,
+}: {
+  terms: string[]
+  pending: boolean
+  onChange: ((next: string[]) => void) | null
+}) {
+  const [draft, setDraft] = useState('')
+  const term = normalizeReportTerm(draft)
+  const duplicate = term !== '' && terms.some((item) => item.toLocaleLowerCase() === term.toLocaleLowerCase())
+
+  function addTerm() {
+    if (!onChange || !term || duplicate) return
+    onChange([...terms, term])
+    setDraft('')
+  }
+
+  return (
+    <section className="report-terms" aria-labelledby="report-terms-title">
+      <div className="report-terms-heading">
+        <h4 id="report-terms-title">Словарь Only RU</h4>
+        <small>Термины ищутся в MarketingTitle целыми словами, без учёта регистра. Тот же словарь использует проверка ENG-названий.</small>
+      </div>
+      {terms.length ? (
+        <ul className="report-terms-list">
+          {terms.map((item) => (
+            <li key={item}>
+              <span>{item}</span>
+              {onChange && (
+                <button
+                  type="button"
+                  aria-label={`Удалить термин «${item}»`}
+                  title="Удалить"
+                  onClick={() => onChange(terms.filter((value) => value !== item))}
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="report-terms-empty">Словарь пуст — отчёт Only RU ничего не найдёт.</p>
+      )}
+      <form
+        className="report-terms-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          addTerm()
+        }}
+      >
+        <input
+          type="text"
+          value={draft}
+          maxLength={100}
+          placeholder="Новый термин"
+          aria-label="Новый термин словаря"
+          disabled={!onChange}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <button type="submit" disabled={!onChange || !term || duplicate}>Добавить</button>
+      </form>
+      {duplicate && <small className="report-terms-hint">Такой термин уже есть в словаре.</small>}
+      {pending && <small className="report-terms-hint">Пересчитываю отчёт по новому словарю…</small>}
+    </section>
+  )
+}
 
 function ReportsDashboard({
   report,
   language,
+  terms,
+  onTermsChange,
   onBack,
 }: {
   report: PlanResponse['report'] | null
   language: 'ru' | 'en'
+  terms: string[]
+  onTermsChange: ((next: string[]) => void) | null
   onBack: () => void
 }) {
   const [selectedYear, setSelectedYear] = useState<(typeof REPORT_YEARS)[number]>('2026')
   const yearReport = report?.years[selectedYear] ?? null
+  const termsPending = Boolean(report) && !sameTerms(terms, report?.terms ?? [])
 
   return (
     <section className="reports-workspace">
@@ -1585,7 +1724,7 @@ function ReportsDashboard({
         <div>
           <span className="eyebrow">Текущий JSON</span>
           <h2>Отчёты</h2>
-          <p>Ключевые показатели состава JSON и качества релизов.</p>
+          <p>Показатели и отчёты за выбранный год. Год определяется по TR Date релиза.</p>
         </div>
         <button type="button" onClick={onBack}>← К презентации</button>
       </div>
@@ -1595,7 +1734,7 @@ function ReportsDashboard({
           <div className="report-block-heading">
             <div>
               <h3 id="english-name-report-title">Brand names in English feature titles</h3>
-              <p>Review these matches in MarketingTitleEn. Matching is case-insensitive and checks whole words.</p>
+              <p>Review these matches in MarketingTitleEn. Matching is case-insensitive, checks whole words and uses the Only RU dictionary below.</p>
             </div>
             <strong>{report?.english_name_issues.length ?? 0}</strong>
           </div>
@@ -1635,57 +1774,67 @@ function ReportsDashboard({
       <section className="report-year-panel" role="tabpanel" aria-label={`Отчёт за ${selectedYear} год`}>
         {yearReport ? (
           <>
-            <div className="reports-summary-cards">
-              <div>
-                <span>Уникальные Requirements</span>
-                <strong>{yearReport.requirements.unique}</strong>
-                <small>
-                  {yearReport.requirements.occurrences} вхождений = {yearReport.requirements.unique} первых +{' '}
-                  {yearReport.requirements.duplicate_occurrences} повторных; {yearReport.requirements.reused} ReqId повторяются
-                </small>
-              </div>
-              <div className={yearReport.releases.with_problems ? 'warning' : ''}>
-                <span>Релизы с проблемами</span>
-                <strong>{yearReport.releases.with_problems} из {yearReport.releases.total}</strong>
-                <small>Год определяется только по TrDate</small>
-              </div>
-              <div className={yearReport.releases.missing_crdate ? 'warning' : ''}>
-                <span>Без CrDate</span>
-                <strong>{yearReport.releases.missing_crdate}</strong>
-                <small>Проверка заполненности и формата CrDate</small>
-              </div>
-            </div>
-
-            {yearReport.release_problems.length > 0 ? (
-              <details className="report-release-details">
-                <summary>Проблемные релизы ({yearReport.release_problems.length})</summary>
-                <div className="quality-table-wrap">
-                  <table className="quality-table">
-                    <thead><tr><th>Релиз</th><th>Проблемы</th><th>TrDate</th><th>CrDate</th></tr></thead>
-                    <tbody>
-                      {yearReport.release_problems.map((release, index) => {
-                        const title = release.title || `Release ${release.release_id ?? '—'}`
-                        return (
-                          <tr key={`${release.release_id ?? 'unknown'}-${index}`}>
-                            <td>
-                              {release.tfs_url ? (
-                                <a href={release.tfs_url} target="_blank" rel="noreferrer noopener"><strong>{title}</strong></a>
-                              ) : <strong>{title}</strong>}
-                              <small>{release.product} · {release.stream} · {release.tier}</small>
-                            </td>
-                            <td>{release.codes.map((code) => RELEASE_PROBLEM_LABELS[code] ?? code).join(', ')}</td>
-                            <td>{release.trdate || '—'}</td>
-                            <td>{release.crdate || '—'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+            <section className="report-totals" aria-labelledby="report-totals-title">
+              <h3 id="report-totals-title">Общие показатели</h3>
+              <div className="reports-summary-cards">
+                <div>
+                  <span>Требования</span>
+                  <strong>{yearReport.totals.requirements}</strong>
+                  <small>Уникальные требования в релизах {selectedYear} года</small>
                 </div>
-              </details>
-            ) : (
-              <p className="quality-empty">Проблемных релизов за {selectedYear} год нет.</p>
-            )}
+                <div>
+                  <span>Релизы</span>
+                  <strong>{yearReport.totals.releases}</strong>
+                  <small>Уникальные релизы с TR Date в {selectedYear} году</small>
+                </div>
+              </div>
+            </section>
+
+            <div className="report-sections">
+              <p className="report-sections-note">
+                Итог отчёта считает каждое требование и релиз один раз. Если они входят в несколько продуктов, то показаны в каждой группе, поэтому сумма по группам может быть больше итога.
+              </p>
+              <ReportSectionView
+                title="Не заполнено Applicable for products"
+                section={yearReport.missing_applicable}
+                year={selectedYear}
+                countLabel={requirementsCount}
+                description="Требования с пустым Applicable for products, по продуктам из AppTitle релиза"
+                renderItem={(item) => <ReportItemLink item={item} />}
+              />
+              <ReportSectionView
+                title="Не указана CR date"
+                section={yearReport.missing_crdate}
+                year={selectedYear}
+                countLabel={releasesCount}
+                description="Релизы без CR date, по продуктам"
+                renderItem={(item) => (
+                  <>
+                    <ReportItemLink item={item} />
+                    <small className="report-item-meta">TR Date {item.trdate || '—'}</small>
+                  </>
+                )}
+              />
+              <ReportSectionView
+                title="Only RU"
+                section={yearReport.only_ru}
+                year={selectedYear}
+                countLabel={requirementsCount}
+                description="MarketingTitle содержит термин из словаря, Visibility — RU and ENG или Only RU"
+                renderItem={(item) => (
+                  <>
+                    <ReportItemLink item={item} />
+                    <small className="report-item-meta">
+                      {item.marketing_title}
+                      {item.matched_terms.map((matched) => (
+                        <span className="report-term-tag" key={matched}>{matched}</span>
+                      ))}
+                    </small>
+                  </>
+                )}
+              />
+            </div>
+            <ReportTermsEditor terms={terms} pending={termsPending} onChange={onTermsChange} />
           </>
         ) : (
           <p className="quality-empty">Отчёт рассчитывается…</p>
