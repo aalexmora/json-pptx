@@ -13,6 +13,9 @@ frontend/.npm-cache/
 
 # Runtime-данные (профиль пользователя, загруженные шаблоны, превью)
 data/
+
+# Реальные входные данные и материалы заказчика — только локально
+Requirements/
 templates_library/
 output/
 
