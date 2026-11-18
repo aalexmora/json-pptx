@@ -5,6 +5,7 @@ from roadmap_generator.version import APP_VERSION
 
 
 IMPLEMENTED = (
+    "Образ для Linux-сервера в GitHub Packages обновлён до текущей версии; docker-compose.ghcr.yml указывает на него.",
     "Раздел «Отчёты»: общие показатели года и отчёты «Не заполнено Applicable for products», «Не указана CR date» и «Only RU» с группами и ссылками на TFS.",
     "Словарь терминов Only RU редактируется под отчётом, сохраняется в профиле и также используется проверкой ENG-названий.",
     "Служебный продукт экспортёра «[Без Applicable for products]» используется только в отчётах и не попадает в превью, PPTX, проверки и сравнение.",

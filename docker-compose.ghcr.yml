@@ -1,7 +1,7 @@
 services:
   roadmap:
     container_name: ${JSON_PPTX_CONTAINER_NAME:-roadmap-pptx}
-    image: ${JSON_PPTX_IMAGE:-ghcr.io/aalexmora/json-pptx:1.24.6}
+    image: ${JSON_PPTX_IMAGE:-ghcr.io/aalexmora/json-pptx:1.25.1}
     init: true
     restart: unless-stopped
     security_opt:

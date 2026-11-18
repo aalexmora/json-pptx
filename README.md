@@ -1,6 +1,6 @@
 # Roadmap → PPTX
 
-> **Версия:** 1.24.6
+> **Версия:** 1.25.1
 
 Локальное веб-приложение: превращает JSON-выгрузку roadmap (иерархия
 `Product → Stream → Tier → Release → Requirement`, RU+EN) в готовую `.pptx`-презентацию
@@ -114,7 +114,7 @@ LibreOffice в образ не входит: PNG-превью загруженн
 
 ### Готовый образ из GitHub Packages
 
-Образ: **`ghcr.io/aalexmora/json-pptx:1.24.6`**.
+Образ: **`ghcr.io/aalexmora/json-pptx:1.25.1`**.
 [Страница пакета](https://github.com/users/aalexmora/packages/container/package/json-pptx).
 Один тег содержит Linux `amd64` и `arm64`; Docker выбирает нужную архитектуру.
 Каждый образ проверяется на своей архитектуре до отправки в registry.
